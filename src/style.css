@@ -288,3 +288,5 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .pl-g{display:flex;align-items:center;gap:4px;flex:none;font-size:13px;color:var(--muted)}
 .pl-g input{width:72px;text-align:right;padding:8px;font-weight:600;font-variant-numeric:tabular-nums}
 .pl-g input:disabled{opacity:.6}
+.pl-opts{margin:2px 0 6px;flex-wrap:wrap}
+.pl-opts .chip{padding:4px 10px;font-size:12px}

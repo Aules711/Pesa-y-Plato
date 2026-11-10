@@ -517,29 +517,34 @@ const nutr = (f, g) => { const k = (+g||0)/100; return {kcal:f.per.kcal*k, p:f.p
 const savePlan = () => put("plan", {days:S.plan});
 function planCard(){
   const n = wdayOf(day), P = planDay(n);
-  if (!planHas(n)) return `<div class="card plan-empty"><div><h3>Plan semanal</h3><p class="note">${Object.keys(S.plan||{}).some(k=>planHas(k)) ? `No tienes nada planificado para el ${WDAYS[n-1].toLowerCase()}.` : "Guarda tu cuadrante de comidas y cada día solo tendrás que escribir los gramos."}</p></div><button class="btn soft" data-act="plan-edit" data-d="${n}">${Object.keys(S.plan||{}).length?"Editar plan":"Crear plan"}</button></div>`;
+  if (!planHas(n)) return `<div class="card plan-empty"><div><h3>Plan semanal</h3><p class="note">${Object.keys(S.plan||{}).some(k=>planHas(k)) ? `No tienes nada planificado para el ${WDAYS[n-1].toLowerCase()}.` : "Guarda tu cuadrante de comidas y cada día solo tendrás que escribir los gramos."}</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn" style="cursor:pointer">Importar mi plan<input type="file" id="impPlan" accept=".json,application/json" hidden></label><button class="btn ghost" data-act="plan-edit" data-d="${n}">${Object.keys(S.plan||{}).length?"Editar plan":"Crear a mano"}</button></div></div>`;
   const done = m => (S.diary[day]||[]).some(e => e.meal===m && e.plan===n+"-"+m);
+  const visible = (m, items) => { const o = planOpt(m, items); return items.map((f,i)=>[f,i]).filter(([f]) => !f.opt || f.opt===o); };
   const blocks = MEALS.filter(m => (P[m]||[]).length).map(m => {
     const items = P[m], isDone = done(m);
-    const rows = items.map((f,i) => { const key = day+"|"+m+"|"+i, g = planDraft[key] ?? f.g, v = nutr(f, g);
+    const opts = planOpts(items), o = planOpt(m, items);
+    const chips = opts.length > 1 ? `<div class="chips pl-opts">${opts.map(x=>`<button class="chip" data-act="plan-opt" data-m="${m}" data-o="${esc(x)}" aria-pressed="${x===o}" ${isDone?"disabled":""}>${esc(x)}</button>`).join("")}</div>` : "";
+    const rows = visible(m, items).map(([f,i]) => { const key = day+"|"+m+"|"+i, g = planDraft[key] ?? f.g, v = nutr(f, g);
       return `<div class="pl-row"><span class="n">${esc(f.name)}<small data-plk="${esc(key)}">${fmt(v.kcal)} kcal · P ${r0(v.p)} · C ${r0(v.c)} · G ${r0(v.f)}</small></span>
         <label class="pl-g"><input id="pl-${esc(key)}" data-pl="${esc(key)}" inputmode="decimal" value="${esc(g)}" ${isDone?"disabled":""} aria-label="Gramos de ${esc(f.name)}"><span>g</span></label></div>`; }).join("");
-    const tot = items.reduce((a,f,i) => a + nutr(f, planDraft[day+"|"+m+"|"+i] ?? f.g).kcal, 0);
-    return `<div class="pl-meal"><div class="pl-h"><b>${m}</b>${isDone?`<span class="pl-ok">✓ Añadido</span>`:`<button class="btn" data-act="plan-add" data-m="${m}"><span data-plt="${m}">Añadir · ${fmt(tot)} kcal</span></button>`}</div>${rows}</div>`; }).join("");
+    const tot = visible(m, items).reduce((a,[f,i]) => a + nutr(f, parseNum(planDraft[day+"|"+m+"|"+i] ?? f.g)).kcal, 0);
+    return `<div class="pl-meal"><div class="pl-h"><b>${m}</b>${isDone?`<span class="pl-ok">✓ Añadido</span>`:`<button class="btn" data-act="plan-add" data-m="${m}"><span data-plt="${m}">Añadir · ${fmt(tot)} kcal</span></button>`}</div>${chips}${rows}</div>`; }).join("");
   const pending = MEALS.filter(m => (P[m]||[]).length && !done(m)).length;
   return `<div class="card plan"><div class="top"><div><h2>Plan de hoy · ${WDAYS[n-1]}</h2><p class="note">Escribe los gramos que has comido de verdad y pulsa Añadir.</p></div><button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button></div>
     ${blocks}${pending>1?`<button class="btn soft" data-act="plan-add-all">Añadir todo lo que falta</button>`:""}</div>`;
 }
+const planOpts = items => [...new Set(items.map(f=>f.opt).filter(Boolean))];
+function planOpt(m, items){ const o = planOpts(items); return o.length ? (planDraft[day+"|"+m+"|opt"] ?? o[0]) : null; }
 function updatePlanRow(key){
   const [d, m, i] = key.split("|"), f = planDay(wdayOf(d))[m]?.[+i]; if (!f) return;
   const v = nutr(f, parseNum(planDraft[key] ?? f.g)); const el = document.querySelector(`[data-plk="${CSS.escape(key)}"]`);
   if (el) el.textContent = `${fmt(v.kcal)} kcal · P ${r0(v.p)} · C ${r0(v.c)} · G ${r0(v.f)}`;
-  const items = planDay(wdayOf(d))[m]; const tot = items.reduce((a,f2,j) => a + nutr(f2, parseNum(planDraft[d+"|"+m+"|"+j] ?? f2.g)).kcal, 0);
+  const items = planDay(wdayOf(d))[m], o = planOpt(m, items); const tot = items.reduce((a,f2,j) => (f2.opt && f2.opt!==o) ? a : a + nutr(f2, parseNum(planDraft[d+"|"+m+"|"+j] ?? f2.g)).kcal, 0);
   const t = document.querySelector(`[data-plt="${CSS.escape(m)}"]`); if (t) t.textContent = `Añadir · ${fmt(tot)} kcal`;
 }
 function addPlanMeal(m){
-  const n = wdayOf(day), items = planDay(n)[m] || [];
-  const entries = items.map((f,i) => ({f, g: parseNum(planDraft[day+"|"+m+"|"+i] ?? f.g)})).filter(x => x.g > 0).map(({f,g}) => {
+  const n = wdayOf(day), items = planDay(n)[m] || [], o = planOpt(m, items);
+  const entries = items.map((f,i) => ({f, g: parseNum(planDraft[day+"|"+m+"|"+i] ?? f.g)})).filter(x => x.g > 0 && (!x.f.opt || x.f.opt===o)).map(({f,g}) => {
     const v = nutr(f, g); return {name:f.name, qty:g, unit:"g", g, per:f.per, servings:f.servings||[], kcal:v.kcal, p:v.p, c:v.c, f:v.f, plan:n+"-"+m, src:"plan"}; });
   if (!entries.length) return;
   (S.diary[day] ||= []).push(...entries.map(e => ({id:rid(), meal:m, ...e})));
@@ -550,10 +555,11 @@ function openPlanEditor(n){
   openSheet("Plan semanal", `<div class="chips">${WDAYS.map((w,i)=>`<button class="chip" data-act="plan-day" data-d="${i+1}" aria-pressed="${i+1===n}">${w.slice(0,3)}${planHas(i+1)?" ·":""}</button>`).join("")}</div>
     <p class="note">Pon lo que sueles comer el ${WDAYS[n-1].toLowerCase()} y los gramos habituales. En el Diario podrás cambiar los gramos de cada día.</p>
     ${MEALS.map(m=>`<div class="card meal"><div class="meal-h"><h3>${m}</h3><b>${fmt((P[m]||[]).reduce((a,f)=>a+nutr(f,f.g).kcal,0))} kcal</b></div>
-      ${(P[m]||[]).map((f,i)=>`<div class="pl-row" style="padding:8px 14px"><span class="n">${esc(f.name)}<small>${fmt(f.per.kcal)} kcal / 100 g</small></span>
+      ${(P[m]||[]).map((f,i)=>`<div class="pl-row" style="padding:8px 14px"><span class="n">${esc(f.name)}<small>${f.opt?esc(f.opt)+" · ":""}${fmt(f.per.kcal)} kcal / 100 g</small></span>
         <label class="pl-g"><input id="pe-${n}-${m}-${i}" data-pe="${n}|${m}|${i}" inputmode="decimal" value="${esc(f.g)}" aria-label="Gramos habituales"><span>g</span></label>
         <button class="x" data-act="plan-del" data-m="${m}" data-i="${i}" aria-label="Quitar">×</button></div>`).join("")}
       <div class="meal-f"><button class="link" data-act="plan-pick" data-m="${m}">+ AÑADIR ALIMENTO</button></div></div>`).join("")}
+    <label class="btn ghost" style="cursor:pointer;text-align:center">Importar mi plan (.json)<input type="file" id="impPlan" accept=".json,application/json" hidden></label>
     <div id="planCopy"><button class="btn ghost" data-act="plan-copy">Copiar el ${WDAYS[n-1].toLowerCase()} a otros días</button></div>
     <button class="btn" data-act="close">Listo</button>`, {kind:"plan", n});
 }
@@ -1288,6 +1294,7 @@ document.addEventListener("click", e => {
     case "plan-copy": $("planCopy").innerHTML = `<div class="card stack"><b>Copiar el ${WDAYS[c.n-1].toLowerCase()} a:</b><div class="chips" style="flex-wrap:wrap">${WDAYS.map((w,i)=>i+1===c.n?"":`<label class="chip"><input type="checkbox" data-cp="${i+1}" style="width:auto;margin-right:4px">${w}</label>`).join("")}</div>
       <p class="note">Se sustituye lo que hubiera planificado esos días.</p><button class="btn" data-act="plan-copy-yes">Copiar</button></div>`; break;
     case "plan-copy-yes": { const src = JSON.stringify(planDay(c.n)); document.querySelectorAll("[data-cp]:checked").forEach(cb => { S.plan[cb.dataset.cp] = JSON.parse(src); }); savePlan(); openPlanEditor(c.n); break; }
+    case "plan-opt": planDraft[day+"|"+el.dataset.m+"|opt"] = el.dataset.o; render(); break;
     case "plan-add": addPlanMeal(el.dataset.m); putDay(day); render(); break;
     case "plan-add-all": { const n = wdayOf(day); MEALS.filter(m => (planDay(n)[m]||[]).length && !(S.diary[day]||[]).some(e=>e.meal===m && e.plan===n+"-"+m)).forEach(addPlanMeal); putDay(day); render(); break; }
     case "copy-yesterday": { const m = el.dataset.meal; const list = (S.diary[addDays(day,-1)]||[]).filter(x=>x.meal===m).map(({id,ex,...x})=>x); addEntries(m, list); break; }
@@ -1348,6 +1355,7 @@ document.addEventListener("change", async e => {
   else if (t.id==="gAddEx" || t.id==="gSteps"){ await put("settings", {...S.settings, addEx:$("gAddEx").checked, stepGoal:Math.max(0,parseNum($("gSteps").value))||10000}); }
   else if (t.type==="file" && t.id!=="exVid" && t.files?.[0]){ const f = t.files[0]; const text = await f.text();
     importState = t.id==="impW" ? importWorkoutsCSV(text, f.name) : t.id==="impF" ? importFoodCSV(text, f.name) : importJSON(text, f.name);
+    if (t.id==="impPlan"){ closeSheet(); tab = "profile"; }
     render(); document.querySelector(".imp")?.scrollIntoView({block:"center"}); }
 });
 document.addEventListener("submit", async e => {
