@@ -187,9 +187,9 @@ function authView(mode, msg){
   if (mode==="signup" && !SIGNUP_OPEN) mode = "login";
   const A = $("auth"); A.hidden = false; $("app").hidden = true;
   const m = msg ? `<p class="${msg.ok?"note":"msg"}" style="${msg.ok?"color:var(--ok)":""}">${esc(msg.t)}</p>` : "";
-  if (mode==="reset"){ A.innerHTML = `<form class="auth-card" id="fReset"><h1>Nueva contraseña</h1><label class="f">Contraseña nueva<input id="aPass" type="password" minlength="6" required autocomplete="new-password"></label>${m}<button class="btn" type="submit">Guardar contraseña</button></form>`; return; }
+  if (mode==="reset"){ A.className = "auth"; A.innerHTML = `<form class="auth-card" id="fReset"><h1>Nueva contraseña</h1><label class="f">Contraseña nueva<input id="aPass" type="password" minlength="6" required autocomplete="new-password"></label>${m}<button class="btn" type="submit">Guardar contraseña</button></form>`; return; }
   const signup = mode==="signup", forgot = mode==="forgot";
-  A.innerHTML = `<form class="auth-card" id="fAuth" data-mode="${mode}">
+  const card = `<form class="auth-card" id="fAuth" data-mode="${mode}">
     <div class="brand"><span class="brand-mark" aria-hidden="true"></span><h1>Pesa y Plato</h1></div>
     <p class="note">${signup?(INVITE_REQUIRED?"Crea tu cuenta con tu email. Necesitas el código de invitación que te han pasado.":"Crea tu cuenta para guardar tus entrenos y comidas."):forgot?"Te enviamos un email para cambiar la contraseña.":SIGNUP_OPEN?"Tus entrenos, comidas y progreso en un solo sitio.":"Acceso solo por invitación. Entra con el email y la contraseña que te han dado."}</p>
     <label class="f">Email<input id="aEmail" type="email" required autocomplete="email"></label>
@@ -200,8 +200,70 @@ function authView(mode, msg){
     <div class="auth-links">${signup?`<button type="button" class="link" data-auth="login">Ya tengo cuenta</button>`:SIGNUP_OPEN?`<button type="button" class="link" data-auth="signup">Crear cuenta</button>`:"<span></span>"}
       ${forgot?`<button type="button" class="link" data-auth="login">Volver</button>`:`<button type="button" class="link" data-auth="forgot">He olvidado mi contraseña</button>`}</div>
     <p class="note legal"><a href="/terminos.html" target="_blank" rel="noopener">Términos</a> · <a href="/privacidad.html" target="_blank" rel="noopener">Privacidad</a></p></form>`;
+  A.className = "landing"; A.innerHTML = landingHTML(card, mode);
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-auth]"); if (b) authView(b.dataset.auth); });
+const ICONS = {
+  lift:'<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
+  food:'<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2.5 1-4 3.5-4 7v3h4"/>',
+  chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  play:'<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
+  watch:'<rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6l1-3h4l1 3M9 18l1 3h4l1-3M12 9.5V12l1.5 1.5"/>',
+  swap:'<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+  timer:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'};
+const ic = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
+function landingHTML(card, mode){
+  const feat = (k,t,d) => `<div class="lf-item"><span class="lf-ic">${ic(k)}</span><h3>${t}</h3><p>${d}</p></div>`;
+  const faq = (q,a) => `<details class="lf-faq"><summary>${q}</summary><p>${a}</p></details>`;
+  return `<header class="lh"><div class="lh-in"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><b>Pesa y Plato</b></a>
+      <nav>${SIGNUP_OPEN?`<button class="btn soft" data-auth="signup" data-go>Crear cuenta</button>`:""}<button class="btn ghost" data-auth="login" data-go>Entrar</button></nav></div></header>
+    <section class="hero"><div class="hero-txt">
+        <span class="kicker">Gratis · En el móvil y el ordenador</span>
+        <h1>Tus entrenos y tus comidas, <em>en una sola app</em>.</h1>
+        <p class="lead">Apunta cada serie con su descanso, lleva tus calorías y macros del día y mira cómo progresas semana a semana. Sin pasar de una app a otra.</p>
+        <div class="hero-cta">${SIGNUP_OPEN?`<button class="btn big" data-auth="signup" data-go>Crear cuenta gratis</button>`:""}<button class="btn ghost big" data-auth="login" data-go>Ya tengo cuenta</button></div>
+        <p class="note">Funciona en iPhone, Android y ordenador. Se instala en la pantalla de inicio como una app.</p>
+      </div>
+      <div class="hero-side">
+        <div class="phone" aria-hidden="true">
+          <div class="ph-top"><b>Entreno de lunes</b><span class="ph-btn">Terminar</span></div>
+          <div class="ph-stats"><div><span>Duración</span><b>42:10</b></div><div><span>Volumen</span><b>4.860 kg</b></div><div><span>Series</span><b>12</b></div></div>
+          <div class="ph-card"><b class="ph-ex">Press banca</b>
+            <div class="ph-row done"><i>1</i><span>57,5 kg × 8</span><b>60</b><b>8</b><em>✓</em></div>
+            <div class="ph-rest live">⏱ 1:24</div>
+            <div class="ph-row"><i>2</i><span>57,5 kg × 8</span><b>60</b><b>8</b><em>✓</em></div>
+            <div class="ph-row"><i>3</i><span>57,5 kg × 7</span><b></b><b></b><em>✓</em></div></div>
+          <div class="ph-food"><span>Calorías restantes</span><b>1.240</b><div class="ph-mac"><i style="--w:62%;--c:var(--carb)"></i><i style="--w:48%;--c:var(--fat)"></i><i style="--w:81%;--c:var(--prot)"></i></div></div>
+        </div>
+      </div>
+    </section>
+    <section class="lf"><h2 class="lsec">Todo lo que necesitas para entrenar y comer bien</h2>
+      <div class="lf-grid">
+        ${feat("lift","Entrenos al detalle","Series, kilos y repeticiones con lo que hiciste la última vez al lado. Calentamientos, series al fallo y drop sets.")}
+        ${feat("timer","Descansos automáticos","Al marcar una serie arranca la cuenta atrás, con aviso al terminar. Elige el descanso de cada ejercicio o de cada serie.")}
+        ${feat("food","Diario de comidas","Calorías restantes del día y tus macros: proteínas, carbohidratos y grasas. Busca alimentos, crea los tuyos o copia la comida de ayer.")}
+        ${feat("chart","Tu progreso a la vista","Récords, 1RM estimado, volumen por ejercicio, series por músculo, peso corporal y calorías de las últimas semanas.")}
+        ${feat("play","Vídeos de tus ejercicios","Sube un vídeo o GIF de cada ejercicio para recordar la técnica justo antes de la serie.")}
+        ${feat("watch","Apple Watch","Trae tus pasos, calorías activas y entrenos del reloj desde la app Salud del iPhone.")}
+        ${feat("swap","Trae tus datos","Importa tu historial de Hevy o Strong y tus comidas de MyFitnessPal. Y exporta los tuyos cuando quieras.")}
+        ${feat("lock","Privado","Tus datos solo los ves tú. Puedes descargarlos o borrar tu cuenta en cualquier momento.")}
+      </div></section>
+    <section class="lsteps"><h2 class="lsec">Empieza en un minuto</h2>
+      <ol><li><b>Crea tu cuenta</b><span>Con tu email y una contraseña. Confirma desde el correo que te llega.</span></li>
+        <li><b>Pon tus objetivos</b><span>Calorías, macros y cuántos días quieres entrenar a la semana.</span></li>
+        <li><b>Apunta tu primer entreno</b><span>Empieza uno vacío o crea tus rutinas para repetirlas con un toque.</span></li></ol></section>
+    <section class="lauth" id="lauth"><div class="lauth-txt"><h2 class="lsec">${mode==="signup"?"Crea tu cuenta":mode==="forgot"?"Recupera tu contraseña":"Entra en tu cuenta"}</h2><p class="note">${mode==="signup"?"Es gratis. Solo necesitas un email.":mode==="forgot"?"Te enviamos un enlace para elegir una nueva.":"¿Aún no tienes cuenta? Créala gratis en un minuto."}</p></div>${card}</section>
+    <section class="lfaqs"><h2 class="lsec">Preguntas frecuentes</h2>
+      ${faq("¿Cuánto cuesta?","Nada. Pesa y Plato es gratis.")}
+      ${faq("¿Tengo que descargar algo?","No. Es una web que funciona en el navegador. En el iPhone, abre la web en Safari, pulsa Compartir y «Añadir a pantalla de inicio» para tenerla como una app.")}
+      ${faq("¿Puedo pasar mis datos de Hevy o MyFitnessPal?","Sí. Exporta tus datos desde esas apps e impórtalos en Perfil › Importar. Si importas el mismo archivo dos veces no se duplica nada.")}
+      ${faq("¿Quién puede ver mis datos?","Solo tú. Cada cuenta ve únicamente sus propios entrenos, comidas y vídeos. Más detalles en la política de privacidad.")}
+      ${faq("¿Sirve como consejo médico o nutricional?","No. Es una herramienta para registrar y ver tu progreso. Para planes de dieta o de entreno, consulta a un profesional.")}
+    </section>
+    <footer class="lfoot"><span>© ${new Date().getFullYear()} Pesa y Plato</span><span><a href="/terminos.html">Términos</a> · <a href="/privacidad.html">Privacidad</a></span></footer>`;
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-auth]"); if (!b) return; authView(b.dataset.auth);
+  if (b.hasAttribute("data-go")) setTimeout(() => { $("lauth")?.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth", block:"start"}); $("aEmail")?.focus({preventScroll:true}); }, 30); });
 document.addEventListener("submit", async e => {
   if (e.target.id==="fAuth"){ e.preventDefault(); const mode = e.target.dataset.mode, email = $("aEmail").value.trim(), pass = $("aPass")?.value, btn = e.target.querySelector("button[type=submit]");
     btn.disabled = true;

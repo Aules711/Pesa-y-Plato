@@ -214,3 +214,62 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .consent input{width:auto;margin-top:2px;flex:none}
 .consent a,.legal a{color:var(--accent)}
 .legal{text-align:center}
+
+/* ===== página de presentación (sin sesión) ===== */
+.landing{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:72px;padding-bottom:24px}
+.lh{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);margin:-16px calc(-1 * max(16px, env(safe-area-inset-left,0px))) 0;padding:12px max(16px, env(safe-area-inset-left,0px));border-bottom:1px solid var(--line)}
+.lh-in{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.lh .brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-size:17px}
+.lh .brand-mark{width:32px;height:32px;border-radius:9px}
+.lh nav{display:flex;gap:8px}
+.lh nav .btn{padding:8px 14px}
+.hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:48px;align-items:center;padding-top:16px}
+.kicker{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:5px 10px;border-radius:999px}
+.hero h1{font-family:var(--display);font-size:clamp(40px,6.4vw,68px);line-height:.98;letter-spacing:-.01em;text-transform:uppercase;margin:18px 0 0;text-wrap:balance}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.lead{font-size:18px;line-height:1.55;color:var(--muted);max-width:52ch;margin:18px 0 0}
+.hero-cta{display:flex;gap:10px;flex-wrap:wrap;margin:26px 0 12px}
+.btn.big{padding:14px 22px;font-size:16px}
+.hero-side{display:flex;justify-content:center}
+.phone{width:100%;max-width:330px;background:var(--surface);border:1px solid var(--line);border-radius:34px;padding:18px 14px;box-shadow:0 24px 60px -24px rgba(20,40,90,.35);display:flex;flex-direction:column;gap:12px;font-size:13px}
+.ph-top{display:flex;justify-content:space-between;align-items:center;font-size:15px}
+.ph-btn{background:var(--accent);color:#fff;border-radius:8px;padding:5px 10px;font-weight:600;font-size:12px}
+.ph-stats{display:flex;gap:16px}.ph-stats span{display:block;font-size:11px;color:var(--muted)}.ph-stats b{font-variant-numeric:tabular-nums}
+.ph-card{background:var(--bg);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.ph-ex{color:var(--accent);padding:0 4px 4px}
+.ph-row{display:grid;grid-template-columns:22px 1fr 34px 26px 26px;gap:6px;align-items:center;padding:5px 4px;border-radius:7px;font-variant-numeric:tabular-nums}
+.ph-row i{font-style:normal;font-weight:700;text-align:center}.ph-row span{color:var(--muted);font-size:12px}
+.ph-row b{background:var(--surface2);border-radius:6px;text-align:center;padding:3px 0;min-height:22px}
+.ph-row em{font-style:normal;text-align:center;background:var(--surface2);border-radius:6px;color:var(--muted);padding:3px 0}
+.ph-row.done{background:var(--done)}.ph-row.done b{background:transparent}.ph-row.done em{background:var(--ok);color:#fff}
+.ph-rest{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--accent);justify-content:center}
+.ph-rest::before,.ph-rest::after{content:"";flex:1;height:2px;background:var(--accent)}
+.ph-food{background:var(--bg);border-radius:14px;padding:10px 12px;display:grid;grid-template-columns:1fr auto;gap:6px;align-items:baseline}
+.ph-food span{color:var(--muted);font-size:12px}.ph-food b{font-family:var(--display);font-size:24px;color:var(--accent);font-variant-numeric:tabular-nums}
+.ph-mac{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ph-mac i{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--c) var(--w),var(--surface2) var(--w))}
+.lsec{font-family:var(--display);font-size:clamp(28px,4vw,40px);line-height:1.05;text-transform:uppercase;letter-spacing:0;color:var(--ink);margin:0 0 24px;text-wrap:balance}
+.lf-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px 24px}
+.lf-item h3{font-size:16px;margin:12px 0 6px}.lf-item p{color:var(--muted);font-size:14px;line-height:1.55;margin:0}
+.lf-ic{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--accent-soft);color:var(--accent)}
+.lf-ic svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.lsteps ol{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;counter-reset:s}
+.lsteps li{counter-increment:s;display:flex;flex-direction:column;gap:6px;border-top:3px solid var(--accent);padding-top:14px}
+.lsteps li::before{content:counter(s);font-family:var(--display);font-size:34px;font-weight:700;color:var(--accent);line-height:1}
+.lsteps li b{font-size:16px}.lsteps li span{color:var(--muted);font-size:14px;line-height:1.5}
+.lauth{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,400px);gap:40px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:32px;scroll-margin-top:80px}
+.lauth .auth-card{border:0;padding:0;max-width:none;background:transparent}
+.lauth .auth-card .brand{display:none}
+.lauth .lsec{margin-bottom:10px}
+.lfaqs{max-width:760px}
+.lf-faq{border-bottom:1px solid var(--line);padding:14px 0}
+.lf-faq summary{cursor:pointer;font-weight:600;font-size:16px;list-style:none;display:flex;justify-content:space-between;gap:12px}
+.lf-faq summary::-webkit-details-marker{display:none}
+.lf-faq summary::after{content:"+";color:var(--accent);font-size:20px;line-height:1}
+.lf-faq[open] summary::after{content:"−"}
+.lf-faq p{color:var(--muted);margin:10px 0 0;line-height:1.55;max-width:65ch}
+.lfoot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:18px}
+.lfoot a{color:var(--muted)}
+@media (max-width:900px){.lf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{grid-template-columns:1fr;gap:36px}.lauth{grid-template-columns:1fr;padding:22px}}
+@media (max-width:560px){.landing{gap:56px}.lf-grid{grid-template-columns:1fr}.lsteps ol{grid-template-columns:1fr}.lh nav .btn.soft{display:none}.lead{font-size:16px}}
+.lauth .auth-card .brand + .note{display:none}
