@@ -273,3 +273,18 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 @media (max-width:900px){.lf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{grid-template-columns:1fr;gap:36px}.lauth{grid-template-columns:1fr;padding:22px}}
 @media (max-width:560px){.landing{gap:56px}.lf-grid{grid-template-columns:1fr}.lsteps ol{grid-template-columns:1fr}.lh nav .btn.soft{display:none}.lead{font-size:16px}}
 .lauth .auth-card .brand + .note{display:none}
+
+/* plan semanal */
+.plan{gap:14px}
+.plan-empty{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.plan-empty>div{flex:1 1 220px;display:flex;flex-direction:column;gap:4px}
+.pl-meal{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line);padding-top:10px}
+.pl-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.pl-h .btn{padding:7px 12px;font-size:13px}
+.pl-ok{color:var(--ok);font-weight:600;font-size:13px}
+.pl-row{display:flex;align-items:center;gap:10px;padding:4px 0}
+.pl-row .n{flex:1;min-width:0;overflow-wrap:anywhere}
+.pl-row small{display:block;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.pl-g{display:flex;align-items:center;gap:4px;flex:none;font-size:13px;color:var(--muted)}
+.pl-g input{width:72px;text-align:right;padding:8px;font-weight:600;font-variant-numeric:tabular-nums}
+.pl-g input:disabled{opacity:.6}

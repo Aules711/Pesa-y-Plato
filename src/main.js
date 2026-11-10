@@ -97,6 +97,7 @@ function applyDoc(id, v){
   else if (id.startsWith("d-")) { if (v && v.entries && v.entries.length) S.diary[id.slice(2)] = v.entries; else delete S.diary[id.slice(2)]; }
   else if (id==="settings") S.settings = {...S.settings, ...(v||{})};
   else if (id==="foods") S.foods = v?.list || [];
+  else if (id==="plan") S.plan = v?.days || {};
   else if (id==="routines") S.routines = v?.list || [];
   else if (id==="exlib") S.exlib = v?.list || [];
   else if (id==="body") S.body = v?.log || {};
@@ -169,7 +170,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {plan:{}, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -503,7 +504,77 @@ function viewFood(){
     <div class="equation" style="${g.addEx?"grid-template-columns:1fr auto 1fr auto 1fr auto 1fr":""}"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div>${g.addEx?`<div class="op">+</div><div><div class="big">${fmt(exK)}</div><span>Ejercicio</span></div>`:""}<div class="op">=</div>
       <div class="rem ${remaining<0?"neg":""}"><div class="big">${fmt(remaining)}</div><span>Restantes</span></div></div>
     <div class="macros">${mac("Carbohidratos",tot.c,g.c,"var(--carb)")}${mac("Grasas",tot.f,g.f,"var(--fat)")}${mac("Proteínas",tot.p,g.p,"var(--prot)")}</div></div>
+  ${planCard()}
   ${meals}`;
+}
+/* ---------- plan semanal ---------- */
+const WDAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+const wdayOf = d => (parseDay(d).getDay()+6)%7 + 1;   // 1 = lunes … 7 = domingo
+const planDay = n => S.plan?.[n] || {};
+const planHas = n => MEALS.some(m => (planDay(n)[m]||[]).length);
+const planDraft = {};                                 // gramos escritos hoy, antes de añadir
+const nutr = (f, g) => { const k = (+g||0)/100; return {kcal:f.per.kcal*k, p:f.per.p*k, c:f.per.c*k, f:f.per.f*k}; };
+const savePlan = () => put("plan", {days:S.plan});
+function planCard(){
+  const n = wdayOf(day), P = planDay(n);
+  if (!planHas(n)) return `<div class="card plan-empty"><div><h3>Plan semanal</h3><p class="note">${Object.keys(S.plan||{}).some(k=>planHas(k)) ? `No tienes nada planificado para el ${WDAYS[n-1].toLowerCase()}.` : "Guarda tu cuadrante de comidas y cada día solo tendrás que escribir los gramos."}</p></div><button class="btn soft" data-act="plan-edit" data-d="${n}">${Object.keys(S.plan||{}).length?"Editar plan":"Crear plan"}</button></div>`;
+  const done = m => (S.diary[day]||[]).some(e => e.meal===m && e.plan===n+"-"+m);
+  const blocks = MEALS.filter(m => (P[m]||[]).length).map(m => {
+    const items = P[m], isDone = done(m);
+    const rows = items.map((f,i) => { const key = day+"|"+m+"|"+i, g = planDraft[key] ?? f.g, v = nutr(f, g);
+      return `<div class="pl-row"><span class="n">${esc(f.name)}<small data-plk="${esc(key)}">${fmt(v.kcal)} kcal · P ${r0(v.p)} · C ${r0(v.c)} · G ${r0(v.f)}</small></span>
+        <label class="pl-g"><input id="pl-${esc(key)}" data-pl="${esc(key)}" inputmode="decimal" value="${esc(g)}" ${isDone?"disabled":""} aria-label="Gramos de ${esc(f.name)}"><span>g</span></label></div>`; }).join("");
+    const tot = items.reduce((a,f,i) => a + nutr(f, planDraft[day+"|"+m+"|"+i] ?? f.g).kcal, 0);
+    return `<div class="pl-meal"><div class="pl-h"><b>${m}</b>${isDone?`<span class="pl-ok">✓ Añadido</span>`:`<button class="btn" data-act="plan-add" data-m="${m}"><span data-plt="${m}">Añadir · ${fmt(tot)} kcal</span></button>`}</div>${rows}</div>`; }).join("");
+  const pending = MEALS.filter(m => (P[m]||[]).length && !done(m)).length;
+  return `<div class="card plan"><div class="top"><div><h2>Plan de hoy · ${WDAYS[n-1]}</h2><p class="note">Escribe los gramos que has comido de verdad y pulsa Añadir.</p></div><button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button></div>
+    ${blocks}${pending>1?`<button class="btn soft" data-act="plan-add-all">Añadir todo lo que falta</button>`:""}</div>`;
+}
+function updatePlanRow(key){
+  const [d, m, i] = key.split("|"), f = planDay(wdayOf(d))[m]?.[+i]; if (!f) return;
+  const v = nutr(f, parseNum(planDraft[key] ?? f.g)); const el = document.querySelector(`[data-plk="${CSS.escape(key)}"]`);
+  if (el) el.textContent = `${fmt(v.kcal)} kcal · P ${r0(v.p)} · C ${r0(v.c)} · G ${r0(v.f)}`;
+  const items = planDay(wdayOf(d))[m]; const tot = items.reduce((a,f2,j) => a + nutr(f2, parseNum(planDraft[d+"|"+m+"|"+j] ?? f2.g)).kcal, 0);
+  const t = document.querySelector(`[data-plt="${CSS.escape(m)}"]`); if (t) t.textContent = `Añadir · ${fmt(tot)} kcal`;
+}
+function addPlanMeal(m){
+  const n = wdayOf(day), items = planDay(n)[m] || [];
+  const entries = items.map((f,i) => ({f, g: parseNum(planDraft[day+"|"+m+"|"+i] ?? f.g)})).filter(x => x.g > 0).map(({f,g}) => {
+    const v = nutr(f, g); return {name:f.name, qty:g, unit:"g", g, per:f.per, servings:f.servings||[], kcal:v.kcal, p:v.p, c:v.c, f:v.f, plan:n+"-"+m, src:"plan"}; });
+  if (!entries.length) return;
+  (S.diary[day] ||= []).push(...entries.map(e => ({id:rid(), meal:m, ...e})));
+}
+/* editor del plan */
+function openPlanEditor(n){
+  const P = planDay(n);
+  openSheet("Plan semanal", `<div class="chips">${WDAYS.map((w,i)=>`<button class="chip" data-act="plan-day" data-d="${i+1}" aria-pressed="${i+1===n}">${w.slice(0,3)}${planHas(i+1)?" ·":""}</button>`).join("")}</div>
+    <p class="note">Pon lo que sueles comer el ${WDAYS[n-1].toLowerCase()} y los gramos habituales. En el Diario podrás cambiar los gramos de cada día.</p>
+    ${MEALS.map(m=>`<div class="card meal"><div class="meal-h"><h3>${m}</h3><b>${fmt((P[m]||[]).reduce((a,f)=>a+nutr(f,f.g).kcal,0))} kcal</b></div>
+      ${(P[m]||[]).map((f,i)=>`<div class="pl-row" style="padding:8px 14px"><span class="n">${esc(f.name)}<small>${fmt(f.per.kcal)} kcal / 100 g</small></span>
+        <label class="pl-g"><input id="pe-${n}-${m}-${i}" data-pe="${n}|${m}|${i}" inputmode="decimal" value="${esc(f.g)}" aria-label="Gramos habituales"><span>g</span></label>
+        <button class="x" data-act="plan-del" data-m="${m}" data-i="${i}" aria-label="Quitar">×</button></div>`).join("")}
+      <div class="meal-f"><button class="link" data-act="plan-pick" data-m="${m}">+ AÑADIR ALIMENTO</button></div></div>`).join("")}
+    <div id="planCopy"><button class="btn ghost" data-act="plan-copy">Copiar el ${WDAYS[n-1].toLowerCase()} a otros días</button></div>
+    <button class="btn" data-act="close">Listo</button>`, {kind:"plan", n});
+}
+function openPlanPicker(n, m){
+  openSheet(`Añadir a ${m} · ${WDAYS[n-1]}`, `<button class="link" data-act="plan-back" style="align-self:flex-start">‹ Volver al plan</button>
+    <input id="ppq" placeholder="Busca un alimento" autocomplete="off" aria-label="Buscar alimento"><div id="ppres"></div>
+    <p class="note">¿No está? Créalo con los valores de la etiqueta:</p>
+    <div class="grid2"><label class="f">Nombre<input id="ppN"></label><label class="f">Kcal / 100 g<input id="ppK" inputmode="decimal"></label>
+      <label class="f">Proteínas / 100 g<input id="ppP" inputmode="decimal"></label><label class="f">Carbohidratos / 100 g<input id="ppC" inputmode="decimal"></label>
+      <label class="f">Grasas / 100 g<input id="ppF" inputmode="decimal"></label><label class="f">Gramos habituales<input id="ppG" inputmode="decimal" value="100"></label></div>
+    <span class="msg" id="ppMsg" hidden></span><button class="btn soft" data-act="plan-create">Crear y añadir</button>`, {kind:"planpick", n, m, q:""});
+  drawPlanPicker();
+}
+function drawPlanPicker(){
+  const c = sheetCtx, f = c.q.trim().toLowerCase(), seen = new Set();
+  c.list = [...S.foods, ...recentFoods(), ...FOODS].filter(x => { if (seen.has(x.name)) return false; seen.add(x.name); return !f || x.name.toLowerCase().includes(f); }).slice(0,30);
+  $("ppres").innerHTML = `<div class="list">${c.list.map((x,i)=>`<button class="li" data-act="plan-pick-food" data-i="${i}"><span class="n">${esc(x.name)}<small>${fmt(x.kcal)} kcal · P ${r1(x.p)} · C ${r1(x.c)} · G ${r1(x.f)} por 100 g</small></span><span>+</span></button>`).join("") || `<div class="li note" style="cursor:default">Sin resultados</div>`}</div>`;
+}
+function planAddFood(n, m, x, g){
+  const P = (S.plan[n] ||= {}); (P[m] ||= []).push({name:x.name, per:{kcal:+x.kcal, p:+x.p, c:+x.c, f:+x.f}, servings:x.servings||[], g:r0(g)});
+  savePlan(); openPlanEditor(n);
 }
 function entryDetail(e){ const parts = []; if (e.qty) parts.push(`${r1(e.qty)} ${e.unit==="g"?"g":e.unit}`); parts.push(`P ${r0(e.p)} · C ${r0(e.c)} · G ${r0(e.f)}`); if (e.src) parts.push(e.src); return esc(parts.join(" · ")); }
 
@@ -600,7 +671,7 @@ function viewProfile(){
   <div class="card"><h2>Importar</h2>
     <label class="f">Entrenos · CSV de Hevy o Strong<input type="file" id="impW" accept=".csv,text/csv"></label>
     <label class="f">Comidas · CSV de MyFitnessPal<input type="file" id="impF" accept=".csv,text/csv"></label>
-    <label class="f">Copia de seguridad de esta app (.json)<input type="file" id="impJ" accept=".json,application/json"></label>
+    <label class="f">Copia de seguridad o plan semanal (.json)<input type="file" id="impJ" accept=".json,application/json"></label>
     <p class="note">En Hevy: Perfil › Ajustes › Exportar e importar datos › Exportar entrenos. En MyFitnessPal (web): Ajustes › Exportar datos; usa el archivo «Nutrition Summary». Si vuelves a importar el mismo archivo no se duplica nada.</p></div>
   ${imp}
   <div class="card"><h2>Exportar</h2>
@@ -615,7 +686,7 @@ function viewProfile(){
 /* ================= hoja inferior ================= */
 let sheetCtx = null;
 function openSheet(title, html, ctx){ sheetCtx = ctx||null; $("sheetTitle").textContent = title; $("sheetBody").innerHTML = html; $("sheet").hidden = false; document.body.style.overflow = "hidden"; }
-function closeSheet(){ if (sheetCtx?.kind==="watch") clearHash(); $("sheet").hidden = true; document.body.style.overflow = ""; sheetCtx = null; }
+function closeSheet(){ if (sheetCtx?.kind==="watch") clearHash(); if (sheetCtx?.kind==="plan"){ clearTimeout(window._pe); savePlan(); setTimeout(render, 0); } $("sheet").hidden = true; document.body.style.overflow = ""; sheetCtx = null; }
 
 /* --- selector de ejercicios --- */
 function openPicker(target){
@@ -926,6 +997,8 @@ function importFoodCSV(text, fname){
 function importJSON(text, fname){
   let d; try { d = JSON.parse(text); } catch { return {title:"Archivo no válido", summary:fname+" no es un JSON válido."}; }
   if (d?.app!=="pesa-y-plato") return {title:"Formato no reconocido", summary:"Este JSON no es una copia de Pesa y Plato."};
+  if (d.plan && !d.workouts && !d.diary){ const n = Object.values(d.plan).reduce((a,day)=>a+Object.values(day).reduce((b,l)=>b+l.length,0),0);
+    return {kind:"backup", items:[d], title:"Plan semanal", summary:`${n} alimentos repartidos en ${Object.keys(d.plan).length} días. Sustituye el plan que tengas ahora en esos días.`}; }
   return {kind:"backup", items:[d], title:"Copia de seguridad", summary:`${(d.workouts||[]).length} entrenos, ${Object.keys(d.diary||{}).length} días de comidas, ${(d.routines||[]).length} rutinas. Se mezclará con lo que ya tienes.`};
 }
 function loadScript(src){ return new Promise((ok,ko)=>{ const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
@@ -1040,6 +1113,7 @@ async function runImport(){
     const merge = (a,b) => [...a.filter(x=>!b.some(y=>y.id===x.id && x.id!=null || y.name===x.name)), ...b];
     if (d.routines) await put("routines", {list:merge(S.routines, d.routines)});
     if (d.foods) await put("foods", {list:merge(S.foods, d.foods)});
+    if (d.plan) await put("plan", {days:{...S.plan, ...d.plan}});
     if (d.exlib) await put("exlib", {list:merge(S.exlib, d.exlib)});
     if (d.body) await put("body", {log:{...S.body, ...d.body}});
     if (d.health) await mergeHealth(d.health);
@@ -1201,6 +1275,21 @@ document.addEventListener("click", e => {
     case "day-next": day = addDays(day,1); render(); break;
     case "day-today": day = today(); render(); break;
     case "add-food": openAddFood(el.dataset.meal); break;
+    case "plan-edit": openPlanEditor(+el.dataset.d || wdayOf(day)); break;
+    case "plan-day": openPlanEditor(+el.dataset.d); break;
+    case "plan-pick": openPlanPicker(c.n, el.dataset.m); break;
+    case "plan-back": openPlanEditor(c.n); break;
+    case "plan-pick-food": { const x = c.list[+el.dataset.i]; planAddFood(c.n, c.m, x, x.servings?.[0]?.g || 100); break; }
+    case "plan-create": { const name = $("ppN").value.trim(), k = parseNum($("ppK").value), msg = $("ppMsg");
+      if (!name || !(k>0)){ msg.textContent = "Pon al menos el nombre y las kcal por 100 g."; msg.hidden = false; break; }
+      const x = {name, kcal:k, p:parseNum($("ppP").value), c:parseNum($("ppC").value), f:parseNum($("ppF").value), servings:[]};
+      put("foods", {list:[...S.foods.filter(y=>y.name!==name), x]}); planAddFood(c.n, c.m, x, parseNum($("ppG").value) || 100); break; }
+    case "plan-del": S.plan[c.n][el.dataset.m].splice(+el.dataset.i, 1); savePlan(); openPlanEditor(c.n); break;
+    case "plan-copy": $("planCopy").innerHTML = `<div class="card stack"><b>Copiar el ${WDAYS[c.n-1].toLowerCase()} a:</b><div class="chips" style="flex-wrap:wrap">${WDAYS.map((w,i)=>i+1===c.n?"":`<label class="chip"><input type="checkbox" data-cp="${i+1}" style="width:auto;margin-right:4px">${w}</label>`).join("")}</div>
+      <p class="note">Se sustituye lo que hubiera planificado esos días.</p><button class="btn" data-act="plan-copy-yes">Copiar</button></div>`; break;
+    case "plan-copy-yes": { const src = JSON.stringify(planDay(c.n)); document.querySelectorAll("[data-cp]:checked").forEach(cb => { S.plan[cb.dataset.cp] = JSON.parse(src); }); savePlan(); openPlanEditor(c.n); break; }
+    case "plan-add": addPlanMeal(el.dataset.m); putDay(day); render(); break;
+    case "plan-add-all": { const n = wdayOf(day); MEALS.filter(m => (planDay(n)[m]||[]).length && !(S.diary[day]||[]).some(e=>e.meal===m && e.plan===n+"-"+m)).forEach(addPlanMeal); putDay(day); render(); break; }
     case "copy-yesterday": { const m = el.dataset.meal; const list = (S.diary[addDays(day,-1)]||[]).filter(x=>x.meal===m).map(({id,ex,...x})=>x); addEntries(m, list); break; }
     case "edit-entry": openEditEntry(el.dataset.id); break;
     case "ftab": c.t = el.dataset.t; c.food = null; drawFood(); break;
@@ -1242,6 +1331,9 @@ document.addEventListener("input", e => {
   else if (t.dataset.we){ const [ei,si,f] = t.dataset.we.split(":"); sheetCtx.w.exercises[+ei].sets[+si][f] = t.value; }
   else if (t.id==="fq"){ sheetCtx.q = t.value; drawFoodResults(); }
   else if (t.id==="fdQ"){ updateFoodDetail(); }
+  else if (t.dataset.pl){ planDraft[t.dataset.pl] = t.value; updatePlanRow(t.dataset.pl); }
+  else if (t.dataset.pe){ const [n,m,i] = t.dataset.pe.split("|"); const it = S.plan[n]?.[m]?.[+i]; if (it){ it.g = parseNum(t.value); clearTimeout(window._pe); window._pe = setTimeout(savePlan, 600); } }
+  else if (t.id==="ppq"){ sheetCtx.q = t.value; drawPlanPicker(); }
   else if (t.id==="hPaste"){ const v = parseWatchText(t.value); if (v){ $("hSteps").value = v.steps||""; $("hKcal").value = v.kcal||""; $("hDate").value = v.date; } }
   else if (t.id==="wPaste"){ clearTimeout(window._wp); window._wp = setTimeout(()=>handleWatchPaste(t.value), 400); }
 });
