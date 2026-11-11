@@ -112,20 +112,22 @@ function applyDoc(id, v){
 let q = Promise.resolve();
 function enqueue(fn){ const p = q.then(fn); q = p.catch(()=>{}); return p; }
 const strip = (id, v) => { if (id!=="media" || !v?.map) return v; const map = {}; for (const [k,m] of Object.entries(v.map)) map[k] = {id:m.id, type:m.type}; return {map}; };
+const sent = new Map();                                  // id → lo último que este dispositivo guardó
+const canon = v => JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x);
 async function put(id, v){
-  applyDoc(id, v);
+  applyDoc(id, v); sent.set(id, canon(strip(id, v)));
   try { await enqueue(async () => { const { error } = await sb.from("docs").upsert({user_id:user.id, id, data:strip(id, v)}); if (error) throw error; }); return true; }
   catch(e){ console.error(e); setBanner("No se pudo guardar el último cambio. Revisa la conexión e inténtalo otra vez."); return false; }
 }
 async function putMany(pairs, onProgress){
-  pairs.forEach(([id,v]) => applyDoc(id, v));
+  pairs.forEach(([id,v]) => { applyDoc(id, v); sent.set(id, canon(strip(id, v))); });
   try { for (let i=0; i<pairs.length; i+=100){ const rows = pairs.slice(i,i+100).map(([id,v]) => ({user_id:user.id, id, data:strip(id, v)}));
       await enqueue(async () => { const { error } = await sb.from("docs").upsert(rows); if (error) throw error; }); onProgress?.(Math.min(i+100, pairs.length), pairs.length); }
     return true; }
   catch(e){ console.error(e); setBanner("No se pudo guardar todo. Revisa la conexión e inténtalo otra vez."); return false; }
 }
 async function del(id){
-  applyDoc(id, null);
+  applyDoc(id, null); sent.set(id, null);
   try { await enqueue(async () => { const { error } = await sb.from("docs").delete().eq("user_id", user.id).eq("id", id); if (error) throw error; }); return true; }
   catch(e){ console.error(e); setBanner("No se pudo borrar. Inténtalo otra vez."); return false; }
 }
@@ -169,7 +171,10 @@ async function aiEstimate(text){
 }
 
 /* ---- arranque: sesión, carga de datos y sincronización en vivo ---- */
-let renderT = null; const scheduleRender = () => { clearTimeout(renderT); renderT = setTimeout(render, 120); };
+let renderT = null, renderPending = false;
+const typing = () => { const a = document.activeElement; return a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest("#main, #sheet"); };
+const scheduleRender = () => { clearTimeout(renderT); renderT = setTimeout(() => { if (typing()) renderPending = true; else render(); }, 120); };
+document.addEventListener("focusout", () => { if (renderPending) setTimeout(() => { if (renderPending && !typing()){ renderPending = false; render(); } }, 60); });
 async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
@@ -186,7 +191,9 @@ async function start(u){
   if (!S.settings.onboarded && !location.hash.includes("watch")) openGoalWizard(true);
   sb.channel("docs-" + user.id).on("postgres_changes", {event:"*", schema:"public", table:"docs", filter:`user_id=eq.${user.id}`}, p => {
     const id = p.new?.id ?? p.old?.id; if (!id || id==="active") return;
-    applyDoc(id, p.eventType==="DELETE" ? null : p.new.data); scheduleRender();
+    const v = p.eventType==="DELETE" ? null : p.new.data;
+    if (sent.has(id) && sent.get(id) === (v == null ? null : canon(v))) return;   // es nuestro propio cambio: ya está en pantalla
+    applyDoc(id, v); scheduleRender();
   }).subscribe();
 }
 function authView(mode, msg){
@@ -341,9 +348,12 @@ function render(){
     b.classList.toggle("live", b.dataset.tab==="train" && !!S.active); });
   const top = `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
   const views = {home:viewHome, train:viewTrain, food:viewFood, nutri:viewNutri, progress:viewProgress, profile:viewProfile};
+  renderPending = false; const y = scrollY;
   $("main").innerHTML = top + views[tab]();
-  if (tab !== lastTab){ lastTab = tab; $("main").classList.remove("enter"); void $("main").offsetWidth; $("main").classList.add("enter"); }
-  requestAnimationFrame(() => document.querySelectorAll("[data-ring]").forEach(el => el.style.strokeDashoffset = el.dataset.ring));
+  const fresh = tab !== lastTab;
+  if (fresh){ lastTab = tab; $("main").classList.remove("enter"); void $("main").offsetWidth; $("main").classList.add("enter");
+    requestAnimationFrame(() => document.querySelectorAll("[data-ring]").forEach(el => el.style.strokeDashoffset = el.dataset.ring)); }
+  else { $("main").classList.remove("enter"); document.querySelectorAll("[data-ring]").forEach(el => { el.style.transition = "none"; el.style.strokeDashoffset = el.dataset.ring; }); if (scrollY !== y) scrollTo(0, y); }
   tick();
 }
 let lastTab = null;
