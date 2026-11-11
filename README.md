@@ -100,6 +100,26 @@ Cada persona solo ve sus propios datos aunque compartáis la misma web. Tú, com
 
 ---
 
+## Premium (escáner de códigos de barras)
+
+El escáner es Premium: 3 € al mes por Bizum. Como Bizum no permite cobrar automáticamente desde una web, el cobro es manual.
+
+1. **Crear la tabla:** en Supabase › SQL Editor, ejecuta `supabase/premium.sql`.
+2. **Variables en Vercel** (Settings › Environment Variables, tipo *Secret*, y después Redeploy):
+   - `ADMIN_EMAILS` = tu email de la app (el que usas para entrar). Varios, separados por comas.
+   - `BIZUM_PHONE` = el número al que te pagan.
+   - `PREMIUM_PRICE` = `3` (opcional).
+   - `SUPABASE_SERVICE_ROLE_KEY` (ya lo tienes del paso 4).
+3. **Cómo funciona:**
+   - Quien no tiene Premium ve el precio, tu número y el concepto que debe poner («Premium su@email.com»), con botones para copiarlos.
+   - Cuando te llegue un Bizum, entra en **Perfil › Panel de administración**, busca el email del concepto y pulsa **+1 mes**. Si ya tenía Premium, se suma al mes que le quedara.
+   - **Regalar** da Premium para siempre a quien tú quieras. **Quitar** lo retira.
+   - El panel solo lo ven los emails de `ADMIN_EMAILS`; la función lo comprueba en el servidor.
+
+Tu número y tu email de administrador no están en el código: van en variables de Vercel, así que puedes tener el repositorio público. El número solo lo ven las personas con sesión iniciada, en la pantalla de Premium.
+
+**Ojo:** si cobras, la web pasa a ser un proyecto comercial. El plan gratuito de Vercel (Hobby) no lo permite; necesitarías Vercel Pro. Y los ingresos hay que declararlos.
+
 ## Pasar tus datos desde la versión de Claude
 
 1. En la app de Claude: **Perfil › Exportar › Copia completa (.json)**.
@@ -131,8 +151,10 @@ src/main.js             toda la lógica (entrenos, diario, progreso, importar…
 src/style.css           diseño (modo claro y oscuro)
 api/estimate.js         función de Vercel para la IA (opcional)
 api/delete-account.js   función de Vercel para que cada usuario elimine su cuenta
+api/admin.js            función de Vercel para Premium y el panel de administración
 supabase/schema.sql     tablas, permisos y almacén de vídeos
 supabase/invitaciones.sql  registro solo con código de invitación
+supabase/premium.sql    tabla de Premium
 public/                 iconos, manifest y páginas legales (privacidad.html, terminos.html)
 ```
 

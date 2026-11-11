@@ -180,8 +180,9 @@ async function loadAll(){
 async function start(u){
   if (user) return; user = u; $("auth").hidden = true; $("app").hidden = false;
   setBanner("Cargando tus datos…"); render();
-  try { await loadAll(); setBanner(""); } catch(e){ console.error(e); setBanner("No se pudieron cargar tus datos. Revisa la conexión y vuelve a abrir la app."); }
+  try { await loadAll(); setBanner(""); loadPremium(); } catch(e){ console.error(e); setBanner("No se pudieron cargar tus datos. Revisa la conexión y vuelve a abrir la app."); }
   render(); checkHash();
+  if (!S.settings.onboarded && !location.hash.includes("watch")) openGoalWizard(true);
   sb.channel("docs-" + user.id).on("postgres_changes", {event:"*", schema:"public", table:"docs", filter:`user_id=eq.${user.id}`}, p => {
     const id = p.new?.id ?? p.old?.id; if (!id || id==="active") return;
     applyDoc(id, p.eventType==="DELETE" ? null : p.new.data); scheduleRender();
@@ -214,7 +215,11 @@ const ICONS = {
   watch:'<rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6l1-3h4l1 3M9 18l1 3h4l1-3M12 9.5V12l1.5 1.5"/>',
   swap:'<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
   timer:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>',
-  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'};
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  scan:'<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M10 8v8M13 8v8M16 8v8"/>',
+  ring:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 8 8"/>',
+  target:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6"/>',
+  fire:'<path d="M12 21c-3.9 0-7-2.8-7-6.5 0-3.2 2.4-5.2 3.6-7.5.6 1.8 1.6 2.8 2.9 3.3C11.3 7.5 12.5 4.8 15 3c-.3 3 3.9 5.6 3.9 11.2C18.9 18.3 15.9 21 12 21z"/>'};
 const ic = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 function landingHTML(card, mode){
   const feat = (k,t,d) => `<div class="lf-item"><span class="lf-ic">${ic(k)}</span><h3>${t}</h3><p>${d}</p></div>`;
@@ -223,46 +228,50 @@ function landingHTML(card, mode){
       <nav>${SIGNUP_OPEN?`<button class="btn soft" data-auth="signup" data-go>Crear cuenta</button>`:""}<button class="btn ghost" data-auth="login" data-go>Entrar</button></nav></div></header>
     <section class="hero"><div class="hero-txt">
         <span class="kicker">Gratis · En el móvil y el ordenador</span>
-        <h1>Tus entrenos y tus comidas, <em>en una sola app</em>.</h1>
-        <p class="lead">Apunta cada serie con su descanso, lleva tus calorías y macros del día y mira cómo progresas semana a semana. Sin pasar de una app a otra.</p>
+        <h1>Tu dieta, <em>al gramo</em>, sin complicarte.</h1>
+        <p class="lead">Mete tu plan de comidas una vez y cada día te lo encuentras puesto. Escribe los gramos que has comido, marca ✓ y la app calcula tus calorías y tus macros.</p>
         <div class="hero-cta">${SIGNUP_OPEN?`<button class="btn big" data-auth="signup" data-go>Crear cuenta gratis</button>`:""}<button class="btn ghost big" data-auth="login" data-go>Ya tengo cuenta</button></div>
         <p class="note">Funciona en iPhone, Android y ordenador. Se instala en la pantalla de inicio como una app.</p>
       </div>
       <div class="hero-side">
         <div class="phone" aria-hidden="true">
-          <div class="ph-top"><b>Entreno de lunes</b><span class="ph-btn">Terminar</span></div>
-          <div class="ph-stats"><div><span>Duración</span><b>42:10</b></div><div><span>Volumen</span><b>4.860 kg</b></div><div><span>Series</span><b>12</b></div></div>
-          <div class="ph-card"><b class="ph-ex">Press banca</b>
-            <div class="ph-row done"><i>1</i><span>57,5 kg × 8</span><b>60</b><b>8</b><em>✓</em></div>
-            <div class="ph-rest live">⏱ 1:24</div>
-            <div class="ph-row"><i>2</i><span>57,5 kg × 8</span><b>60</b><b>8</b><em>✓</em></div>
-            <div class="ph-row"><i>3</i><span>57,5 kg × 7</span><b></b><b></b><em>✓</em></div></div>
-          <div class="ph-food"><span>Calorías restantes</span><b>1.240</b><div class="ph-mac"><i style="--w:62%;--c:var(--carb)"></i><i style="--w:48%;--c:var(--fat)"></i><i style="--w:81%;--c:var(--prot)"></i></div></div>
+          <div class="ph-top"><b>HOY · DÍA 11</b><span class="ph-chip">🔥 6 días</span></div>
+          <div class="ph-ringrow"><svg viewBox="0 0 132 132" class="ph-ring"><circle cx="66" cy="66" r="54"/><circle cx="66" cy="66" r="54" class="fg" stroke-dasharray="339.3" stroke-dashoffset="128"/></svg>
+            <div class="ph-ringc"><b>624</b><span>kcal restantes</span></div></div>
+          <div class="ph-mac"><i style="--w:62%;--c:var(--carb)"></i><i style="--w:48%;--c:var(--fat)"></i><i style="--w:81%;--c:var(--prot)"></i></div>
+          <div class="ph-card"><b class="ph-ex">COMIDA · TERNERA CON PATATA</b>
+            <div class="ph-item ok"><em>✓</em><span>Ternera magra</span><b>150 g</b></div>
+            <div class="ph-item ok"><em>✓</em><span>Patata</span><b>300 g</b></div>
+            <div class="ph-item"><em>✓</em><span>Verduras</span><b>250 g</b></div>
+            <div class="ph-item"><em>✓</em><span>Aceite de oliva</span><b>5 g</b></div></div>
+          <div class="ph-scan"><span class="ph-bars" aria-hidden="true"></span><span><b>Yogur natural · Pascual</b><small>62 kcal · P 3,6 · C 4,8 · G 3,1 por 100 g</small></span></div>
         </div>
       </div>
     </section>
-    <section class="lf"><h2 class="lsec">Todo lo que necesitas para entrenar y comer bien</h2>
+    <section class="lf"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
-        ${feat("lift","Entrenos al detalle","Series, kilos y repeticiones con lo que hiciste la última vez al lado. Calentamientos, series al fallo y drop sets.")}
-        ${feat("timer","Descansos automáticos","Al marcar una serie arranca la cuenta atrás, con aviso al terminar. Elige el descanso de cada ejercicio o de cada serie.")}
-        ${feat("food","Diario de comidas","Calorías restantes del día y tus macros: proteínas, carbohidratos y grasas. Busca alimentos, crea los tuyos o copia la comida de ayer.")}
-        ${feat("chart","Tu progreso a la vista","Récords, 1RM estimado, volumen por ejercicio, series por músculo, peso corporal y calorías de las últimas semanas.")}
-        ${feat("play","Vídeos de tus ejercicios","Sube un vídeo o GIF de cada ejercicio para recordar la técnica justo antes de la serie.")}
-        ${feat("food","Tu plan semanal","Importa el plan de alimentación que ya tienes y cada día apunta solo los gramos que has comido.")}
-        ${feat("swap","Trae tus datos","Importa tu historial de Hevy o Strong y tus comidas de MyFitnessPal. Y exporta los tuyos cuando quieras.")}
+        ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida y cena. Solo escribes los gramos.")}
+        ${feat("scan","Escanea el código de barras ⭐","Apunta con la cámara al paquete y la app trae sus kcal, proteínas, hidratos y grasas por 100 g. Función Premium: 3 € al mes.")}
+        ${feat("ring","Calorías y macros del día","Un anillo te dice cuánto te queda, y las barras cuánta proteína, hidratos y grasa llevas.")}
+        ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Y si tu plan trae objetivo por día, se usa ese.")}
+        ${feat("chart","Tu progreso a la vista","Peso corporal y calorías de las últimas semanas, para ver la tendencia y no fijarte en un solo día.")}
+        ${feat("fire","Racha de días","Cada día que apuntas suma a tu racha. Ver la llama encendida ayuda a no saltarse días.")}
+        ${feat("swap","Trae tus datos","Importa tu historial de comidas de MyFitnessPal y descarga los tuyos cuando quieras.")}
         ${feat("lock","Privado","Tus datos solo los ves tú. Puedes descargarlos o borrar tu cuenta en cualquier momento.")}
       </div></section>
     <section class="lsteps"><h2 class="lsec">Empieza en un minuto</h2>
       <ol><li><b>Crea tu cuenta</b><span>Con tu email y una contraseña. Confirma desde el correo que te llega.</span></li>
-        <li><b>Pon tus objetivos</b><span>Calorías, macros y cuántos días quieres entrenar a la semana.</span></li>
-        <li><b>Apunta tu primer entreno</b><span>Empieza uno vacío o crea tus rutinas para repetirlas con un toque.</span></li></ol></section>
+        <li><b>Pon tu objetivo o tu plan</b><span>Calcula tus calorías en un paso, o mete el plan de comidas que ya sigues.</span></li>
+        <li><b>Apunta lo que comes</b><span>Gramos y ✓. O escanea el código de barras de lo que no esté en tu plan.</span></li></ol></section>
     <section class="lauth" id="lauth"><div class="lauth-txt"><h2 class="lsec">${mode==="signup"?"Crea tu cuenta":mode==="forgot"?"Recupera tu contraseña":"Entra en tu cuenta"}</h2><p class="note">${mode==="signup"?"Es gratis. Solo necesitas un email.":mode==="forgot"?"Te enviamos un enlace para elegir una nueva.":"¿Aún no tienes cuenta? Créala gratis en un minuto."}</p></div>${card}</section>
     <section class="lfaqs"><h2 class="lsec">Preguntas frecuentes</h2>
-      ${faq("¿Cuánto cuesta?","Nada. Pesa y Plato es gratis.")}
+      ${faq("¿Cuánto cuesta?","La app es gratis. El escáner de códigos de barras es Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
       ${faq("¿Tengo que descargar algo?","No. Es una web que funciona en el navegador. En el iPhone, abre la web en Safari, pulsa Compartir y «Añadir a pantalla de inicio» para tenerla como una app.")}
-      ${faq("¿Puedo pasar mis datos de Hevy o MyFitnessPal?","Sí. Exporta tus datos desde esas apps e impórtalos en Perfil › Importar. Si importas el mismo archivo dos veces no se duplica nada.")}
-      ${faq("¿Quién puede ver mis datos?","Solo tú. Cada cuenta ve únicamente sus propios entrenos, comidas y vídeos. Más detalles en la política de privacidad.")}
-      ${faq("¿Sirve como consejo médico o nutricional?","No. Es una herramienta para registrar y ver tu progreso. Para planes de dieta o de entreno, consulta a un profesional.")}
+      ${faq("¿Puedo meter la dieta que ya sigo?","Sí. En Diario › Crear a mano montas cada día de la semana con sus alimentos y gramos habituales. A partir de ahí, cada día te aparece ya puesto y solo cambias los gramos si hace falta.")}
+      ${faq("¿Y si un producto no sale al escanearlo?","Los datos vienen de Open Food Facts, una base de datos abierta. Si un producto no está, créalo en «Crear» copiando la etiqueta y se queda guardado para la próxima vez.")}
+      ${faq("¿Puedo pasar mis datos de MyFitnessPal?","Sí. Exporta el archivo «Nutrition Summary» desde la web de MyFitnessPal e impórtalo en Perfil › Importar.")}
+      ${faq("¿Quién puede ver mis datos?","Solo tú. Cada cuenta ve únicamente sus propios datos. Más detalles en la política de privacidad.")}
+      ${faq("¿Sirve como consejo médico o nutricional?","No. Es una herramienta para registrar lo que comes y ver tu progreso. Las calorías propuestas son orientativas: para un plan de dieta, consulta a un dietista-nutricionista.")}
     </section>
     <footer class="lfoot"><span>© ${new Date().getFullYear()} Pesa y Plato</span><span><a href="/terminos.html">Términos</a> · <a href="/privacidad.html">Privacidad</a></span></footer>`;
 }
@@ -384,7 +393,7 @@ function homeFood(t, tot, remaining){
       const logged = (S.diary[t]||[]).filter(e => e.meal===m), lk = logged.reduce((a,e)=>a+(+e.kcal||0),0);
       if (!items.length && !logged.length) return "";
       const pk = items.reduce((a,f)=>a+nutr(f,f.g).kcal,0);
-      return `<button class="hm-row" data-act="tab" data-tab="food"><span class="hm-m">${m}</span><span class="hm-d">${esc(dishes[m] || (items[0]?.name ?? logged.map(e=>e.name).join(", ")))}</span>
+      return `<button class="hm-row" data-act="tab" data-tab="food"><span class="hm-m">${m}</span><span class="hm-d">${esc(dishes[m] || (items.length ? items.filter(f => !/aceite|leche desnatada \(en el café\)/i.test(f.name)).slice(0,3).map(f => f.name.replace(/\s*\(.*?\)/g,"")).join(", ") : logged.map(e=>e.name).join(", ")))}</span>
         <span class="hm-k ${logged.length?"ok":""}">${logged.length ? "✓ "+fmt(lk) : fmt(pk)} kcal</span></button>`; }).join("");
   return `<div class="card today"><h2>Hoy</h2><div><span class="big">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"} de ${fmt(g.kcal)}</span></div>
       <div class="hm-mac">${[["Proteínas",tot.p,g.p],["Carbohidratos",tot.c,g.c],["Grasas",tot.f,g.f]].map(([l,v,o])=>`<div><span>${l}</span><b>${r0(v)} / ${r0(o)} g</b><i style="--w:${Math.min(100,o?v/o*100:0)}%"></i></div>`).join("")}</div>
@@ -732,9 +741,11 @@ function viewProfile(){
       ${importState.items?.length?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="imp-confirm" ${importState.busy?"disabled":""}>${importState.busy?"Importando…":"Importar"}</button><button class="btn ghost" data-act="imp-cancel" ${importState.busy?"disabled":""}>Cancelar</button></div>`:`<button class="btn ghost" data-act="imp-cancel">Cerrar</button>`}
       <span class="note" id="impProg">${esc(importState.progress||"")}</span></div>` : "";
   return `<h1>Perfil</h1>
+  <div class="card"><h2>Premium</h2>${isPremium() ? `<p><b>⭐ ${esc(premiumStatus())}</b></p><p class="note">Tienes el escáner de códigos de barras en Diario › Añadir alimento › Escanear.</p>` : premiumPitch()}
+    ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>
   <div class="card"><h2>Cuenta</h2><div class="top"><span style="overflow-wrap:anywhere">${esc(user?.email||"")}</span><button class="btn ghost" data-act="logout">Cerrar sesión</button></div>
     <form id="fPass" class="stack"><label class="f">Cambiar contraseña<input id="newPass" type="password" minlength="6" autocomplete="new-password" placeholder="Nueva contraseña (mín. 6 caracteres)"></label><button class="btn soft" type="submit">Guardar contraseña</button><span class="note" id="passMsg"></span></form></div>
-  <form class="card" id="fGoals"><h2>Objetivos diarios</h2>
+  <form class="card" id="fGoals"><div class="top"><h2>Objetivos diarios</h2><button type="button" class="link" data-act="wizard">Calcular mis objetivos</button></div>
     <div class="grid2"><label class="f">Calorías (kcal)<input id="gKcal" type="number" min="0" step="10" value="${g.kcal}"></label>
       <label class="f">Proteínas (g)<input id="gP" type="number" min="0" step="5" value="${g.p}"></label>
       <label class="f">Carbohidratos (g)<input id="gC" type="number" min="0" step="5" value="${g.c}"></label>
@@ -761,7 +772,7 @@ function viewProfile(){
 /* ================= hoja inferior ================= */
 let sheetCtx = null;
 function openSheet(title, html, ctx){ sheetCtx = ctx||null; $("sheetTitle").textContent = title; $("sheetBody").innerHTML = html; $("sheet").hidden = false; document.body.style.overflow = "hidden"; }
-function closeSheet(){ stopScan(); if (sheetCtx?.kind==="watch") clearHash(); if (sheetCtx?.kind==="plan"){ clearTimeout(window._pe); savePlan(); setTimeout(render, 0); } $("sheet").hidden = true; document.body.style.overflow = ""; sheetCtx = null; }
+function closeSheet(){ stopScan(); if (sheetCtx?.kind==="wizard" && !S.settings.onboarded) put("settings", {...S.settings, onboarded:true}); if (sheetCtx?.kind==="watch") clearHash(); if (sheetCtx?.kind==="plan"){ clearTimeout(window._pe); savePlan(); setTimeout(render, 0); } $("sheet").hidden = true; document.body.style.overflow = ""; sheetCtx = null; }
 
 /* --- selector de ejercicios --- */
 function openPicker(target){
@@ -924,7 +935,7 @@ function recentFoods(){ const seen = new Map(); const days = Object.keys(S.diary
   for (const d of days) for (const e of S.diary[d]) if (e.per && !seen.has(e.name)) seen.set(e.name, {name:e.name, ...e.per, servings:e.servings||[]});
   return [...seen.values()].slice(0,12); }
 function openAddFood(meal){
-  openSheet("Añadir a "+meal, `<div class="seg" id="ftabs"><button data-act="ftab" data-t="search" aria-pressed="true">Buscar</button><button data-act="ftab" data-t="scan" aria-pressed="false">Escanear</button><button data-act="ftab" data-t="quick" aria-pressed="false">Rápido</button><button data-act="ftab" data-t="create" aria-pressed="false">Crear</button>${smp?`<button data-act="ftab" data-t="ai" aria-pressed="false">Con IA</button>`:""}</div><div id="fpane" class="stack"></div>`,
+  openSheet("Añadir a "+meal, `<div class="seg" id="ftabs"><button data-act="ftab" data-t="search" aria-pressed="true">Buscar</button><button data-act="ftab" data-t="scan" aria-pressed="false">Escáner</button><button data-act="ftab" data-t="quick" aria-pressed="false">Rápido</button><button data-act="ftab" data-t="create" aria-pressed="false">Crear</button>${smp?`<button data-act="ftab" data-t="ai" aria-pressed="false">Con IA</button>`:""}</div><div id="fpane" class="stack"></div>`,
     {kind:"food", meal, t:"search", q:"", food:null});
   drawFood();
 }
@@ -947,6 +958,7 @@ function drawFood(){
     <label class="f">Carbohidratos / 100 g<input id="cC" inputmode="decimal"></label><label class="f">Grasas / 100 g<input id="cF" inputmode="decimal"></label>
     <label class="f">Ración (nombre)<input id="cSn" placeholder="unidad"></label><label class="f">Ración (g)<input id="cSg" inputmode="decimal" placeholder="9"></label></div>
     <span class="msg" id="cMsg" hidden></span><button class="btn" data-act="create-food">Crear y elegir cantidad</button>`;
+  if (c.t==="scan" && !isPremium()){ P.innerHTML = premiumPitch(); return; }
   if (c.t==="scan"){ P.innerHTML = `<div class="scan"><video id="scanV" playsinline muted autoplay></video><div class="scan-frame" aria-hidden="true"></div></div>
     <p class="note" id="scanMsg" style="text-align:center">Abriendo la cámara…</p>
     <div style="display:flex;gap:8px"><input id="scanCode" inputmode="numeric" placeholder="O escribe el código (8410…)" aria-label="Código de barras"><button class="btn soft" data-act="scan-lookup">Buscar</button></div>
@@ -1002,6 +1014,95 @@ async function runAI(){
       <button class="btn" data-act="ai-add">Añadir ${items.length>1?"todo ":""}a ${esc(sheetCtx.meal)} · ${fmt(items.reduce((a,i)=>a+i.kcal,0))} kcal</button>` : `<p class="msg">No he podido sacar una estimación. Prueba a describirlo con más detalle.</p>`;
   } catch(e){ $("aiOut").innerHTML = `<p class="msg">${e.code==="not_granted"?"Tu sesión ha caducado. Vuelve a entrar.":e.code==="disabled"?"La estimación con IA no está activada en esta instalación.":e.code==="rate_limited"?"Demasiadas consultas seguidas. Espera un poco.":"No se pudo calcular ahora. Inténtalo otra vez."}</p>`; }
   btn.disabled = false; btn.textContent = "Calcular";
+}
+
+/* ================= Premium ================= */
+let premium = null, adminInfo = {admin:false, phone:null, price:"3"};
+async function callAdmin(action, body){
+  const { data:{ session } } = await sb.auth.getSession();
+  const r = await fetch("/api/admin", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({action, ...(body||{})})});
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw {code:j.code || r.status}; return j;
+}
+async function loadPremium(){
+  const [p, a] = await Promise.allSettled([sb.from("premium").select("until,note").eq("user_id", user.id).maybeSingle(), callAdmin("me")]);
+  premium = p.status==="fulfilled" ? p.value.data : null; if (a.status==="fulfilled") adminInfo = a.value;
+  render(); if (sheetCtx?.kind==="food" && sheetCtx.t==="scan") drawFood();
+}
+const isPremium = () => adminInfo.admin || (!!premium && (!premium.until || premium.until >= today()));
+const fmtPhone = p => String(p||"").replace(/\D/g,"").replace(/^(\d{3})(\d{3})(\d{3})$/,"$1 $2 $3");
+function premiumStatus(){
+  if (adminInfo.admin) return "Eres administrador: tienes todo activado.";
+  if (!premium) return "";
+  if (!premium.until) return "Tienes Premium para siempre. 🎁";
+  return premium.until >= today() ? `Tienes Premium hasta el ${longDay(premium.until)}.` : `Tu Premium terminó el ${longDay(premium.until)}.`;
+}
+function premiumPitch(){
+  const ph = adminInfo.phone, concept = `Premium ${user?.email || ""}`;
+  return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Escáner de códigos de barras</h3>
+    <p class="note">Apunta al código de cualquier producto y la app saca sus kcal, proteínas, hidratos y grasas al momento.</p>
+    <div class="prem-price"><b>${esc(adminInfo.price||"3")} €</b><span>al mes</span></div>
+    ${ph ? `<ol class="prem-steps">
+      <li><span>Envía <b>${esc(adminInfo.price||"3")} €</b> por <b>Bizum</b> al</span><div class="copy"><code>${esc(fmtPhone(ph))}</code><button class="btn soft" data-act="copy" data-v="${esc(String(ph).replace(/\D/g,""))}">Copiar</button></div></li>
+      <li><span>En el concepto escribe</span><div class="copy"><code>${esc(concept)}</code><button class="btn soft" data-act="copy" data-v="${esc(concept)}">Copiar</button></div></li>
+      <li><span>Te lo activamos en cuanto llegue el pago, normalmente en el mismo día. Dura un mes y no se renueva solo.</span></li></ol>
+      ${premium?.until && premium.until < today() ? `<p class="note">${esc(premiumStatus())}</p>` : ""}`
+    : `<p class="note">El Premium aún no está disponible. Vuelve a mirarlo pronto.</p>`}
+    <p class="note">Sin Premium puedes seguir buscando alimentos y creando los tuyos con los datos de la etiqueta.</p></div>`;
+}
+async function openAdmin(){
+  openSheet("Panel de administración", `<p class="note">Activa el Premium cuando te llegue un Bizum (busca el email que venga en el concepto) o regálalo a quien quieras.</p>
+    <input id="admQ" placeholder="Buscar por email" autocomplete="off" aria-label="Buscar usuario"><div id="admList" class="stack"><p class="note">Cargando usuarios…</p></div>`, {kind:"admin", users:[], q:""});
+  try { const r = await callAdmin("list"); if (sheetCtx?.kind!=="admin") return; sheetCtx.users = r.users; drawAdmin(); }
+  catch(e){ $("admList").innerHTML = `<p class="msg">${e.code===403?"Tu cuenta no es administradora.":e.code==="disabled"?"Falta configurar SUPABASE_SERVICE_ROLE_KEY en Vercel.":"No se pudo cargar la lista. Comprueba que has ejecutado supabase/premium.sql."}</p>`; }
+}
+function drawAdmin(){
+  const c = sheetCtx, q = c.q.trim().toLowerCase(), list = c.users.filter(u => !q || (u.email||"").toLowerCase().includes(q));
+  const act = list.filter(u => u.premium && (!u.premium.until || u.premium.until >= today())).length;
+  $("admList").innerHTML = `<p class="note">${c.users.length} usuarios · ${act} con Premium activo</p><div class="list">${list.slice(0,200).map(u => { const P = u.premium, on = P && (!P.until || P.until >= today());
+    return `<div class="adm-u"><div class="n"><b>${esc(u.email)}</b><small>${on ? (P.until ? `Premium hasta el ${longDay(P.until)}` : "Premium para siempre 🎁") : P ? `Caducó el ${longDay(P.until)}` : "Sin Premium"} · alta ${u.created ? longDay(u.created.slice(0,10)) : "—"}</small></div>
+      <div class="adm-b"><button class="btn soft" data-act="adm-grant" data-id="${esc(u.id)}" data-m="1">+1 mes</button><button class="btn ghost" data-act="adm-gift" data-id="${esc(u.id)}">Regalar</button>${P?`<button class="btn danger" data-act="adm-revoke" data-id="${esc(u.id)}">Quitar</button>`:""}</div></div>`; }).join("") || `<div class="li note">Nadie con ese email.</div>`}</div>`;
+}
+async function admDo(action, body, btn){
+  btn.disabled = true;
+  try { await callAdmin(action, body); const r = await callAdmin("list"); if (sheetCtx?.kind==="admin"){ sheetCtx.users = r.users; drawAdmin(); }
+    if (body.user_id === user.id) loadPremium(); }
+  catch { btn.disabled = false; btn.textContent = "Error, reintenta"; }
+}
+
+/* ================= bienvenida: calcular objetivos ================= */
+function calcGoals(v){
+  const {sex, age, h, w, act, goal} = v; if (!(age>=14 && age<=100 && h>=120 && h<=230 && w>=30 && w<=300)) return null;
+  const bmr = 10*w + 6.25*h - 5*age + (sex==="m" ? 5 : -161);          // Mifflin-St Jeor
+  const tdee = bmr * ({sed:1.2, lig:1.375, mod:1.55, alt:1.725}[act] || 1.375);
+  let kcal = tdee * ({lose:0.85, keep:1, gain:1.1}[goal] || 1);
+  kcal = Math.max(kcal, sex==="m" ? 1500 : 1200, bmr);                    // no bajar de un mínimo prudente
+  kcal = Math.round(kcal/10)*10;
+  const p = Math.round(w * ({lose:2, keep:1.6, gain:1.8}[goal] || 1.6));
+  const f = Math.round(kcal*0.27/9), c = Math.max(0, Math.round((kcal - p*4 - f*9)/4));
+  return {kcal, p, c, f, tdee:Math.round(tdee/10)*10};
+}
+function openGoalWizard(first){
+  const pr = S.settings.profile || {}, lastW = Object.entries(S.body||{}).sort(([a],[b])=>a<b?1:-1)[0]?.[1]?.kg;
+  const opt = (id, cur, list) => `<select id="${id}">${list.map(([v,l])=>`<option value="${v}" ${v===cur?"selected":""}>${l}</option>`).join("")}</select>`;
+  openSheet(first ? "Bienvenido a Pesa y Plato" : "Calcular mis objetivos", `${first?`<p class="note">Vamos a calcular cuántas calorías y proteína te convienen al día. Son 20 segundos; puedes cambiarlo cuando quieras en Perfil.</p>`:""}
+    <div class="grid2"><label class="f">Sexo${opt("wSex", pr.sex||"m", [["m","Hombre"],["f","Mujer"]])}</label><label class="f">Edad<input id="wAge" type="number" inputmode="numeric" min="14" max="100" value="${pr.age||""}" placeholder="25"></label>
+      <label class="f">Altura (cm)<input id="wH" type="number" inputmode="numeric" value="${pr.h||""}" placeholder="175"></label><label class="f">Peso (kg)<input id="wW" type="number" inputmode="decimal" value="${pr.w||lastW||""}" placeholder="75"></label></div>
+    <label class="f">Actividad${opt("wAct", pr.act||"lig", [["sed","Poca: trabajo sentado y casi sin ejercicio"],["lig","Ligera: ejercicio 1–3 días por semana"],["mod","Moderada: ejercicio 3–5 días o trabajo de pie"],["alt","Alta: ejercicio intenso casi a diario o trabajo físico"]])}</label>
+    <label class="f">Objetivo${opt("wGoal", pr.goal||"lose", [["lose","Perder grasa"],["keep","Mantenerme"],["gain","Ganar músculo"]])}</label>
+    <div id="wRes" class="wres"></div>
+    <button class="btn" data-act="wizard-save" id="wSave" disabled>Usar estos objetivos</button>
+    ${first?`<button class="btn ghost" data-act="close">Ahora no</button>`:""}
+    <p class="note">Cálculo orientativo (fórmula de Mifflin-St Jeor según tu actividad). No sustituye el consejo de un dietista-nutricionista; si tienes alguna condición de salud, consúltalo antes.</p>`, {kind:"wizard"});
+  updateWizard();
+}
+function wizardVals(){ return {sex:$("wSex").value, age:parseNum($("wAge").value), h:parseNum($("wH").value), w:parseNum($("wW").value), act:$("wAct").value, goal:$("wGoal").value}; }
+function updateWizard(){
+  const v = wizardVals(), g = calcGoals(v), el = $("wRes"); if (!el) return;
+  $("wSave").disabled = !g;
+  el.innerHTML = g ? `<div class="wres-k"><b>${fmt(g.kcal)}</b><span>kcal al día</span></div>
+      <div class="wres-m"><div><b>${g.p} g</b><span>Proteínas</span></div><div><b>${g.c} g</b><span>Carbohidratos</span></div><div><b>${g.f} g</b><span>Grasas</span></div></div>
+      <p class="note">${v.goal==="lose"?`Un 15 % menos de lo que gastas (unas ${fmt(g.tdee)} kcal) para perder grasa poco a poco.`:v.goal==="gain"?`Un 10 % más de lo que gastas (unas ${fmt(g.tdee)} kcal) para ganar músculo sin coger mucha grasa.`:`Lo que gastas al día, aproximadamente.`}</p>`
+    : `<p class="note">Rellena tu edad (14 o más), altura y peso para ver el cálculo.</p>`;
 }
 
 /* ================= códigos de barras ================= */
@@ -1336,6 +1437,17 @@ document.addEventListener("click", e => {
     case "ex-up": { const x = a.exercises.splice(ei,1)[0]; a.exercises.splice(ei-1,0,x); saveActive(); render(); break; }
     case "finish": finishWorkout(); break;
     case "watch-paste": openWatchPaste(); break;
+    case "wizard": openGoalWizard(false); break;
+    case "admin": openAdmin(); break;
+    case "adm-grant": admDo("grant", {user_id:el.dataset.id, months:+el.dataset.m}, el); break;
+    case "adm-gift": admDo("grant", {user_id:el.dataset.id, forever:true}, el); break;
+    case "adm-revoke": admDo("revoke", {user_id:el.dataset.id}, el); break;
+    case "copy": { const v = el.dataset.v, done = () => { const t = el.textContent; el.textContent = "Copiado ✓"; setTimeout(() => el.textContent = t, 1500); };
+      try { navigator.clipboard.writeText(v).then(done, () => {}); } catch {} break; }
+    case "wizard-save": { const v = wizardVals(), g = calcGoals(v); if (!g) break;
+      put("settings", {...S.settings, kcal:g.kcal, p:g.p, c:g.c, f:g.f, onboarded:true, profile:v});
+      if (v.w && !S.body[today()]) put("body", {log:{...S.body, [today()]:{kg:r1(v.w)}}});
+      closeSheet(); tab = "food"; render(); setBanner(`Objetivo guardado: ${fmt(g.kcal)} kcal y ${g.p} g de proteína al día.`); setTimeout(() => setBanner(""), 5000); break; }
     case "logout": sb.auth.signOut(); break;
     case "wipe": $("wipeBox").innerHTML = `<div class="confirm"><span style="flex:1">Se borrarán todos tus entrenos, comidas, rutinas y vídeos. No se puede deshacer.</span><button class="btn danger" data-act="wipe-yes">Borrar todo</button><button class="btn ghost" data-act="tab" data-tab="profile">Cancelar</button></div>`; break;
     case "delacc": $("wipeBox").innerHTML = `<div class="confirm"><span style="flex:1">Se eliminará tu cuenta con todos tus entrenos, comidas, rutinas y vídeos. No se puede deshacer.</span><button class="btn danger" data-act="delacc-yes">Eliminar cuenta</button><button class="btn ghost" data-act="tab" data-tab="profile">Cancelar</button></div>`; break;
@@ -1470,6 +1582,7 @@ document.addEventListener("input", e => {
   if (t.dataset.f && S.active){ const row = t.closest("[data-ei]"); const s = S.active.exercises[+row.dataset.ei].sets[+row.dataset.si]; s[t.dataset.f] = t.value; updateLiveStats(); saveActive(); }
   else if (t.id==="wTitle" && S.active){ S.active.title = t.value; saveActive(); }
   else if (t.id==="pkSearch"){ sheetCtx.filter = t.value; drawPicker(); }
+  else if (t.id==="admQ"){ sheetCtx.q = t.value; drawAdmin(); }
   else if (t.id==="libSearch"){ sheetCtx.q = t.value; drawLibrary(); }
   else if (t.dataset.we){ const [ei,si,f] = t.dataset.we.split(":"); sheetCtx.w.exercises[+ei].sets[+si][f] = t.value; }
   else if (t.id==="fq"){ sheetCtx.q = t.value; drawFoodResults(); }
@@ -1477,6 +1590,7 @@ document.addEventListener("input", e => {
   else if (t.dataset.pl){ planDraft[t.dataset.pl] = t.value; updatePlanRow(t.dataset.pl); }
   else if (t.dataset.pe){ const [n,m,i] = t.dataset.pe.split("|"); const it = S.plan[n]?.[m]?.[+i]; if (it){ it.g = parseNum(t.value); clearTimeout(window._pe); window._pe = setTimeout(savePlan, 600); } }
   else if (t.id==="ppq"){ sheetCtx.q = t.value; drawPlanPicker(); }
+  else if (["wSex","wAge","wH","wW","wAct","wGoal"].includes(t.id)){ updateWizard(); }
   else if (t.id==="hPaste"){ const v = parseWatchText(t.value); if (v){ $("hSteps").value = v.steps||""; $("hKcal").value = v.kcal||""; $("hDate").value = v.date; } }
   else if (t.id==="wPaste"){ clearTimeout(window._wp); window._wp = setTimeout(()=>handleWatchPaste(t.value), 400); }
 });
@@ -1498,7 +1612,7 @@ document.addEventListener("change", async e => {
 document.addEventListener("submit", async e => {
   e.preventDefault();
   if (e.target.id==="fGoals"){ const g = {kcal:parseNum($("gKcal").value)||2200, p:parseNum($("gP").value), c:parseNum($("gC").value), f:parseNum($("gF").value), days:Math.min(7,Math.max(1,parseNum($("gDays").value)||4)), rest:Math.max(0,parseNum($("gRest").value)), stepGoal:S.settings.stepGoal||10000, addEx:!!S.settings.addEx, restByEx:S.settings.restByEx||{}};
-    const ok = await put("settings", g); const m = $("goalMsg"); if (m) m.textContent = ok ? "Objetivos guardados." : "No se pudieron guardar."; }
+    const ok = await put("settings", {...S.settings, ...g}); const m = $("goalMsg"); if (m) m.textContent = ok ? "Objetivos guardados." : "No se pudieron guardar."; }
   if (e.target.id==="fHealth"){ const d = $("hDate").value || today(), st = r0(parseNum($("hSteps").value)), kc = r0(parseNum($("hKcal").value)); const m = $("hMsg");
     if (!(st>0) && !(kc>0)){ m.textContent = "Escribe los pasos o las calorías, o pega lo que copió el atajo."; return; }
     const ok = await mergeHealth({days:{[d]:{steps:st || S.health.days[d]?.steps || 0, kcal:kc || S.health.days[d]?.kcal || 0}}, wos:[]});

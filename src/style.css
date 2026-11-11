@@ -417,3 +417,44 @@ nav.tabbar.four{grid-template-columns:repeat(4,1fr)}
 .scan-frame::after{content:"";position:absolute;left:6%;right:6%;top:50%;height:2px;background:#ff4d4d;box-shadow:0 0 8px #ff4d4d;animation:scanline 1.6s ease-in-out infinite}
 @keyframes scanline{0%,100%{transform:translateY(-18px)}50%{transform:translateY(18px)}}
 @media (prefers-reduced-motion:reduce){.scan-frame::after{animation:none}}
+
+/* maqueta del móvil en la portada */
+.ph-chip{background:var(--bg);border-radius:999px;padding:4px 9px;font-size:12px;font-weight:700;color:var(--prot)}
+.ph-ringrow{position:relative;width:132px;margin:0 auto}
+.ph-ring{width:132px;height:132px;transform:rotate(-90deg)}.ph-ring circle{fill:none;stroke:var(--surface2);stroke-width:12}.ph-ring .fg{stroke:var(--accent);stroke-linecap:round}
+.ph-ringc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ph-ringc b{font-family:var(--display);font-size:32px;color:var(--accent);line-height:1}.ph-ringc span{font-size:11px;color:var(--muted)}
+.phone > .ph-mac{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.phone > .ph-mac i{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--c) var(--w),var(--surface2) var(--w))}
+.ph-item{display:grid;grid-template-columns:24px 1fr auto;gap:8px;align-items:center;padding:5px 4px;font-size:13px}
+.ph-item em{font-style:normal;width:22px;height:22px;border-radius:50%;border:2px solid var(--accent);color:var(--accent);display:grid;place-items:center;font-size:11px}
+.ph-item.ok em{background:var(--ok);border-color:var(--ok);color:#fff}
+.ph-item b{background:var(--surface);border-radius:6px;padding:2px 8px;font-variant-numeric:tabular-nums}
+.ph-scan{display:flex;gap:10px;align-items:center;background:var(--bg);border-radius:14px;padding:10px 12px}
+.ph-scan small{display:block;color:var(--muted);font-size:11px}
+.ph-bars{width:34px;height:26px;flex:none;background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 4px,var(--ink) 4px 5px,transparent 5px 8px);border-radius:3px;opacity:.85}
+
+.wres{background:var(--accent-soft);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;align-items:center;text-align:center}
+.wres-k b{font-family:var(--display);font-size:46px;line-height:1;color:var(--accent);display:block}
+.wres-k span{font-size:12px;color:var(--muted);font-weight:600}
+.wres-m{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+.wres-m div{background:var(--surface);border-radius:10px;padding:8px 4px}
+.wres-m b{display:block;font-variant-numeric:tabular-nums}.wres-m span{font-size:11px;color:var(--muted)}
+
+.prem{display:flex;flex-direction:column;gap:10px}
+.prem-badge{align-self:flex-start;background:linear-gradient(90deg,#F5A64C,#E8364F);color:#fff;font-weight:700;font-size:12px;border-radius:999px;padding:4px 10px;letter-spacing:.04em}
+.prem h3{font-family:var(--display);text-transform:uppercase;font-size:24px;margin:0}
+.prem-price{display:flex;align-items:baseline;gap:6px}.prem-price b{font-family:var(--display);font-size:44px;line-height:1;color:var(--accent)}.prem-price span{color:var(--muted);font-weight:600}
+.prem-steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px}
+.prem-steps li{display:flex;flex-direction:column;gap:6px}
+.copy{display:flex;gap:8px;align-items:center}.copy code{flex:1;min-width:0;overflow-wrap:anywhere;background:var(--surface2);border-radius:10px;padding:9px 12px;font-size:15px;font-weight:600;font-family:var(--body)}
+.copy .btn{padding:8px 12px;flex:none}
+.adm-u{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.adm-u .n{min-width:0;flex:1 1 200px;overflow-wrap:anywhere}.adm-u small{display:block;color:var(--muted);font-size:12px}
+.adm-b{display:flex;gap:6px;flex-wrap:wrap}.adm-b .btn{padding:6px 10px;font-size:13px}
+
+:root{--accent-strong:#2C6CF0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--accent-strong:#2550C4}}
+:root[data-theme="dark"]{--accent-strong:#2550C4}
+.card.today{background:var(--accent-strong)}
+.hm-d{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
