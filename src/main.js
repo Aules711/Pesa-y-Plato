@@ -529,7 +529,7 @@ function planCard(){
     const tot = visible(m, items).reduce((a,[f,i]) => a + nutr(f, parseNum(planDraft[day+"|"+m+"|"+i] ?? f.g)).kcal, 0);
     return `<div class="pl-meal"><div class="pl-h"><b>${m}</b>${isDone?`<span class="pl-ok">✓ Añadido</span>`:`<button class="btn" data-act="plan-add" data-m="${m}"><span data-plt="${m}">Añadir · ${fmt(tot)} kcal</span></button>`}</div>${chips}${rows}</div>`; }).join("");
   const pending = MEALS.filter(m => (P[m]||[]).length && !done(m)).length;
-  return `<div class="card plan"><div class="top"><div><h2>Plan de hoy · ${WDAYS[n-1]}</h2><p class="note">Escribe los gramos que has comido de verdad y pulsa Añadir.</p></div><button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button></div>
+  return `<div class="card plan"><div class="top"><div><h2>${day===today()?"Plan de hoy":"Plan del día"} · ${WDAYS[n-1]} ${parseDay(day).getDate()} ${MES[parseDay(day).getMonth()]}</h2><p class="note">Se apunta en el diario del ${WDAYS[n-1].toLowerCase()} ${parseDay(day).getDate()}. Escribe los gramos que has comido y pulsa Añadir.</p></div><button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button></div>
     ${blocks}${pending>1?`<button class="btn soft" data-act="plan-add-all">Añadir todo lo que falta</button>`:""}</div>`;
 }
 const planOpts = items => [...new Set(items.map(f=>f.opt).filter(Boolean))];
@@ -986,7 +986,7 @@ function importJSON(text, fname){
   let d; try { d = JSON.parse(text); } catch { return {title:"Archivo no válido", summary:fname+" no es un JSON válido."}; }
   if (d?.app!=="pesa-y-plato") return {title:"Formato no reconocido", summary:"Este JSON no es una copia de Pesa y Plato."};
   if (d.plan && !d.workouts && !d.diary){ const n = Object.values(d.plan).reduce((a,day)=>a+Object.values(day).reduce((b,l)=>b+l.length,0),0);
-    return {kind:"backup", items:[d], title:"Plan semanal", summary:`${n} alimentos repartidos en ${Object.keys(d.plan).length} días. Sustituye el plan que tengas ahora en esos días.`}; }
+    return {kind:"backup", items:[d], title:"Plan semanal", summary:`${n} alimentos repartidos en ${Object.keys(d.plan).length} días. Sustituye por completo el plan que tengas ahora.`}; }
   return {kind:"backup", items:[d], title:"Copia de seguridad", summary:`${(d.workouts||[]).length} entrenos, ${Object.keys(d.diary||{}).length} días de comidas, ${(d.routines||[]).length} rutinas. Se mezclará con lo que ya tienes.`};
 }
 function loadScript(src){ return new Promise((ok,ko)=>{ const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
@@ -1101,7 +1101,7 @@ async function runImport(){
     const merge = (a,b) => [...a.filter(x=>!b.some(y=>y.id===x.id && x.id!=null || y.name===x.name)), ...b];
     if (d.routines) await put("routines", {list:merge(S.routines, d.routines)});
     if (d.foods) await put("foods", {list:merge(S.foods, d.foods)});
-    if (d.plan) await put("plan", {days:{...S.plan, ...d.plan}});
+    if (d.plan) await put("plan", {days: (!d.workouts && !d.diary) ? d.plan : {...S.plan, ...d.plan}});
     if (d.exlib) await put("exlib", {list:merge(S.exlib, d.exlib)});
     if (d.body) await put("body", {log:{...S.body, ...d.body}});
     if (d.health) await mergeHealth(d.health);
