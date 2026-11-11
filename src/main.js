@@ -20,6 +20,7 @@ const MES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","
 const DIA = ["dom","lun","mar","mié","jue","vie","sáb"];
 function dayLabel(s){ const t = today(); if (s===t) return "Hoy"; if (s===addDays(t,-1)) return "Ayer"; if (s===addDays(t,1)) return "Mañana";
   const d = parseDay(s); return DIA[d.getDay()]+" "+d.getDate()+" "+MES[d.getMonth()]; }
+const longDay = s => { const d = parseDay(s); return DIA[d.getDay()]+" "+d.getDate()+" "+MES[d.getMonth()]; };
 const shortDay = s => { const d = parseDay(s); return d.getDate()+" "+MES[d.getMonth()]; };
 function fmtDur(ms){ const m = Math.max(0,Math.round(ms/60000)); return m>=60 ? Math.floor(m/60)+" h "+pad(m%60)+" min" : m+" min"; }
 function clock(ms){ const s = Math.max(0,Math.floor(ms/1000)); const h=Math.floor(s/3600), m=Math.floor(s%3600/60); return (h? h+":"+pad(m) : m)+":"+pad(s%60); }
@@ -98,6 +99,7 @@ function applyDoc(id, v){
   else if (id==="settings") S.settings = {...S.settings, ...(v||{})};
   else if (id==="foods") S.foods = v?.list || [];
   else if (id==="plan") S.plan = v?.days || {};
+  else if (id==="plandates") S.planDates = v?.days ? v : null;
   else if (id==="routines") S.routines = v?.list || [];
   else if (id==="exlib") S.exlib = v?.list || [];
   else if (id==="body") S.body = v?.log || {};
@@ -170,7 +172,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {plan:{}, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -513,11 +515,17 @@ const WDAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domin
 const wdayOf = d => (parseDay(d).getDay()+6)%7 + 1;   // 1 = lunes … 7 = domingo
 const planDay = n => S.plan?.[n] || {};
 const planHas = n => MEALS.some(m => (planDay(n)[m]||[]).length);
+const datedPlan = d => S.planDates?.days?.[d] || null;            // plan por fechas (p. ej. 30 días)
+const curPlan = d => datedPlan(d) || planDay(wdayOf(d));           // lo que toca ese día
+const planIdFor = d => datedPlan(d) ? d : String(wdayOf(d));
+const hasPlanFor = d => MEALS.some(m => (curPlan(d)[m]||[]).length);
+function planLabel(d){ const P = datedPlan(d); if (!P) return `Plan del ${WDAYS[wdayOf(d)-1].toLowerCase()}`;
+  return `${esc(S.planDates.title||"Plan")} · día ${P._n}`; }
 const planDraft = {};                                 // gramos escritos hoy, antes de añadir
 const nutr = (f, g) => { const k = (+g||0)/100; return {kcal:f.per.kcal*k, p:f.per.p*k, c:f.per.c*k, f:f.per.f*k}; };
 const savePlan = () => put("plan", {days:S.plan});
 function planEmpty(){
-  const n = wdayOf(day); if (planHas(n)) return "";
+  const n = wdayOf(day); if (hasPlanFor(day)) return "";
   const any = Object.keys(S.plan||{}).some(k=>planHas(k));
   return `<div class="card plan-empty"><div><h3>Plan semanal</h3><p class="note">${any ? `No tienes nada planificado para el ${WDAYS[n-1].toLowerCase()}.` : "Importa tu plan de comidas: cada día aparecerá ya puesto en su desayuno, comida y cena, y solo tendrás que escribir los gramos."}</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn" style="cursor:pointer">Importar mi plan<input type="file" id="impPlan" accept=".json,application/json" hidden></label><button class="btn ghost" data-act="plan-edit" data-d="${n}">${any?"Editar plan":"Crear a mano"}</button></div></div>`;
 }
@@ -528,7 +536,7 @@ function planOpt(m, items){
   return planDraft[day+"|"+m+"|opt"] ?? o[0];
 }
 function planPending(m){            // [alimento, índice] planificados para este día y comida que aún no están apuntados
-  const n = wdayOf(day), items = planDay(n)[m] || [], L = (S.diary[day]||[]).filter(e => e.meal===m && e.plan);
+  const n = planIdFor(day), items = curPlan(day)[m] || [], L = (S.diary[day]||[]).filter(e => e.meal===m && e.plan);
   if (L.some(e => e.plan===n+"-"+m)) return [];   // apuntado con la versión anterior
   const done = new Set(L.map(e => e.plan)), o = planOpt(m, items);
   return items.map((f,i)=>[f,i]).filter(([f,i]) => !done.has(n+"-"+m+"-"+i) && (!f.opt || f.opt===o));
@@ -536,7 +544,7 @@ function planPending(m){            // [alimento, índice] planificados para est
 const planG = (m,i,f) => parseNum(planDraft[day+"|"+m+"|"+i] ?? f.g);
 function planRows(m){
   const pend = planPending(m); if (!pend.length) return "";
-  const items = planDay(wdayOf(day))[m], opts = planOpts(items), o = planOpt(m, items);
+  const items = curPlan(day)[m], opts = planOpts(items), o = planOpt(m, items);
   const anyOptLogged = (S.diary[day]||[]).some(e => e.meal===m && e.plan && e.opt);
   const chips = opts.length>1 && !anyOptLogged ? `<div class="chips pl-opts">${opts.map(x=>`<button class="chip" data-act="plan-opt" data-m="${m}" data-o="${esc(x)}" aria-pressed="${x===o}">${esc(x)}</button>`).join("")}</div>` : "";
   const rows = pend.map(([f,i]) => { const key = day+"|"+m+"|"+i, g = planDraft[key] ?? f.g, v = nutr(f, parseNum(g));
@@ -544,24 +552,27 @@ function planRows(m){
       <span class="n">${esc(f.name)}<small data-plk="${esc(key)}">${fmt(v.kcal)} kcal · P ${r0(v.p)} · C ${r0(v.c)} · G ${r0(v.f)}</small></span>
       <label class="pl-g"><input id="pl-${esc(key)}" data-pl="${esc(key)}" inputmode="decimal" value="${esc(g)}" aria-label="Gramos de ${esc(f.name)}"><span>g</span></label></div>`; }).join("");
   const tot = pend.reduce((a,[f,i]) => a + nutr(f, planG(m,i,f)).kcal, 0);
-  return `<div class="pl-box"><div class="pl-tag">Según tu plan · escribe los gramos y marca ✓</div>${chips}${rows}
+  const dish = curPlan(day).dishes?.[m];
+  return `<div class="pl-box"><div class="pl-tag">Según tu plan · escribe los gramos y marca ✓</div>${dish?`<div class="pl-dish">${esc(dish)}</div>`:""}${chips}${rows}
     ${pend.length>1?`<button class="btn soft pl-all" data-act="plan-add" data-m="${m}"><span data-plt="${m}">Apuntar todo · ${fmt(tot)} kcal</span></button>`:""}</div>`;
 }
 function planBar(){
-  const n = wdayOf(day); if (!planHas(n)) return "";
+  const n = wdayOf(day); if (!hasPlanFor(day)) return "";
   const pend = MEALS.flatMap(m => planPending(m).map(([f,i]) => nutr(f, planG(m,i,f)).kcal));
-  return `<div class="plan-bar"><span>${pend.length ? `Plan del ${WDAYS[n-1].toLowerCase()}: <b data-plday>${fmt(pend.reduce((a,b)=>a+b,0))} kcal</b> por apuntar` : `Plan del ${WDAYS[n-1].toLowerCase()} apuntado ✓`}</span>
-    <span>${pend.length?`<button class="link" data-act="plan-add-all">Apuntar todo el día</button> · `:""}<button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button></span></div>`;
+  const dated = !!datedPlan(day);
+  return `<div class="plan-bar"><span>${pend.length ? `${planLabel(day)}: <b data-plday>${fmt(pend.reduce((a,b)=>a+b,0))} kcal</b> por apuntar` : `${planLabel(day)} apuntado ✓`}</span>
+    <span>${pend.length?`<button class="link" data-act="plan-add-all">Apuntar todo el día</button> · `:""}${dated?`<button class="link" data-act="plan30-off">Quitar plan de ${S.planDates.length||30} días</button>`:`<button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button>`}</span></div>
+`;
 }
 function updatePlanRow(key){
-  const [d, m, i] = key.split("|"), f = planDay(wdayOf(d))[m]?.[+i]; if (!f) return;
+  const [d, m, i] = key.split("|"), f = curPlan(d)[m]?.[+i]; if (!f) return;
   const v = nutr(f, parseNum(planDraft[key] ?? f.g)); const el = document.querySelector(`[data-plk="${CSS.escape(key)}"]`);
   if (el) el.textContent = `${fmt(v.kcal)} kcal · P ${r0(v.p)} · C ${r0(v.c)} · G ${r0(v.f)}`;
   const t = document.querySelector(`[data-plt="${CSS.escape(m)}"]`); if (t) t.textContent = `Apuntar todo · ${fmt(planPending(m).reduce((a,[f2,j]) => a + nutr(f2, planG(m,j,f2)).kcal, 0))} kcal`;
   const dt = document.querySelector("[data-plday]"); if (dt) dt.textContent = fmt(MEALS.flatMap(mm => planPending(mm).map(([f2,j]) => nutr(f2, planG(mm,j,f2)).kcal)).reduce((a,b)=>a+b,0)) + " kcal";
 }
 function logPlan(m, list){
-  const n = wdayOf(day);
+  const n = planIdFor(day);
   const entries = list.map(([f,i]) => ({f, i, g: planG(m,i,f)})).filter(x => x.g > 0).map(({f,i,g}) => { const v = nutr(f, g);
     return {id:rid(), meal:m, name:f.name, qty:g, unit:"g", g, per:f.per, servings:f.servings||[], kcal:v.kcal, p:v.p, c:v.c, f:v.f, plan:n+"-"+m+"-"+i, ...(f.opt?{opt:f.opt}:{}), src:"de tu plan"}; });
   if (entries.length) (S.diary[day] ||= []).push(...entries);
@@ -660,6 +671,7 @@ function viewProfile(){
   const g = S.settings, mk = r0(g.p*4+g.c*4+g.f*9);
   const imp = importState ? `<div class="card imp"><h3>${esc(importState.title)}</h3><p class="note">${esc(importState.summary)}</p>
       ${importState.review?`<button class="btn" data-act="open-review">Revisar ${importState.review} ejercicio${importState.review>1?"s":""} importado${importState.review>1?"s":""}</button>`:""}
+      ${importState.kind==="plan30" && !importState.busy ? `<label class="f">Empiezo el día 1 el<input type="date" id="p30start" value="${(()=>{ const t = today(), w = wdayOf(t); return w===1 ? t : addDays(t, 8-w); })()}"></label>` : ""}
       ${importState.items?.length?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="imp-confirm" ${importState.busy?"disabled":""}>${importState.busy?"Importando…":"Importar"}</button><button class="btn ghost" data-act="imp-cancel" ${importState.busy?"disabled":""}>Cancelar</button></div>`:`<button class="btn ghost" data-act="imp-cancel">Cerrar</button>`}
       <span class="note" id="impProg">${esc(importState.progress||"")}</span></div>` : "";
   return `<h1>Perfil</h1>
@@ -1003,6 +1015,8 @@ function importFoodCSV(text, fname){
 function importJSON(text, fname){
   let d; try { d = JSON.parse(text); } catch { return {title:"Archivo no válido", summary:fname+" no es un JSON válido."}; }
   if (d?.app!=="pesa-y-plato") return {title:"Formato no reconocido", summary:"Este JSON no es una copia de Pesa y Plato."};
+  if (d.plan30){ const n = d.plan30.days.length;
+    return {kind:"plan30", items:[d.plan30], title:`${d.plan30.title} · ${n} días`, summary:`Cada día del ${d.plan30.title.toLowerCase()} se pondrá en su fecha. Elige qué día empiezas (el día 1 es ${d.plan30.firstWeekday||"lunes"}).`}; }
   if (d.plan && !d.workouts && !d.diary){ const n = Object.values(d.plan).reduce((a,day)=>a+Object.values(day).reduce((b,l)=>b+l.length,0),0);
     return {kind:"backup", items:[d], title:"Plan semanal", summary:`${n} alimentos repartidos en ${Object.keys(d.plan).length} días. Sustituye por completo el plan que tengas ahora.`}; }
   return {kind:"backup", items:[d], title:"Copia de seguridad", summary:`${(d.workouts||[]).length} entrenos, ${Object.keys(d.diary||{}).length} días de comidas, ${(d.routines||[]).length} rutinas. Se mezclará con lo que ya tienes.`};
@@ -1109,6 +1123,9 @@ async function runImport(){
   const st = importState; st.busy = true; render(); const prog = t => { st.progress = t; const el = $("impProg"); if (el) el.textContent = t; };
   let n = 0;
   if (st.kind==="workouts"){ await putMany(st.items.map(w=>["w-"+w.id, w]), (i,t)=>prog(`${i} de ${t}…`)); }
+  else if (st.kind==="plan30"){ const P = st.items[0], start = st.start || today(), days = {};
+    P.days.forEach((meals, i) => { days[addDays(start, i)] = {...meals, _n:i+1}; });
+    await put("plandates", {title:P.title, start, length:P.days.length, days}); }
   else if (st.kind==="health"){ prog("Guardando…"); await mergeHealth(st.items[0]); }
   else if (st.kind==="food"){ const byDay = {}; for (const i of st.items) (byDay[i.date] ||= []).push(i);
     const days = Object.keys(byDay); for (const d of days){ const ids = new Set(byDay[d].map(i=>i.id));
@@ -1125,7 +1142,7 @@ async function runImport(){
     if (d.health) await mergeHealth(d.health);
     if (d.settings) await put("settings", {...S.settings, ...d.settings}); }
   const nRev = st.kind==="workouts" || st.kind==="backup" ? unreviewed().length : 0;
-  importState = {review:nRev, title:"Importación terminada", summary: st.kind==="health" ? "Datos de Salud importados. Mira la tarjeta de actividad en Inicio." : st.kind==="workouts" ? `${st.items.length} entrenos importados.` : st.kind==="food" ? `${st.items.length} registros de comida importados.` : "Copia restaurada."};
+  importState = {review:nRev, title:"Importación terminada", summary: st.kind==="plan30" ? `Listo: lo tienes en el Diario del ${longDay(S.planDates.start)} al ${longDay(addDays(S.planDates.start, S.planDates.length-1))}.` : st.kind==="health" ? "Datos de Salud importados. Mira la tarjeta de actividad en Inicio." : st.kind==="workouts" ? `${st.items.length} entrenos importados.` : st.kind==="food" ? `${st.items.length} registros de comida importados.` : "Copia restaurada."};
   render();
 }
 
@@ -1295,7 +1312,9 @@ document.addEventListener("click", e => {
       <p class="note">Se sustituye lo que hubiera planificado esos días.</p><button class="btn" data-act="plan-copy-yes">Copiar</button></div>`; break;
     case "plan-copy-yes": { const src = JSON.stringify(planDay(c.n)); document.querySelectorAll("[data-cp]:checked").forEach(cb => { S.plan[cb.dataset.cp] = JSON.parse(src); }); savePlan(); openPlanEditor(c.n); break; }
     case "plan-opt": planDraft[day+"|"+el.dataset.m+"|opt"] = el.dataset.o; render(); break;
-    case "plan-one": { const m = el.dataset.m, i = +el.dataset.i, f = planDay(wdayOf(day))[m]?.[i]; if (f){ logPlan(m, [[f,i]]); putDay(day); render(); } break; }
+    case "plan30-off": el.parentElement.innerHTML = `¿Quitar el plan de ${S.planDates?.length||30} días? Lo ya apuntado se queda. <button class="link" data-act="plan30-off-yes">Quitar</button>`; break;
+    case "plan30-off-yes": S.planDates = null; del("plandates"); render(); break;
+    case "plan-one": { const m = el.dataset.m, i = +el.dataset.i, f = curPlan(day)[m]?.[i]; if (f){ logPlan(m, [[f,i]]); putDay(day); render(); } break; }
     case "plan-add": logPlan(el.dataset.m, planPending(el.dataset.m)); putDay(day); render(); break;
     case "plan-add-all": MEALS.forEach(m => logPlan(m, planPending(m))); putDay(day); render(); break;
     case "copy-yesterday": { const m = el.dataset.meal; const list = (S.diary[addDays(day,-1)]||[]).filter(x=>x.meal===m).map(({id,ex,...x})=>x); addEntries(m, list); break; }
@@ -1321,7 +1340,7 @@ document.addEventListener("click", e => {
     /* progreso */
     case "metric": metric = el.dataset.m; render(); break;
     /* perfil */
-    case "imp-confirm": runImport(); break;
+    case "imp-confirm": if (importState?.kind==="plan30") importState.start = $("p30start")?.value || today(); runImport(); break;
     case "imp-cancel": importState = null; render(); break;
     case "export-json": exportJSON(); break;
     case "export-w": exportW(); break;
