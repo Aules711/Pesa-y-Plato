@@ -336,7 +336,7 @@ function viewHome(){
   return `<div class="top"><h1>Inicio</h1>${S.active?`<button class="btn" data-act="tab" data-tab="train">Seguir entreno · <span data-elapsed></span></button>`:""}</div>
   <div class="grid2">
     <div class="card"><h2>Esta semana</h2><div><span class="big">${count}</span> <span class="note">/ ${S.settings.days} entrenos</span></div><div class="dots">${dots}</div></div>
-    <div class="card"><h2>Hoy</h2><div><span class="big" style="color:${remaining<0?"var(--danger)":"var(--accent)"}">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"}</span></div>
+    <div class="card today"><h2>Hoy</h2><div><span class="big" style="color:${remaining<0?"var(--danger)":"var(--accent)"}">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"}</span></div>
       <div class="note tnum">P ${r0(tot.p)} · C ${r0(tot.c)} · G ${r0(tot.f)} g</div>
       <button class="btn soft" data-act="tab" data-tab="food">Abrir diario</button></div>
   </div>
@@ -481,7 +481,7 @@ function tick(){
   if (S.active) document.querySelectorAll("[data-elapsed]").forEach(el => el.textContent = clock(Date.now()-S.active.start));
   if (rest){ const left = rest.end-Date.now();
     if (left<=0){ stopRest(); beep(); try { navigator.vibrate?.([200,100,200]); } catch {} }
-    else { $("restbar").hidden = false; $("restT").textContent = "Descanso " + clock(left); $("restProg").style.width = (100*left/rest.total)+"%";
+    else { $("restbar").hidden = false; $("restT").textContent = clock(left); $("restProg").style.width = (100*left/rest.total)+"%";
       document.querySelectorAll("[data-restlive]").forEach(el => el.textContent = clock(left)); } }
 }
 setInterval(tick, 1000);
