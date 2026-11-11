@@ -245,7 +245,7 @@ function landingHTML(card, mode){
         ${feat("food","Diario de comidas","Calorías restantes del día y tus macros: proteínas, carbohidratos y grasas. Busca alimentos, crea los tuyos o copia la comida de ayer.")}
         ${feat("chart","Tu progreso a la vista","Récords, 1RM estimado, volumen por ejercicio, series por músculo, peso corporal y calorías de las últimas semanas.")}
         ${feat("play","Vídeos de tus ejercicios","Sube un vídeo o GIF de cada ejercicio para recordar la técnica justo antes de la serie.")}
-        ${feat("watch","Apple Watch","Trae tus pasos, calorías activas y entrenos del reloj desde la app Salud del iPhone.")}
+        ${feat("food","Tu plan semanal","Importa el plan de alimentación que ya tienes y cada día apunta solo los gramos que has comido.")}
         ${feat("swap","Trae tus datos","Importa tu historial de Hevy o Strong y tus comidas de MyFitnessPal. Y exporta los tuyos cuando quieras.")}
         ${feat("lock","Privado","Tus datos solo los ves tú. Puedes descargarlos o borrar tu cuenta en cualquier momento.")}
       </div></section>
@@ -340,7 +340,6 @@ function viewHome(){
       <div class="note tnum">P ${r0(tot.p)} · C ${r0(tot.c)} · G ${r0(tot.f)} g</div>
       <button class="btn soft" data-act="tab" data-tab="food">Abrir diario</button></div>
   </div>
-  ${activityCard()}
   <div class="top"><h2>Entrenos</h2>${S.workouts.length?`<span class="note">${S.workouts.length} en total</span>`:""}</div>
   ${feed || `<div class="empty"><span>Aún no hay entrenos guardados. Empieza uno o importa tu historial de Hevy o Strong.</span>
      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn" data-act="start-empty">Empezar entreno</button><button class="btn ghost" data-act="tab" data-tab="profile">Importar</button></div></div>`}`;
@@ -489,7 +488,7 @@ setInterval(tick, 1000);
 
 /* ---------- Diario ---------- */
 function viewFood(){
-  const tot = dayTotals(day), g = S.settings, exK = g.addEx ? r0(S.health.days[day]?.kcal||0) : 0, remaining = g.kcal - tot.kcal + exK;
+  const tot = dayTotals(day), g = S.settings, exK = 0, remaining = g.kcal - tot.kcal + exK;
   const mac = (lab,v,goal,color) => `<div class="macro"><span>${lab}</span><b>${r0(v)} <span class="note">/ ${goal} g</span></b><div class="bar"><i style="width:${Math.min(100,goal?v/goal*100:0)}%;background:${color}"></i></div></div>`;
   const meals = MEALS.map(m=>{
     const list = (S.diary[day]||[]).filter(e=>e.meal===m), k = list.reduce((a,e)=>a+(+e.kcal||0),0);
@@ -501,7 +500,7 @@ function viewFood(){
     <div style="text-align:center"><div class="lbl">${dayLabel(day)}</div>${day!==today()?`<button class="link" data-act="day-today" style="padding:0;font-size:13px">Volver a hoy</button>`:""}</div>
     <button class="iconb" data-act="day-next" aria-label="Día siguiente">›</button></div>
   <div class="card"><h2>Calorías restantes</h2>
-    <div class="equation" style="${g.addEx?"grid-template-columns:1fr auto 1fr auto 1fr auto 1fr":""}"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div>${g.addEx?`<div class="op">+</div><div><div class="big">${fmt(exK)}</div><span>Ejercicio</span></div>`:""}<div class="op">=</div>
+    <div class="equation"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div><div class="op">=</div>
       <div class="rem ${remaining<0?"neg":""}"><div class="big">${fmt(remaining)}</div><span>Restantes</span></div></div>
     <div class="macros">${mac("Carbohidratos",tot.c,g.c,"var(--carb)")}${mac("Grasas",tot.f,g.f,"var(--fat)")}${mac("Proteínas",tot.p,g.p,"var(--prot)")}</div></div>
   ${planCard()}
@@ -635,9 +634,6 @@ function viewProgress(){
   <div class="card"><div class="top"><h2>Peso corporal</h2>${bwDiff!=null?`<span class="note tnum">${bwDiff>0?"+":""}${bwDiff.toLocaleString("es-ES")} kg desde ${shortDay(bw[0][0])}</span>`:""}</div>
     <form id="fWeight" style="display:flex;gap:8px"><input id="bwIn" inputmode="decimal" placeholder="Peso de hoy (kg)" value="${S.body[today()]?.kg??""}" aria-label="Peso de hoy en kg"><button class="btn" type="submit">Guardar</button></form>
     ${lineChart(bwPts,{color:"var(--ok)",label:"Peso corporal",empty:"Apunta tu peso para ver la tendencia."})}</div>
-  ${Object.keys(S.health.days).length ? (()=>{ const sp = []; for (let i=29;i>=0;i--){ const d = addDays(today(),-i); sp.push({x:shortDay(d), y:S.health.days[d]?.steps||0}); }
-     const avg = r0(sp.reduce((a,b)=>a+b.y,0)/Math.max(1,sp.filter(x=>x.y).length));
-     return `<div class="card"><div class="top"><h2>Pasos · 30 días</h2><span class="note tnum">media ${fmt(avg)}</span></div>${lineChart(sp,{bars:true,zero:true,goal:S.settings.stepGoal||10000,color:"var(--accent)",label:"Pasos de los últimos 30 días",okOver:true})}</div>`; })() : ""}
   <div class="card"><div class="top"><h2>Calorías · 14 días</h2><span class="note">línea = objetivo</span></div>${lineChart(kp,{bars:true,zero:true,goal:S.settings.kcal,color:"var(--prot)",label:"Calorías de los últimos 14 días"})}</div>`;
 }
 
@@ -660,20 +656,6 @@ function viewProfile(){
       <label class="f">Descanso por defecto (s)<input id="gRest" type="number" min="0" step="15" value="${g.rest}"></label></div>
     <p class="note tnum">Tus macros suman ${fmt(mk)} kcal${Math.abs(mk-g.kcal)>100?` (${mk>g.kcal?"+":""}${fmt(mk-g.kcal)} respecto al objetivo)`:""}.</p>
     <button class="btn" type="submit">Guardar objetivos</button><span class="note" id="goalMsg"></span></form>
-  <div class="card"><h2>Apple Watch y Salud</h2>
-    <p class="note">Apple no permite que las webs lean Salud directamente. Tienes dos formas de traer tus datos:</p>
-    <h3>1 · Todo tu historial</h3>
-    <p class="note">En el iPhone: app Salud › tu foto (arriba a la derecha) › Exportar todos los datos de salud. Guarda el archivo «exportación.zip» y elígelo aquí. Se leen pasos, calorías activas y entrenos del último año; puede tardar un minuto.</p>
-    <label class="f">Exportación de Salud (.zip o export.xml)<input type="file" id="impH" accept=".zip,.xml,application/zip,text/xml"></label>
-    <h3>2 · El día a día, con un atajo</h3>
-    <p class="note">Un atajo del iPhone copia tus pasos y calorías cada noche y abre la app lista para pegar.</p><button class="btn soft" data-act="shortcut-guide">Configurar atajo</button>
-    <p class="note">O apúntalo aquí a mano:</p>
-    <form id="fHealth" class="stack"><div class="grid2"><label class="f">Día<input type="date" id="hDate" value="${today()}"></label><label class="f">Pegar del atajo<input id="hPaste" placeholder="8432;512" autocomplete="off"></label></div>
-      <div class="grid2"><label class="f">Pasos<input id="hSteps" inputmode="numeric"></label><label class="f">Kcal activas<input id="hKcal" inputmode="numeric"></label></div>
-      <button class="btn" type="submit">Guardar actividad</button><span class="note" id="hMsg"></span></form>
-    <div class="grid2"><label class="f">Meta de pasos diarios<input id="gSteps" type="number" min="0" step="500" value="${S.settings.stepGoal||10000}"></label>
-      <label class="f" style="justify-content:flex-end"><span style="display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px;font-weight:500"><input type="checkbox" id="gAddEx" ${S.settings.addEx?"checked":""} style="width:auto"> Sumar kcal activas al objetivo del Diario</span></label></div>
-  </div>
   <div class="card"><h2>Importar</h2>
     <label class="f">Entrenos · CSV de Hevy o Strong<input type="file" id="impW" accept=".csv,text/csv"></label>
     <label class="f">Comidas · CSV de MyFitnessPal<input type="file" id="impF" accept=".csv,text/csv"></label>
@@ -1372,7 +1354,7 @@ document.addEventListener("submit", async e => {
 });
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("sheet").hidden) closeSheet(); });
 
-function checkHash(){ if (location.hash==="#watch"){ tab = "home"; render(); openWatchPaste(); } }
+function checkHash(){ if (location.hash==="#watch") clearHash(); }
 window.addEventListener("hashchange", checkHash);
 init();
 })();

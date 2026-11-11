@@ -1,6 +1,6 @@
 # Pesa y Plato
 
-Entrenos al estilo Hevy, diario de comidas al estilo MyFitnessPal, progreso, vídeos de ejercicios e integración con el Apple Watch. Web instalable en el móvil, con cuentas de usuario.
+Entrenos al estilo Hevy, diario de comidas al estilo MyFitnessPal, plan semanal de comidas, progreso y vídeos de ejercicios. Web instalable en el móvil, con cuentas de usuario.
 
 **Tecnología:** Vite (HTML + JavaScript) · Supabase (usuarios, base de datos y vídeos) · Vercel (alojamiento y la función de IA) · GitHub (código).
 
@@ -105,11 +105,8 @@ Cada persona solo ve sus propios datos aunque compartáis la misma web. Tú, com
 1. En la app de Claude: **Perfil › Exportar › Copia completa (.json)**.
 2. En la nueva web, entra con tu cuenta: **Perfil › Importar › Copia de seguridad (.json)**.
 
-Pasan entrenos, comidas, rutinas, ejercicios, peso, actividad del Watch y ajustes. Los **vídeos no viajan** en la copia: vuelve a subirlos desde la ficha de cada ejercicio.
+Pasan entrenos, comidas, rutinas, ejercicios, peso y ajustes. Los **vídeos no viajan** en la copia: vuelve a subirlos desde la ficha de cada ejercicio.
 
-## Apple Watch
-
-El atajo de iPhone funciona igual, pero con el enlace nuevo: en la app, **Inicio › Configurar atajo** ya muestra tu dirección con `/#watch` al final. Si ya tenías el atajo creado, cambia solo la acción «Abrir URL».
 
 ## Instalarla en el móvil
 
