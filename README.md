@@ -177,6 +177,6 @@ public/                 iconos, manifest y páginas legales (privacidad.html, te
 En Perfil › Conexiones cada usuario Premium conecta Strava, Garmin o los dos. Sus actividades salen en Inicio, Diario (calorías de ejercicio opcionales) y Progreso.
 
 1. En Supabase › SQL Editor ejecuta `supabase/conexiones.sql`.
-2. **Strava** (exige suscripción de Strava de pago para el desarrollador): crea la app en strava.com/settings/api con *Authorization Callback Domain* = tu dominio (p. ej. `pesayplato.vercel.app`) y añade en Vercel `STRAVA_CLIENT_ID` y `STRAVA_CLIENT_SECRET`.
+2. **Strava**: Strava exige suscripción de pago para crear una app en su API. Por eso **cada usuario usa su propia app de Strava**: al pulsar «Conectar con Strava», la app le guía para crearla (strava.com/settings/api, *Authorization Callback Domain* = tu dominio) y pegar su Client ID y Client Secret. Opcional: si tú tienes una app general, pon `STRAVA_CLIENT_ID` y `STRAVA_CLIENT_SECRET` en Vercel y se usará para quien no tenga la suya.
 3. **Garmin** (programa Starter, gratis tras aprobación): pide acceso en developer.garmin.com › Garmin Connect Developer Program. En el portal, pon como *Redirect URL* `https://TU-DOMINIO/api/garmin` y como endpoint de avisos (push) de **Activities** y **Deregistrations** la misma `https://TU-DOMINIO/api/garmin`. Añade en Vercel `GARMIN_CLIENT_ID` y `GARMIN_CLIENT_SECRET`.
 4. Redeploy.

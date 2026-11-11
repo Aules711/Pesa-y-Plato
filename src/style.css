@@ -573,3 +573,8 @@ nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
 .st-v.garmin{color:var(--accent)}
 .conn-logos{display:flex;gap:10px}
 .conn-msg{margin:0}
+.st-setup{display:flex;flex-direction:column;gap:10px}
+.st-steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.st-steps a{color:#FC4C02;font-weight:700}
+.st-steps code{background:var(--surface2);padding:2px 6px;border-radius:6px;font-size:13px}
+.st-steps .copy{display:flex;gap:8px;align-items:center;margin-top:6px}

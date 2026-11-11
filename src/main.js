@@ -662,7 +662,7 @@ function openNutriDetail(k){
     : `<p class="note">Ningún alimento apuntado aporta ${l.toLowerCase()}.</p>`);
 }
 /* ---------- Strava ---------- */
-let stravaMsg = "", stravaBusy = false;
+let stravaMsg = "", stravaBusy = false, stravaSetup = false;
 const SPORTS = {Run:"Carrera",TrailRun:"Trail",VirtualRun:"Carrera (cinta)",Walk:"Caminata",Hike:"Senderismo",Ride:"Bici",MountainBikeRide:"Bici de montaña",GravelRide:"Gravel",EBikeRide:"Bici eléctrica",VirtualRide:"Bici (rodillo)",
   Swim:"Natación",WeightTraining:"Pesas",Workout:"Entreno",Crossfit:"CrossFit",HighIntensityIntervalTraining:"HIIT",Yoga:"Yoga",Pilates:"Pilates",Elliptical:"Elíptica",StairStepper:"Escaleras",Rowing:"Remo",
   Soccer:"Fútbol",Tennis:"Tenis",Padel:"Pádel",Basketball:"Baloncesto",Badminton:"Bádminton",Golf:"Golf",Kayaking:"Kayak",Surfing:"Surf",AlpineSki:"Esquí",Snowboard:"Snowboard",RockClimbing:"Escalada",Boxing:"Boxeo"};
@@ -678,9 +678,9 @@ const exKcal = d => actsOn(d).reduce((a,x) => a + (+x.kcal||0), 0);
 const exAdd = d => S.settings.addEx ? exKcal(d) : 0;
 const fmtMin = sec => { const m = Math.round(sec/60); return m >= 60 ? `${Math.floor(m/60)} h ${m%60 ? (m%60)+" min" : ""}`.trim() : `${m} min`; };
 const actLine = a => [fmtMin(a.dur), a.km ? String(r1(a.km)).replace(".",",")+" km" : "", a.kcal ? fmt(a.kcal)+" kcal" : ""].filter(Boolean).join(" · ");
-async function stravaCall(action, svc = "strava"){
+async function stravaCall(action, svc = "strava", extra){
   const { data:{ session } } = await sb.auth.getSession();
-  const r = await fetch("/api/" + svc, {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({action})});
+  const r = await fetch("/api/" + svc, {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({action, ...(extra||{})})});
   const j = await r.json().catch(() => ({})); if (!r.ok) throw {code:j.code || r.status, detail:j.detail}; return j;
 }
 async function stravaSync(force){
@@ -690,7 +690,7 @@ async function stravaSync(force){
   catch(e){ if (force) stravaMsg = stravaErr(e); }
   stravaBusy = false; if (force || tab !== "profile") render();
 }
-const stravaErr = e => e.code==="premium" ? "Conectar Strava o Garmin es Premium." : e.code==="garmin_disabled" ? "Falta configurar Garmin en Vercel (GARMIN_CLIENT_ID y GARMIN_CLIENT_SECRET)." : e.code==="strava_disabled" ? "Falta configurar Strava en Vercel (STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET)." : e.code==="no_table" ? "Falta crear la tabla: ejecuta supabase/strava.sql en Supabase." : e.code==="strava_rate" ? "Strava está saturado ahora mismo. Prueba en unos minutos." : e.code==="disabled" ? "Falta la clave secreta de Supabase en Vercel." : e.code===404 ? "Solo funciona en la web publicada." : "No se pudo hablar con Strava. Inténtalo otra vez.";
+const stravaErr = e => e.code==="bad_app" ? "Revisa los datos: el Client ID son solo números y el Client Secret es un código largo de letras y números." : e.code==="premium" ? "Conectar Strava o Garmin es Premium." : e.code==="garmin_disabled" ? "Falta configurar Garmin en Vercel (GARMIN_CLIENT_ID y GARMIN_CLIENT_SECRET)." : e.code==="strava_disabled" ? "Falta configurar Strava en Vercel (STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET)." : e.code==="no_table" ? "Falta crear la tabla: ejecuta supabase/strava.sql en Supabase." : e.code==="strava_rate" ? "Strava está saturado ahora mismo. Prueba en unos minutos." : e.code==="disabled" ? "Falta la clave secreta de Supabase en Vercel." : e.code===404 ? "Solo funciona en la web publicada." : "No se pudo hablar con Strava. Inténtalo otra vez.";
 function connSection(){
   const msg = stravaMsg ? `<p class="note conn-msg"><b>${esc(stravaMsg)}</b></p>` : "";
   if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Conecta tu reloj o Strava</h3>
@@ -703,6 +703,7 @@ function connSection(){
     ${C ? `<p class="note">Tus actividades llegan solas cada vez que abres la app. ${last ? `Última: ${SPORT_ICO(last.type)} ${esc(sportName(last.type))}, ${dayLabel(last.day).toLowerCase()}.` : "Aún no hay actividades en los últimos 3 meses."}</p>
       <button class="btn soft" data-act="strava-sync" ${stravaBusy?"disabled":""}>Sincronizar ahora</button>
       <button class="btn danger" data-act="conn-off" data-s="strava">Desconectar Strava</button>`
+    : stravaSetup ? stravaSetupForm()
     : `<p class="note">Trae tus actividades de los últimos 3 meses y las nuevas cada vez que abras la app.</p><button class="btn st-btn" data-act="conn-on" data-s="strava">Conectar con Strava</button>`}</div>
     <div class="card garmin"><div class="st-h"><span class="gm-logo" aria-hidden="true">G</span><div><b>Garmin Connect</b><small>${G ? "Conectado" : "No conectado"}</small></div>${G?`<span class="st-on">●</span>`:""}</div>
     ${G ? `<p class="note">Cada actividad que guarde tu reloj llega sola a la app al sincronizarse con Garmin Connect. ${glast ? `Última: ${SPORT_ICO(glast.type)} ${esc(sportName(glast.type))}, ${dayLabel(glast.day).toLowerCase()}.` : "Aún no ha llegado ninguna: aparecerán desde tu próxima actividad."}</p>
@@ -712,6 +713,19 @@ function connSection(){
       <p class="note" style="margin:0">Desactívalo si tu plan ya cuenta con el ejercicio.</p></div>` : ""}
     ${msg}
     <p class="note">Solo se leen tus actividades; la app nunca publica nada en tu Strava ni en tu Garmin. Puedes quitar el permiso cuando quieras desde aquí o desde la propia app de Strava o Garmin Connect.</p>`;
+}
+function stravaSetupForm(){
+  const host = location.host;
+  return `<div class="st-setup"><p class="note"><b>Strava pide un paso más:</b> para conectar hace falta tener <b>Strava de pago</b> y crear tu propia «app» en Strava (gratis, 2 minutos, solo la primera vez).</p>
+    <ol class="st-steps">
+      <li>Abre <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a> (mejor desde el ordenador) e inicia sesión.</li>
+      <li>Rellena: <b>Application Name</b> «BEINGHEALTHY ${esc((user?.email||"").split("@")[0])}», <b>Category</b> «Training», <b>Website</b> <code>https://${esc(host)}</code></li>
+      <li>En <b>Authorization Callback Domain</b> pon exactamente: <span class="copy"><code>${esc(host)}</code><button class="btn soft" data-act="copy" data-v="${esc(host)}">Copiar</button></span></li>
+      <li>Guarda (si pide icono, sube cualquier imagen). Copia aquí tu <b>Client ID</b> y tu <b>Client Secret</b> (pulsa «show» para verlo):</li></ol>
+    <label class="f">Client ID<input id="stCid" inputmode="numeric" autocomplete="off" placeholder="184523"></label>
+    <label class="f">Client Secret<input id="stSec" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="a1b2c3…"></label>
+    <button class="btn st-btn" data-act="strava-app">Guardar y conectar</button>
+    <p class="note" style="margin:0">Tu Client Secret solo lo guarda el servidor de la app y solo se usa para leer tus actividades.</p></div>`;
 }
 function stravaCard(){
   const L = allActs(); if (!S.strava && !S.garmin) return "";
@@ -1678,7 +1692,10 @@ document.addEventListener("click", e => {
   const act = el.dataset.act, row = el.closest("[data-ei]"), ei = row ? +row.dataset.ei : -1, si = row?.dataset.si!=null ? +row.dataset.si : -1;
   const a = S.active, c = sheetCtx;
   switch (act){
-    case "conn-on": { const sv = el.dataset.s; el.disabled = true; el.textContent = `Abriendo ${sv==="garmin"?"Garmin":"Strava"}…`; stravaCall("start", sv).then(r => { location.href = r.url; }).catch(e => { stravaMsg = stravaErr(e); render(); }); break; }
+    case "conn-on": { const sv = el.dataset.s; el.disabled = true; el.textContent = `Abriendo ${sv==="garmin"?"Garmin":"Strava"}…`;
+      stravaCall("start", sv).then(r => { location.href = r.url; }).catch(e => { if (sv==="strava" && e.code==="needs_app"){ stravaSetup = true; stravaMsg = ""; } else stravaMsg = stravaErr(e); render(); }); break; }
+    case "strava-app": { const cid = $("stCid").value.trim(), sec = $("stSec").value.trim(); el.disabled = true; el.textContent = "Abriendo Strava…";
+      stravaCall("app", "strava", {client_id:cid, client_secret:sec}).then(r => { location.href = r.url; }).catch(e => { stravaMsg = stravaErr(e); el.disabled = false; el.textContent = "Guardar y conectar"; const m = document.querySelector(".conn-msg"); if (m) m.innerHTML = `<b>${esc(stravaMsg)}</b>`; else el.insertAdjacentHTML("afterend", `<p class="note conn-msg"><b>${esc(stravaMsg)}</b></p>`); }); break; }
     case "strava-sync": stravaSync(true); break;
     case "conn-off": { const N = el.dataset.s==="garmin" ? "Garmin" : "Strava"; el.outerHTML = `<div class="stack"><p class="note">¿Desconectar ${N}? Se borran de la app las actividades traídas (en ${N} no se toca nada).</p><button class="btn danger" data-act="conn-off-yes" data-s="${el.dataset.s}">Sí, desconectar</button></div>`; break; }
     case "conn-off-yes": { const sv = el.dataset.s; el.disabled = true; stravaCall("disconnect", sv).then(() => { S[sv] = null; stravaMsg = `${sv==="garmin"?"Garmin":"Strava"} desconectado.`; render(); }).catch(e => { stravaMsg = stravaErr(e); render(); }); break; }

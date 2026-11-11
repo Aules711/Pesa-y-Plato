@@ -3,18 +3,21 @@
 // - POST /api/strava {action:"start"}      → devuelve el enlace para conectar
 // - POST /api/strava {action:"sync"}       → trae las actividades nuevas
 // - POST /api/strava {action:"disconnect"} → desconecta y borra lo traído
-// Variables en Vercel: STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, SUPABASE_SERVICE_ROLE_KEY.
+// - POST /api/strava {action:"app", client_id, client_secret} → guarda la app de Strava PROPIA del usuario y devuelve el enlace
+// Cada usuario puede usar su propia app de Strava (la crea él con su suscripción de Strava) o, si existe, la general
+// de STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET en Vercel. Necesita SUPABASE_SERVICE_ROLE_KEY.
 import crypto from "node:crypto";
 import { sbAdmin, hasPremium, hasPremiumById } from "./_sb.js";
 
-const ID = () => (process.env.STRAVA_CLIENT_ID || "").trim();
-const SECRET = () => (process.env.STRAVA_CLIENT_SECRET || "").trim();
+const ENV_ID = () => (process.env.STRAVA_CLIENT_ID || "").trim();
+const ENV_SECRET = () => (process.env.STRAVA_CLIENT_SECRET || "").trim();
 const DAYS_BACK = 90;
-const sign = (s) => crypto.createHmac("sha256", SECRET()).update(s).digest("base64url").slice(0, 32);
+const sign = (s) => crypto.createHmac("sha256", "strava-state:" + (process.env.SUPABASE_SERVICE_ROLE_KEY || "")).update(s).digest("base64url").slice(0, 32);
+// credenciales a usar para una persona: las suyas si las tiene, si no las generales
+const credsOf = (row) => row?.client_id && row?.client_secret ? { id: row.client_id, secret: row.client_secret } : ENV_ID() && ENV_SECRET() ? { id: ENV_ID(), secret: ENV_SECRET() } : null;
 
 export default async function handler(req, res) {
   const sb = sbAdmin();
-  if (!ID() || !SECRET()) return res.status(501).json({ code: "strava_disabled" });
   if (!sb || sb.wrongKey) return res.status(501).json({ code: "disabled" });
   const origin = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
 
@@ -28,7 +31,9 @@ export default async function handler(req, res) {
     if (!String(scope).includes("activity:read")) return back("scope");
     if (!(await hasPremiumById(sb, uid))) return back("premium");
     try {
-      const t = await stravaToken({ code, grant_type: "authorization_code" });
+      const row = (await sb.call(`/rest/v1/strava?select=client_id,client_secret&user_id=eq.${uid}`))?.[0];
+      const cr = credsOf(row); if (!cr) return back("error");
+      const t = await stravaToken(cr, { code, grant_type: "authorization_code" });
       await sb.call(`/rest/v1/strava`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify({ user_id: uid, athlete_id: t.athlete?.id, access_token: t.access_token, refresh_token: t.refresh_token, expires_at: t.expires_at,
           athlete_name: [t.athlete?.firstname, t.athlete?.lastname].filter(Boolean).join(" "), updated_at: new Date().toISOString() }) });
@@ -46,16 +51,25 @@ export default async function handler(req, res) {
 
   if (body.action !== "disconnect" && !(await hasPremium(sb, me))) return res.status(402).json({ code: "premium" });
   try {
+    if (body.action === "app") {
+      const cid = String(body.client_id || "").trim(), csec = String(body.client_secret || "").trim();
+      if (!/^\d{3,10}$/.test(cid) || !/^[0-9a-f]{30,64}$/i.test(csec)) return res.status(400).json({ code: "bad_app" });
+      await sb.call(`/rest/v1/strava`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ user_id: me.id, client_id: cid, client_secret: csec, updated_at: new Date().toISOString() }) });
+      body.action = "start";
+    }
     if (body.action === "start") {
+      let row = null; try { row = (await sb.call(`/rest/v1/strava?select=client_id,client_secret&user_id=eq.${me.id}`))?.[0]; } catch { return res.status(500).json({ code: "no_table" }); }
+      const cr = credsOf(row); if (!cr) return res.status(409).json({ code: "needs_app" });
       const ts = String(Date.now()), state = `${me.id}.${ts}.${sign(`${me.id}.${ts}`)}`;
       const u = new URL("https://www.strava.com/oauth/mobile/authorize");
-      u.search = new URLSearchParams({ client_id: ID(), response_type: "code", redirect_uri: `${origin}/api/strava`, approval_prompt: "auto", scope: "read,activity:read_all", state }).toString();
+      u.search = new URLSearchParams({ client_id: cr.id, response_type: "code", redirect_uri: `${origin}/api/strava`, approval_prompt: "auto", scope: "read,activity:read_all", state }).toString();
       return res.status(200).json({ url: u.toString() });
     }
     if (body.action === "sync") return res.status(200).json(await sync(sb, me.id));
     if (body.action === "disconnect") {
       const row = (await sb.call(`/rest/v1/strava?select=*&user_id=eq.${me.id}`))?.[0];
-      if (row) await fetch("https://www.strava.com/oauth/deauthorize", { method: "POST", headers: { Authorization: `Bearer ${row.access_token}` } }).catch(() => {});
+      if (row?.access_token) await fetch("https://www.strava.com/oauth/deauthorize", { method: "POST", headers: { Authorization: `Bearer ${row.access_token}` } }).catch(() => {});
       await sb.call(`/rest/v1/strava?user_id=eq.${me.id}`, { method: "DELETE" });
       await sb.call(`/rest/v1/docs?user_id=eq.${me.id}&id=eq.strava`, { method: "DELETE" });
       return res.status(200).json({ ok: true });
@@ -66,9 +80,9 @@ export default async function handler(req, res) {
   return res.status(400).json({ code: "invalid" });
 }
 
-async function stravaToken(params) {
+async function stravaToken(cr, params) {
   const r = await fetch("https://www.strava.com/oauth/token", { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: ID(), client_secret: SECRET(), ...params }) });
+    body: JSON.stringify({ client_id: cr.id, client_secret: cr.secret, ...params }) });
   if (!r.ok) { const e = new Error("token " + r.status); e.code = "strava_token"; throw e; }
   return r.json();
 }
@@ -77,11 +91,12 @@ async function sync(sb, uid) {
   let row;
   try { row = (await sb.call(`/rest/v1/strava?select=*&user_id=eq.${uid}`))?.[0]; }
   catch { const e = new Error("Falta la tabla strava"); e.code = "no_table"; throw e; }
-  if (!row) return { connected: false };
+  if (!row?.access_token) return { connected: false };
 
   // renovar el permiso si ha caducado (dura 6 horas)
   if (row.expires_at < Date.now() / 1000 + 120) {
-    const t = await stravaToken({ grant_type: "refresh_token", refresh_token: row.refresh_token });
+    const cr = credsOf(row); if (!cr) return { connected: false };
+    const t = await stravaToken(cr, { grant_type: "refresh_token", refresh_token: row.refresh_token });
     Object.assign(row, { access_token: t.access_token, refresh_token: t.refresh_token, expires_at: t.expires_at });
     await sb.call(`/rest/v1/strava?user_id=eq.${uid}`, { method: "PATCH", body: JSON.stringify({ access_token: t.access_token, refresh_token: t.refresh_token, expires_at: t.expires_at, updated_at: new Date().toISOString() }) });
   }
@@ -102,7 +117,7 @@ async function sync(sb, uid) {
   let list;
   try { list = await api(`/athlete/activities?after=${after}&per_page=100`); }
   catch (e) {
-    if (e.code === "revoked") { await sb.call(`/rest/v1/strava?user_id=eq.${uid}`, { method: "DELETE" }); return { connected: false, revoked: true }; }
+    if (e.code === "revoked") { await sb.call(`/rest/v1/strava?user_id=eq.${uid}`, { method: "PATCH", body: JSON.stringify({ access_token: null, refresh_token: null, expires_at: null }) }); return { connected: false, revoked: true }; }
     throw e;
   }
   let details = 0;
