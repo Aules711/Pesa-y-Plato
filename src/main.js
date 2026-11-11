@@ -358,7 +358,7 @@ function greet(){ const h = new Date().getHours(); return h<6 ? "Buenas noches" 
 function viewHome(){
   const t = today(), ws = weekStart(t), wd = workoutDays();
   const count = [...wd].filter(d=>d>=ws && d<=addDays(ws,6)).length;
-  const tot = dayTotals(t), remaining = S.settings.kcal - tot.kcal;
+  const tot = dayTotals(t), remaining = goalsFor(t).kcal - tot.kcal;
   const dots = ["L","M","X","J","V","S","D"].map((l,i)=>{ const d = addDays(ws,i); return `<div>${l}<i class="${wd.has(d)?"on":""} ${d===t?"today":""}"></i></div>`; }).join("");
   const feed = S.workouts.slice(0,15).map(workoutCard).join("");
   const st = streak(), td = parseDay(today());
@@ -520,7 +520,7 @@ setInterval(tick, 1000);
 
 /* ---------- Diario ---------- */
 function viewFood(){
-  const tot = dayTotals(day), g = S.settings, exK = 0, remaining = g.kcal - tot.kcal + exK;
+  const tot = dayTotals(day), g = goalsFor(day), exK = 0, remaining = g.kcal - tot.kcal + exK;
   const mac = (lab,v,goal,color) => `<div class="macro"><span>${lab}</span><b>${r0(v)} <span class="note">/ ${goal} g</span></b><div class="bar"><i style="width:${Math.min(100,goal?v/goal*100:0)}%;background:${color}"></i></div></div>`;
   const meals = MEALS.map(m=>{
     const list = (S.diary[day]||[]).filter(e=>e.meal===m), k = list.reduce((a,e)=>a+(+e.kcal||0),0);
@@ -532,7 +532,7 @@ function viewFood(){
   return `<div class="daynav"><button class="iconb" data-act="day-prev" aria-label="Día anterior">‹</button>
     <div style="text-align:center"><div class="lbl">${dayLabel(day)}</div>${day!==today()?`<button class="link" data-act="day-today" style="padding:0;font-size:13px">Volver a hoy</button>`:""}</div>
     <button class="iconb" data-act="day-next" aria-label="Día siguiente">›</button></div>
-  <div class="card"><h2>Calorías restantes</h2>
+  <div class="card"><h2>Calorías restantes</h2>${g.fromPlan?`<p class="note goal-src">Objetivo del día según tu plan: ${esc(g.label)}</p>`:""}
     ${(() => { const R = 54, C = 2*Math.PI*R, pct = Math.min(1, g.kcal ? tot.kcal/g.kcal : 0), over = tot.kcal > g.kcal;
       return `<div class="ring-wrap"><svg class="ring" viewBox="0 0 132 132" role="img" aria-label="${fmt(tot.kcal)} de ${fmt(g.kcal)} kcal">
         <circle cx="66" cy="66" r="${R}" class="ring-bg"/><circle cx="66" cy="66" r="${R}" class="ring-fg ${over?"over":""}" stroke-dasharray="${C}" style="stroke-dashoffset:${C}" data-ring="${C*(1-pct)}"/></svg>
@@ -555,6 +555,10 @@ function datedPlan(d){                                            // plan mensua
 const curPlan = d => datedPlan(d) || planDay(wdayOf(d));           // lo que toca ese día
 const planIdFor = d => datedPlan(d) ? d : String(wdayOf(d));
 const hasPlanFor = d => MEALS.some(m => (curPlan(d)[m]||[]).length);
+function goalsFor(d){            // objetivo del día: el del plan si lo trae, si no el general
+  const T = curPlan(d).target; if (!T) return S.settings;
+  return {...S.settings, kcal:T.kcal, p:T.p ?? S.settings.p, fromPlan:true, label:T.label || `${fmt(T.kcal)} kcal · ${T.p} g proteína`};
+}
 function planLabel(d){ const P = datedPlan(d); if (!P) return `Plan del ${WDAYS[wdayOf(d)-1].toLowerCase()}`;
   return `${esc(S.planDates.title||"Plan")} · día ${P._n}`; }
 const planDraft = {};                                 // gramos escritos hoy, antes de añadir
