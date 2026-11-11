@@ -1,27 +1,25 @@
 // Función de Vercel: el usuario elimina su propia cuenta (derecho de supresión del RGPD).
-// Usa la clave service_role, que SOLO vive en las variables de entorno de Vercel.
-import { createClient } from "@supabase/supabase-js";
+// Usa la clave secreta de Supabase, que SOLO vive en las variables de entorno de Vercel.
+import { sbAdmin } from "./_sb.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ code: "method" });
-  const url = process.env.VITE_SUPABASE_URL, service = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !service) return res.status(501).json({ code: "disabled" });
-
-  const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const sb = sbAdmin();
+  if (!sb || sb.wrongKey) return res.status(501).json({ code: "disabled" });
   const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  const { data, error } = await admin.auth.getUser(token);
-  if (error || !data?.user) return res.status(401).json({ code: "not_granted" });
-  const id = data.user.id;
-
-  // 1. Borrar sus vídeos
-  for (;;) {
-    const { data: files } = await admin.storage.from("videos").list(id, { limit: 1000 });
-    if (!files?.length) break;
-    await admin.storage.from("videos").remove(files.map((f) => `${id}/${f.name}`));
-    if (files.length < 1000) break;
-  }
-  // 2. Borrar el usuario (sus datos de la tabla docs se borran solos en cascada)
-  const { error: delErr } = await admin.auth.admin.deleteUser(id);
-  if (delErr) return res.status(502).json({ code: "error" });
-  return res.status(200).json({ ok: true });
+  const me = await sb.userFromToken(token);
+  if (!me?.id) return res.status(401).json({ code: "not_granted" });
+  const id = me.id;
+  try {
+    // 1. Borrar sus vídeos
+    for (let i = 0; i < 50; i++) {
+      const files = await sb.call(`/storage/v1/object/list/videos`, { method: "POST", body: JSON.stringify({ prefix: id, limit: 1000 }) }).catch(() => []);
+      if (!files?.length) break;
+      await sb.call(`/storage/v1/object/videos`, { method: "DELETE", body: JSON.stringify({ prefixes: files.map((f) => `${id}/${f.name}`) }) });
+      if (files.length < 1000) break;
+    }
+    // 2. Borrar el usuario (sus datos de la tabla docs se borran solos en cascada)
+    await sb.call(`/auth/v1/admin/users/${id}`, { method: "DELETE" });
+    return res.status(200).json({ ok: true });
+  } catch { return res.status(502).json({ code: "error" }); }
 }

@@ -1168,7 +1168,7 @@ const isFreePremium = () => FREE_PREMIUM.includes((user?.email || "").toLowerCas
 async function callAdmin(action, body){
   const { data:{ session } } = await sb.auth.getSession();
   const r = await fetch("/api/admin", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({action, ...(body||{})})});
-  const j = await r.json().catch(() => ({})); if (!r.ok) throw {code:j.code || r.status}; return j;
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw {code:j.code || r.status, detail:j.detail, status:r.status}; return j;
 }
 async function loadPremium(){
   const [p, a] = await Promise.allSettled([sb.from("premium").select("until,note").eq("user_id", user.id).maybeSingle(), callAdmin("me")]);
@@ -1217,8 +1217,11 @@ function adminSection(){
 }
 async function loadAdmin(){
   adm.loading = true;
-  try { const r = await callAdmin("list"); adm.users = r.users; adm.err = null; }
-  catch(e){ adm.err = e.code===403 ? "Esta cuenta no es administradora." : (e.code==="disabled" || e.code===501) ? "Falta poner SUPABASE_SERVICE_ROLE_KEY en Vercel (Settings › Environment Variables) y hacer Redeploy." : e.code===404 ? "El portal solo funciona en la web publicada (pesayplato.vercel.app)." : "No se pudo cargar la lista. Comprueba que has ejecutado supabase/premium.sql en Supabase."; }
+  try { const r = await callAdmin("list"); adm.users = r.users; adm.err = null; adm.noTable = !!r.noTable; }
+  catch(e){ adm.err = e.code==="wrong_key" ? "En Vercel, SUPABASE_SERVICE_ROLE_KEY tiene la clave pública (publishable/anon). Tiene que ser la SECRETA: en Supabase › Project Settings › API Keys, la «secret» (sb_secret_…) o la «service_role» de Legacy API Keys. Cámbiala y haz Redeploy."
+    : e.code==="not_granted" ? "Tu sesión ha caducado: cierra sesión y vuelve a entrar."
+    : e.code==="supabase" ? `Supabase ha rechazado la clave secreta (${e.detail || "error " + e.status}). Revisa que en Vercel SUPABASE_SERVICE_ROLE_KEY sea la clave secreta completa, sin espacios, y haz Redeploy.`
+    : e.code===403 ? "Esta cuenta no es administradora." : (e.code==="disabled" || e.code===501) ? "Falta poner SUPABASE_SERVICE_ROLE_KEY en Vercel (Settings › Environment Variables) y hacer Redeploy." : e.code===404 ? "El portal solo funciona en la web publicada (pesayplato.vercel.app)." : "No se pudo cargar la lista. Comprueba que has ejecutado supabase/premium.sql en Supabase."; }
   adm.loading = false; drawAdmin();
 }
 function drawAdmin(){
@@ -1230,7 +1233,7 @@ function drawAdmin(){
   $("admF").innerHTML = [["all","Todos"],["on","Con Premium"],["off","Sin Premium"]].map(([k,l]) => `<button class="chip" data-act="adm-f" data-f="${k}" aria-pressed="${adm.f===k}">${l}</button>`).join("");
   const q = adm.q.trim().toLowerCase();
   const list = U.filter(u => (!q || (u.email||"").toLowerCase().includes(q)) && (adm.f==="all" || (adm.f==="on") === !!premOn(u.premium)));
-  L.innerHTML = `<div class="list">${list.slice(0,300).map(u => { const P = u.premium, on = premOn(P);
+  L.innerHTML = (adm.noTable ? `<p class="msg">Falta crear la tabla de Premium: ejecuta supabase/premium.sql en Supabase › SQL Editor. Hasta entonces no podrás dar Premium.</p>` : "") + `<div class="list">${list.slice(0,300).map(u => { const P = u.premium, on = premOn(P);
     return `<div class="adm-u"><div class="n"><b>${esc(u.email)}</b><small>${on ? (P.until ? `⭐ Premium hasta el ${longDay(P.until)}` : "⭐ Premium para siempre 🎁") : P ? `Caducó el ${longDay(P.until)}` : "Sin Premium"} · alta ${u.created ? longDay(u.created.slice(0,10)) : "—"}${u.last ? ` · última vez ${longDay(u.last.slice(0,10))}` : ""}</small></div>
       <div class="adm-b"><button class="btn soft" data-act="adm-grant" data-id="${esc(u.id)}" data-m="1">+1 mes</button>${P?.until===null && on ? "" : `<button class="btn ghost" data-act="adm-gift" data-id="${esc(u.id)}">Regalar</button>`}${P?`<button class="btn danger" data-act="adm-revoke" data-id="${esc(u.id)}">Quitar</button>`:""}</div></div>`; }).join("") || `<div class="li note">Nadie con ese filtro.</div>`}</div>`;
 }
