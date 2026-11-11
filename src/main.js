@@ -548,7 +548,10 @@ const WDAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domin
 const wdayOf = d => (parseDay(d).getDay()+6)%7 + 1;   // 1 = lunes … 7 = domingo
 const planDay = n => S.plan?.[n] || {};
 const planHas = n => MEALS.some(m => (planDay(n)[m]||[]).length);
-const datedPlan = d => S.planDates?.days?.[d] || null;            // plan por fechas (p. ej. 30 días)
+function datedPlan(d){                                            // plan mensual: día N del plan = día N del mes
+  const P = S.planDates; if (!P?.days) return null;
+  if (P.mode === "month"){ const n = Math.min(parseDay(d).getDate(), P.days.length); return P.days[n-1] ? {...P.days[n-1], _n:n} : null; }
+  return P.days[d] || null; }
 const curPlan = d => datedPlan(d) || planDay(wdayOf(d));           // lo que toca ese día
 const planIdFor = d => datedPlan(d) ? d : String(wdayOf(d));
 const hasPlanFor = d => MEALS.some(m => (curPlan(d)[m]||[]).length);
@@ -594,7 +597,7 @@ function planBar(){
   const pend = MEALS.flatMap(m => planPending(m).map(([f,i]) => nutr(f, planG(m,i,f)).kcal));
   const dated = !!datedPlan(day);
   return `<div class="plan-bar"><span>${pend.length ? `${planLabel(day)}: <b data-plday>${fmt(pend.reduce((a,b)=>a+b,0))} kcal</b> por apuntar` : `${planLabel(day)} apuntado ✓`}</span>
-    <span>${pend.length?`<button class="link" data-act="plan-add-all">Apuntar todo el día</button> · `:""}${dated?`<button class="link" data-act="plan30-off">Quitar plan de ${S.planDates.length||30} días</button>`:`<button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button>`}</span></div>
+    <span>${pend.length?`<button class="link" data-act="plan-add-all">Apuntar todo el día</button> · `:""}${dated?`<button class="link" data-act="plan30-off">Quitar plan mensual</button>`:`<button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button>`}</span></div>
 `;
 }
 function updatePlanRow(key){
@@ -704,7 +707,6 @@ function viewProfile(){
   const g = S.settings, mk = r0(g.p*4+g.c*4+g.f*9);
   const imp = importState ? `<div class="card imp"><h3>${esc(importState.title)}</h3><p class="note">${esc(importState.summary)}</p>
       ${importState.review?`<button class="btn" data-act="open-review">Revisar ${importState.review} ejercicio${importState.review>1?"s":""} importado${importState.review>1?"s":""}</button>`:""}
-      ${importState.kind==="plan30" && !importState.busy ? `<label class="f">Empiezo el día 1 el<input type="date" id="p30start" value="${(()=>{ const t = today(), w = wdayOf(t); return w===1 ? t : addDays(t, 8-w); })()}"></label>` : ""}
       ${importState.items?.length?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="imp-confirm" ${importState.busy?"disabled":""}>${importState.busy?"Importando…":"Importar"}</button><button class="btn ghost" data-act="imp-cancel" ${importState.busy?"disabled":""}>Cancelar</button></div>`:`<button class="btn ghost" data-act="imp-cancel">Cerrar</button>`}
       <span class="note" id="impProg">${esc(importState.progress||"")}</span></div>` : "";
   return `<h1>Perfil</h1>
@@ -1049,7 +1051,8 @@ function importJSON(text, fname){
   let d; try { d = JSON.parse(text); } catch { return {title:"Archivo no válido", summary:fname+" no es un JSON válido."}; }
   if (d?.app!=="pesa-y-plato") return {title:"Formato no reconocido", summary:"Este JSON no es una copia de Pesa y Plato."};
   if (d.plan30){ const n = d.plan30.days.length;
-    return {kind:"plan30", items:[d.plan30], title:`${d.plan30.title} · ${n} días`, summary:`Cada día del ${d.plan30.title.toLowerCase()} se pondrá en su fecha. Elige qué día empiezas (el día 1 es ${d.plan30.firstWeekday||"lunes"}).`}; }
+    const hoy = parseDay(today()).getDate();
+    return {kind:"plan30", items:[d.plan30], title:`${d.plan30.title} · ${n} días`, summary:`Cada día del mes tendrá su menú: el día 1 de cada mes el menú del día 1, el día 2 el del día 2… Hoy (${hoy}) te toca el del día ${Math.min(hoy, n)}. Sustituye cualquier plan mensual que tuvieras.`}; }
   if (d.plan && !d.workouts && !d.diary){ const n = Object.values(d.plan).reduce((a,day)=>a+Object.values(day).reduce((b,l)=>b+l.length,0),0);
     return {kind:"backup", items:[d], title:"Plan semanal", summary:`${n} alimentos repartidos en ${Object.keys(d.plan).length} días. Sustituye por completo el plan que tengas ahora.`}; }
   return {kind:"backup", items:[d], title:"Copia de seguridad", summary:`${(d.workouts||[]).length} entrenos, ${Object.keys(d.diary||{}).length} días de comidas, ${(d.routines||[]).length} rutinas. Se mezclará con lo que ya tienes.`};
@@ -1156,9 +1159,8 @@ async function runImport(){
   const st = importState; st.busy = true; render(); const prog = t => { st.progress = t; const el = $("impProg"); if (el) el.textContent = t; };
   let n = 0;
   if (st.kind==="workouts"){ await putMany(st.items.map(w=>["w-"+w.id, w]), (i,t)=>prog(`${i} de ${t}…`)); }
-  else if (st.kind==="plan30"){ const P = st.items[0], start = st.start || today(), days = {};
-    P.days.forEach((meals, i) => { days[addDays(start, i)] = {...meals, _n:i+1}; });
-    await put("plandates", {title:P.title, start, length:P.days.length, days}); }
+  else if (st.kind==="plan30"){ const P = st.items[0];
+    await put("plandates", {mode:"month", title:P.title, length:P.days.length, days:P.days}); }
   else if (st.kind==="health"){ prog("Guardando…"); await mergeHealth(st.items[0]); }
   else if (st.kind==="food"){ const byDay = {}; for (const i of st.items) (byDay[i.date] ||= []).push(i);
     const days = Object.keys(byDay); for (const d of days){ const ids = new Set(byDay[d].map(i=>i.id));
@@ -1175,7 +1177,7 @@ async function runImport(){
     if (d.health) await mergeHealth(d.health);
     if (d.settings) await put("settings", {...S.settings, ...d.settings}); }
   const nRev = st.kind==="workouts" || st.kind==="backup" ? unreviewed().length : 0;
-  importState = {review:nRev, title:"Importación terminada", summary: st.kind==="plan30" ? `Listo: lo tienes en el Diario del ${longDay(S.planDates.start)} al ${longDay(addDays(S.planDates.start, S.planDates.length-1))}.` : st.kind==="health" ? "Datos de Salud importados. Mira la tarjeta de actividad en Inicio." : st.kind==="workouts" ? `${st.items.length} entrenos importados.` : st.kind==="food" ? `${st.items.length} registros de comida importados.` : "Copia restaurada."};
+  importState = {review:nRev, title:"Importación terminada", summary: st.kind==="plan30" ? `Listo: hoy, día ${parseDay(today()).getDate()}, tienes en el Diario el menú del día ${datedPlan(today())?._n}. Cada mes vuelve a empezar por el día 1.` : st.kind==="health" ? "Datos de Salud importados. Mira la tarjeta de actividad en Inicio." : st.kind==="workouts" ? `${st.items.length} entrenos importados.` : st.kind==="food" ? `${st.items.length} registros de comida importados.` : "Copia restaurada."};
   render();
 }
 
@@ -1345,7 +1347,7 @@ document.addEventListener("click", e => {
       <p class="note">Se sustituye lo que hubiera planificado esos días.</p><button class="btn" data-act="plan-copy-yes">Copiar</button></div>`; break;
     case "plan-copy-yes": { const src = JSON.stringify(planDay(c.n)); document.querySelectorAll("[data-cp]:checked").forEach(cb => { S.plan[cb.dataset.cp] = JSON.parse(src); }); savePlan(); openPlanEditor(c.n); break; }
     case "plan-opt": planDraft[day+"|"+el.dataset.m+"|opt"] = el.dataset.o; render(); break;
-    case "plan30-off": el.parentElement.innerHTML = `¿Quitar el plan de ${S.planDates?.length||30} días? Lo ya apuntado se queda. <button class="link" data-act="plan30-off-yes">Quitar</button>`; break;
+    case "plan30-off": el.parentElement.innerHTML = `¿Quitar el plan mensual? Lo ya apuntado se queda. <button class="link" data-act="plan30-off-yes">Quitar</button>`; break;
     case "plan30-off-yes": S.planDates = null; del("plandates"); render(); break;
     case "plan-one": { const m = el.dataset.m, i = +el.dataset.i, f = curPlan(day)[m]?.[i]; if (f){ logPlan(m, [[f,i]]); putDay(day); render(); if (!MEALS.some(mm => planPending(mm).length)) confetti(); } break; }
     case "plan-add": logPlan(el.dataset.m, planPending(el.dataset.m)); putDay(day); render(); break;
@@ -1373,7 +1375,7 @@ document.addEventListener("click", e => {
     /* progreso */
     case "metric": metric = el.dataset.m; render(); break;
     /* perfil */
-    case "imp-confirm": if (importState?.kind==="plan30") importState.start = $("p30start")?.value || today(); runImport(); break;
+    case "imp-confirm": runImport(); break;
     case "imp-cancel": importState = null; render(); break;
     case "export-json": exportJSON(); break;
     case "export-w": exportW(); break;
