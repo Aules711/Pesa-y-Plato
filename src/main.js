@@ -581,7 +581,6 @@ function viewFood(){
     <div class="equation"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div></div>
     <div class="macros">${mac("Carbohidratos",tot.c,g.c,"var(--carb)")}${mac("Grasas",tot.f,g.f,"var(--fat)")}${mac("Proteínas",tot.p,g.p,"var(--prot)")}</div>
     ${planBar()}</div>
-  ${planEmpty()}
   ${meals}`;
 }
 /* ---------- Nutrientes (al estilo MyFitnessPal) ---------- */
@@ -677,6 +676,17 @@ function planLabel(d){ const P = datedPlan(d); if (!P) return `Plan del ${WDAYS[
 const planDraft = {};                                 // gramos escritos hoy, antes de añadir
 const nutr = (f, g) => { const k = (+g||0)/100; return {kcal:f.per.kcal*k, p:f.per.p*k, c:f.per.c*k, f:f.per.f*k}; };
 const savePlan = () => put("plan", {days:S.plan});
+function planStatus(){
+  const P = S.planDates; if (P?.days) return `${esc(P.title || "Plan mensual")} · ${P.length || P.days.length} días`;
+  return Object.keys(S.plan||{}).some(k => planHas(k)) ? "Plan semanal" : "Sin plan · impórtalo aquí"; }
+function planSection(){
+  const P = S.planDates, weekly = Object.keys(S.plan||{}).some(k => planHas(k));
+  return `<div class="card"><h2>Tu plan</h2>
+    <p class="note">${P?.days ? `Tienes el plan mensual <b>${esc(P.title||"")}</b>: el día ${parseDay(today()).getDate()} del mes toca el día ${Math.min(parseDay(today()).getDate(), P.days.length)} del plan.` : weekly ? "Tienes un plan semanal: cada día de la semana aparece ya puesto en el Diario." : "Aún no tienes plan. Impórtalo (semanal o de un mes) y cada día aparecerá ya puesto en el Diario: solo tendrás que escribir los gramos."}</p>
+    <label class="btn" style="cursor:pointer;text-align:center">${P?.days||weekly ? "Importar otro plan" : "Importar mi plan"} (.json)<input type="file" id="impPlan" accept=".json,application/json" hidden></label>
+    <button class="btn ghost" data-act="plan-edit" data-d="${wdayOf(today())}">${weekly ? "Editar plan semanal" : "Crear plan semanal a mano"}</button>
+    ${P?.days ? `<span class="note"><button class="link" data-act="plan30-off">Quitar plan mensual</button></span>` : ""}</div>`;
+}
 function planEmpty(){
   const n = wdayOf(day); if (hasPlanFor(day)) return "";
   const any = Object.keys(S.plan||{}).some(k=>planHas(k));
@@ -714,7 +724,7 @@ function planBar(){
   const pend = MEALS.flatMap(m => planPending(m).map(([f,i]) => nutr(f, planG(m,i,f)).kcal));
   const dated = !!datedPlan(day);
   return `<div class="plan-bar"><span>${pend.length ? `${planLabel(day)}: <b data-plday>${fmt(pend.reduce((a,b)=>a+b,0))} kcal</b> por apuntar` : `${planLabel(day)} apuntado ✓`}</span>
-    <span>${pend.length?`<button class="link" data-act="plan-add-all">Apuntar todo el día</button> · `:""}${dated?`<button class="link" data-act="plan30-off">Quitar plan mensual</button>`:`<button class="link" data-act="plan-edit" data-d="${n}">Editar plan</button>`}</span></div>
+    <span>${pend.length?`<button class="link" data-act="plan-add-all">Apuntar todo el día</button>`:""}</span></div>
 `;
 }
 function updatePlanRow(key){
@@ -827,12 +837,12 @@ function viewProfile(){
       ${importState.review?`<button class="btn" data-act="open-review">Revisar ${importState.review} ejercicio${importState.review>1?"s":""} importado${importState.review>1?"s":""}</button>`:""}
       ${importState.items?.length?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="imp-confirm" ${importState.busy?"disabled":""}>${importState.busy?"Importando…":"Importar"}</button><button class="btn ghost" data-act="imp-cancel" ${importState.busy?"disabled":""}>Cancelar</button></div>`:`<button class="btn ghost" data-act="imp-cancel">Cerrar</button>`}
       <span class="note" id="impProg">${esc(importState.progress||"")}</span></div>` : "";
-  return `<h1>Perfil</h1>
-  <div class="card"><h2>Premium</h2>${isPremium() ? `<div class="prem"><span class="prem-badge">⭐ ${esc(premiumStatus())}</span>${premFeats(true)}<p class="note">También las tienes en Diario › Añadir alimento › Foto.</p></div>` : premiumPitch()}
-    ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>
-  <div class="card"><h2>Cuenta</h2><div class="top"><span style="overflow-wrap:anywhere">${esc(user?.email||"")}</span><button class="btn ghost" data-act="logout">Cerrar sesión</button></div>
-    <form id="fPass" class="stack"><label class="f">Cambiar contraseña<input id="newPass" type="password" minlength="6" autocomplete="new-password" placeholder="Nueva contraseña (mín. 6 caracteres)"></label><button class="btn soft" type="submit">Guardar contraseña</button><span class="note" id="passMsg"></span></form></div>
-  <form class="card" id="fGoals"><div class="top"><h2>Objetivos diarios</h2><button type="button" class="link" data-act="wizard">Calcular mis objetivos</button></div>
+  const back = t => `<div class="prof-back"><button class="iconb" data-act="prof-sec" data-k="" aria-label="Volver al perfil">‹</button><h1>${t}</h1></div>`;
+  const S2 = {
+    plan: ["Mi plan de comidas", planSection()],
+    premium: ["Premium", `<div class="card"><h2>Premium</h2>${isPremium() ? `<div class="prem"><span class="prem-badge">⭐ ${esc(premiumStatus())}</span>${premFeats(true)}<p class="note">También las tienes en Diario › Añadir alimento › Foto.</p></div>` : premiumPitch()}
+    ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>`],
+    goals: ["Objetivos", `<form class="card" id="fGoals"><div class="top"><h2>Objetivos diarios</h2><button type="button" class="link" data-act="wizard">Calcular mis objetivos</button></div>
     <div class="grid2"><label class="f">Calorías (kcal)<input id="gKcal" type="number" min="0" step="10" value="${g.kcal}"></label>
       <label class="f">Proteínas (g)<input id="gP" type="number" min="0" step="5" value="${g.p}"></label>
       <label class="f">Carbohidratos (g)<input id="gC" type="number" min="0" step="5" value="${g.c}"></label>
@@ -840,24 +850,42 @@ function viewProfile(){
       <label class="f">Entrenos por semana<input id="gDays" type="number" min="1" max="7" value="${g.days}"></label>
       <label class="f">Descanso por defecto (s)<input id="gRest" type="number" min="0" step="15" value="${g.rest}"></label></div>
     <p class="note tnum">Tus macros suman ${fmt(mk)} kcal${Math.abs(mk-g.kcal)>100?` (${mk>g.kcal?"+":""}${fmt(mk-g.kcal)} respecto al objetivo)`:""}.</p>
-    <button class="btn" type="submit">Guardar objetivos</button><span class="note" id="goalMsg"></span></form>
-  <div class="card"><h2>Importar</h2>
+    <button class="btn" type="submit">Guardar objetivos</button><span class="note" id="goalMsg"></span></form>`],
+    account: ["Cuenta", `<div class="card"><h2>Cuenta</h2><p style="overflow-wrap:anywhere;margin:0"><b>${esc(user?.email||"")}</b></p>
+    <form id="fPass" class="stack"><label class="f">Cambiar contraseña<input id="newPass" type="password" minlength="6" autocomplete="new-password" placeholder="Nueva contraseña (mín. 6 caracteres)"></label><button class="btn soft" type="submit">Guardar contraseña</button><span class="note" id="passMsg"></span></form></div><button class="btn ghost block" data-act="logout">Cerrar sesión</button>`],
+    io: ["Importar y exportar", `<div class="card"><h2>Importar</h2>
     <label class="f" ${TRAIN_ON?"":"hidden"}>Entrenos · CSV de Hevy o Strong<input type="file" id="impW" accept=".csv,text/csv"></label>
     <label class="f">Comidas · CSV de MyFitnessPal<input type="file" id="impF" accept=".csv,text/csv"></label>
     <label class="f">Copia de seguridad o plan semanal (.json)<input type="file" id="impJ" accept=".json,application/json"></label>
-    <p class="note">En Hevy: Perfil › Ajustes › Exportar e importar datos › Exportar entrenos. En MyFitnessPal (web): Ajustes › Exportar datos; usa el archivo «Nutrition Summary». Si vuelves a importar el mismo archivo no se duplica nada.</p></div>
-  ${imp}
-  <div class="card"><h2>Exportar</h2>
-    ${dl?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" data-act="export-json">Copia completa (.json)</button><button class="btn ghost" data-act="export-w">Entrenos (.csv)</button><button class="btn ghost" data-act="export-f">Comidas (.csv)</button></div>`:`<p class="note">Las descargas no están disponibles en esta vista.</p>`}</div>
-  <div class="card"><h2>Datos de ejemplo</h2><p class="note">Tres semanas inventadas de entrenos, comidas y peso para ver cómo funciona todo. Salen marcadas como «ejemplo» y se borran de golpe.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" data-act="load-ex">Cargar ejemplos</button><button class="btn danger" data-act="clear-ex">Borrar ejemplos</button></div><span class="note" id="exMsg"></span></div>
-  <div class="card"><h2>Tus datos y tu cuenta</h2><p class="note">Tus datos solo los ves tú. Puedes descargarlos en «Exportar», borrarlos o eliminar tu cuenta por completo.</p>
-    <div id="wipeBox" class="stack"><button class="btn danger block" data-act="wipe">Borrar todos mis datos</button><button class="btn danger block" data-act="delacc">Eliminar mi cuenta</button></div></div>
-  <p class="note legal"><a href="/terminos.html" target="_blank" rel="noopener">Términos de uso</a> · <a href="/privacidad.html" target="_blank" rel="noopener">Política de privacidad</a></p>`;
+    <p class="note">En Hevy: Perfil › Ajustes › Exportar e importar datos › Exportar entrenos. En MyFitnessPal (web): Ajustes › Exportar datos; usa el archivo «Nutrition Summary». Si vuelves a importar el mismo archivo no se duplica nada.</p></div>${imp}<div class="card"><h2>Exportar</h2>
+    ${dl?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" data-act="export-json">Copia completa (.json)</button><button class="btn ghost" data-act="export-w">Entrenos (.csv)</button><button class="btn ghost" data-act="export-f">Comidas (.csv)</button></div>`:`<p class="note">Las descargas no están disponibles en esta vista.</p>`}</div>`],
+    examples: ["Datos de ejemplo", `<div class="card"><h2>Datos de ejemplo</h2><p class="note">Tres semanas inventadas de entrenos, comidas y peso para ver cómo funciona todo. Salen marcadas como «ejemplo» y se borran de golpe.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" data-act="load-ex">Cargar ejemplos</button><button class="btn danger" data-act="clear-ex">Borrar ejemplos</button></div><span class="note" id="exMsg"></span></div>`],
+    privacy: ["Privacidad y datos", `<div class="card"><h2>Tus datos y tu cuenta</h2><p class="note">Tus datos solo los ves tú. Puedes descargarlos en «Exportar», borrarlos o eliminar tu cuenta por completo.</p>
+    <div id="wipeBox" class="stack"><button class="btn danger block" data-act="wipe">Borrar todos mis datos</button><button class="btn danger block" data-act="delacc">Eliminar mi cuenta</button></div></div><div class="card"><h2>Documentos legales</h2><p class="note legal"><a href="/terminos.html" target="_blank" rel="noopener">Términos de uso</a> · <a href="/privacidad.html" target="_blank" rel="noopener">Política de privacidad</a></p></div>`],
+  };
+  if (profSec && S2[profSec]) return back(S2[profSec][0]) + S2[profSec][1];
+  const name = (user?.email || "").split("@")[0], ini = (name[0] || "?").toUpperCase();
+  const row = (k, ico, t, sub, act = "prof-sec") => `<button class="prof-row" data-act="${act}" data-k="${k}"><span class="prof-ic" aria-hidden="true">${ico}</span><span class="prof-t"><b>${t}</b>${sub?`<small>${sub}</small>`:""}</span><span class="prof-ch" aria-hidden="true">›</span></button>`;
+  return `<h1>Perfil</h1>
+  <div class="card prof-head"><span class="prof-av" aria-hidden="true">${esc(ini)}</span><div class="prof-id"><b>${esc(name)}</b><small>${esc(user?.email||"")}</small></div>
+    ${isPremium() ? `<span class="prof-badge on">⭐ Premium</span>` : `<button class="prof-badge" data-act="prof-sec" data-k="premium">Hazte Premium</button>`}</div>
+  <div class="prof-group">
+    ${row("premium","⭐","Premium", isPremium() ? esc(premiumStatus()) : "Foto al plato con IA y al código de barras")}
+    ${row("plan","🍽️","Mi plan de comidas", planStatus())}
+    ${row("goals","🎯","Objetivos", `${fmt(g.kcal)} kcal · ${g.p} g proteína`)}
+  </div>
+  <div class="prof-group">
+    ${row("account","👤","Cuenta", "Email y contraseña")}
+    ${row("io","📥","Importar y exportar", "Tu plan, copias de seguridad, MyFitnessPal")}
+    ${row("examples","🧪","Datos de ejemplo", "Para ver cómo funciona")}
+    ${row("privacy","🔒","Privacidad y datos", "Borrar datos, eliminar cuenta, términos")}
+  </div>
+  ${adminInfo.admin ? `<div class="prof-group">${row("","🛠️","Panel de administración","Activar o regalar Premium","admin")}</div>` : ""}
+  <button class="btn ghost block prof-out" data-act="logout">Cerrar sesión</button>`;
 }
-
 /* ================= hoja inferior ================= */
-let sheetCtx = null;
+let sheetCtx = null, profSec = null;
 function openSheet(title, html, ctx){ sheetCtx = ctx||null; $("sheetTitle").textContent = title; $("sheetBody").innerHTML = html; $("sheet").hidden = false; document.body.style.overflow = "hidden"; }
 function closeSheet(){ stopScan(); if (sheetCtx?.kind==="wizard" && !S.settings.onboarded) put("settings", {...S.settings, onboarded:true}); if (sheetCtx?.kind==="watch") clearHash(); if (sheetCtx?.kind==="plan"){ clearTimeout(window._pe); savePlan(); setTimeout(render, 0); } $("sheet").hidden = true; document.body.style.overflow = ""; sheetCtx = null; }
 
@@ -1558,7 +1586,8 @@ document.addEventListener("click", e => {
   const act = el.dataset.act, row = el.closest("[data-ei]"), ei = row ? +row.dataset.ei : -1, si = row?.dataset.si!=null ? +row.dataset.si : -1;
   const a = S.active, c = sheetCtx;
   switch (act){
-    case "tab": tab = el.dataset.tab; closeSheet(); render(); scrollTo(0,0); break;
+    case "prof-sec": profSec = el.dataset.k || null; render(); scrollTo(0,0); break;
+    case "tab": if (el.dataset.tab === "profile") profSec = null; tab = el.dataset.tab; closeSheet(); render(); scrollTo(0,0); break;
     case "close": closeSheet(); break;
     /* entreno */
     case "start-empty": startWorkout("Entreno "+(["de domingo","de lunes","de martes","de miércoles","de jueves","de viernes","de sábado"][new Date().getDay()]), []); break;
@@ -1757,7 +1786,7 @@ document.addEventListener("change", async e => {
   else if (t.id==="gAddEx" || t.id==="gSteps"){ await put("settings", {...S.settings, addEx:$("gAddEx").checked, stepGoal:Math.max(0,parseNum($("gSteps").value))||10000}); }
   else if (t.type==="file" && t.id!=="exVid" && t.files?.[0]){ const f = t.files[0]; const text = await f.text();
     importState = t.id==="impW" ? importWorkoutsCSV(text, f.name) : t.id==="impF" ? importFoodCSV(text, f.name) : importJSON(text, f.name);
-    if (t.id==="impPlan"){ closeSheet(); tab = "profile"; }
+    closeSheet(); tab = "profile"; profSec = "io";
     render(); document.querySelector(".imp")?.scrollIntoView({block:"center"}); }
 });
 document.addEventListener("submit", async e => {

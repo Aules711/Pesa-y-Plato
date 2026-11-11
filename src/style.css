@@ -527,3 +527,21 @@ nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
 .prem-f{display:flex;gap:12px;align-items:flex-start;background:var(--surface2);border-radius:16px;padding:12px}
 .prem-fi{font-size:22px;width:44px;height:44px;border-radius:13px;background:var(--surface);display:grid;place-items:center;flex:none}
 .prem-f b{font-size:15px}.prem-f .note{margin:2px 0 0;font-size:13px}.prem-f .btn{margin-top:10px}
+
+/* ---------- Perfil por carpetas ---------- */
+.prof-head{display:flex;align-items:center;gap:14px}
+.prof-av{width:54px;height:54px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:800;font-size:22px;color:#fff;background:linear-gradient(135deg,var(--accent),#7C55E6)}
+.prof-id{flex:1;min-width:0}.prof-id b{display:block;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prof-id small{display:block;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prof-badge{flex:none;border:0;border-radius:999px;padding:6px 11px;font:inherit;font-size:12px;font-weight:700;background:var(--accent-soft);color:var(--accent);cursor:pointer}
+.prof-badge.on{background:linear-gradient(90deg,#F5A64C,#E8364F);color:#fff;cursor:default}
+.prof-group{background:var(--surface);border-radius:var(--radius,18px);box-shadow:var(--shadow);overflow:hidden;margin:0 0 14px}
+.prof-row{display:flex;align-items:center;gap:12px;width:100%;background:none;border:0;padding:13px 14px;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
+.prof-row + .prof-row{border-top:1px solid var(--line)}
+.prof-row:active{background:var(--surface2)}
+.prof-ic{width:36px;height:36px;border-radius:11px;background:var(--surface2);display:grid;place-items:center;font-size:18px;flex:none}
+.prof-t{flex:1;min-width:0}.prof-t b{display:block;font-size:15px}.prof-t small{display:block;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prof-ch{color:var(--muted);font-size:22px;line-height:1}
+.prof-out{margin-top:4px}
+.prof-back{display:flex;align-items:center;gap:8px;margin-bottom:6px}.prof-back h1{margin:0}
+#main .prof-head{display:flex;flex-direction:row;align-items:center;text-align:left;gap:14px}
