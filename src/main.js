@@ -109,6 +109,7 @@ function applyDoc(id, v){
   else if (id==="media"){ S.media = JSON.parse(JSON.stringify(v?.map || {})); for (const m of Object.values(S.media)) m.url = mediaUrls[m.id] || ""; queueMediaUrls(); }
   else if (id==="health") S.health = {days:v?.days||{}, wos:v?.wos||[]};
   else if (id==="strava") S.strava = v?.connected ? v : null;
+  else if (id==="garmin") S.garmin = v?.connected ? v : null;
 }
 let q = Promise.resolve();
 function enqueue(fn){ const p = q.then(fn); q = p.catch(()=>{}); return p; }
@@ -180,7 +181,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {strava:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {strava:null, garmin:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -665,49 +666,64 @@ let stravaMsg = "", stravaBusy = false;
 const SPORTS = {Run:"Carrera",TrailRun:"Trail",VirtualRun:"Carrera (cinta)",Walk:"Caminata",Hike:"Senderismo",Ride:"Bici",MountainBikeRide:"Bici de montaña",GravelRide:"Gravel",EBikeRide:"Bici eléctrica",VirtualRide:"Bici (rodillo)",
   Swim:"Natación",WeightTraining:"Pesas",Workout:"Entreno",Crossfit:"CrossFit",HighIntensityIntervalTraining:"HIIT",Yoga:"Yoga",Pilates:"Pilates",Elliptical:"Elíptica",StairStepper:"Escaleras",Rowing:"Remo",
   Soccer:"Fútbol",Tennis:"Tenis",Padel:"Pádel",Basketball:"Baloncesto",Badminton:"Bádminton",Golf:"Golf",Kayaking:"Kayak",Surfing:"Surf",AlpineSki:"Esquí",Snowboard:"Snowboard",RockClimbing:"Escalada",Boxing:"Boxeo"};
-const SPORT_ICO = t => /Run/.test(t) ? "🏃" : /Ride/.test(t) ? "🚴" : /Swim/.test(t) ? "🏊" : /Walk|Hike/.test(t) ? "🚶" : /Weight|Crossfit|Workout|HIIT/.test(t) ? "🏋️" : /Yoga|Pilates/.test(t) ? "🧘" : /Soccer/.test(t) ? "⚽" : /Tennis|Padel|Badminton/.test(t) ? "🎾" : "💪";
-const sportName = t => SPORTS[t] || String(t||"Actividad").replace(/([a-z])([A-Z])/g,"$1 $2");
-const actsOn = d => (S.strava?.list || []).filter(a => a.day === d);
+const GSPORTS = {RUNNING:"Carrera",TREADMILL_RUNNING:"Carrera (cinta)",TRAIL_RUNNING:"Trail",STREET_RUNNING:"Carrera",TRACK_RUNNING:"Pista",CYCLING:"Bici",ROAD_BIKING:"Bici de carretera",MOUNTAIN_BIKING:"Bici de montaña",GRAVEL_CYCLING:"Gravel",INDOOR_CYCLING:"Bici (rodillo)",
+  WALKING:"Caminata",HIKING:"Senderismo",LAP_SWIMMING:"Natación (piscina)",OPEN_WATER_SWIMMING:"Natación (aguas abiertas)",SWIMMING:"Natación",STRENGTH_TRAINING:"Fuerza",CARDIO:"Cardio",HIIT:"HIIT",YOGA:"Yoga",PILATES:"Pilates",
+  ELLIPTICAL:"Elíptica",INDOOR_ROWING:"Remo",ROWING:"Remo",STAIR_CLIMBING:"Escaleras",TENNIS:"Tenis",PADEL:"Pádel",SOCCER:"Fútbol",BASKETBALL:"Baloncesto",BOXING:"Boxeo",OTHER:"Actividad"};
+const SPORT_ICO = t => /run/i.test(t) ? "🏃" : /ride|cycl|bik/i.test(t) ? "🚴" : /swim/i.test(t) ? "🏊" : /walk|hik/i.test(t) ? "🚶" : /weight|strength|crossfit|workout|hiit|cardio/i.test(t) ? "🏋️" : /yoga|pilates/i.test(t) ? "🧘" : /soccer/i.test(t) ? "⚽" : /tennis|padel|badminton/i.test(t) ? "🎾" : "💪";
+const sportName = t => SPORTS[t] || GSPORTS[t] || String(t||"Actividad").replace(/_/g," ").toLowerCase().replace(/^./, c => c.toUpperCase()).replace(/([a-z])([A-Z])/g,"$1 $2");
+const allActs = () => [...(S.strava?.list || []).map(a => ({...a, src:"strava"})), ...(S.garmin?.list || []).map(a => ({...a, src:"garmin"}))].sort((a,b) => b.start - a.start);
+const actsOn = d => allActs().filter(a => a.day === d);
+const actLink = a => a.src==="garmin" ? (a.gid ? `https://connect.garmin.com/modern/activity/${a.gid}` : "") : `https://www.strava.com/activities/${a.id}`;
 const exKcal = d => actsOn(d).reduce((a,x) => a + (+x.kcal||0), 0);
 const exAdd = d => S.settings.addEx ? exKcal(d) : 0;
 const fmtMin = sec => { const m = Math.round(sec/60); return m >= 60 ? `${Math.floor(m/60)} h ${m%60 ? (m%60)+" min" : ""}`.trim() : `${m} min`; };
 const actLine = a => [fmtMin(a.dur), a.km ? String(r1(a.km)).replace(".",",")+" km" : "", a.kcal ? fmt(a.kcal)+" kcal" : ""].filter(Boolean).join(" · ");
-async function stravaCall(action){
+async function stravaCall(action, svc = "strava"){
   const { data:{ session } } = await sb.auth.getSession();
-  const r = await fetch("/api/strava", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({action})});
+  const r = await fetch("/api/" + svc, {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({action})});
   const j = await r.json().catch(() => ({})); if (!r.ok) throw {code:j.code || r.status, detail:j.detail}; return j;
 }
 async function stravaSync(force){
-  if (!S.strava || stravaBusy) return; if (!force && Date.now() - (S.strava.synced||0) < 10*60*1000) return;
+  if (!S.strava || stravaBusy || !isPremium()) return; if (!force && Date.now() - (S.strava.synced||0) < 10*60*1000) return;
   stravaBusy = true; if (force){ stravaMsg = "Sincronizando…"; render(); }
   try { const d = await stravaCall("sync"); applyDoc("strava", d); if (force) stravaMsg = d.connected ? `✓ Al día. ${(d.list||[]).length} actividades de los últimos meses.` : "Strava se ha desconectado (quitaste el permiso desde Strava). Vuelve a conectarlo."; }
   catch(e){ if (force) stravaMsg = stravaErr(e); }
   stravaBusy = false; if (force || tab !== "profile") render();
 }
-const stravaErr = e => e.code==="strava_disabled" ? "Falta configurar Strava en Vercel (STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET)." : e.code==="no_table" ? "Falta crear la tabla: ejecuta supabase/strava.sql en Supabase." : e.code==="strava_rate" ? "Strava está saturado ahora mismo. Prueba en unos minutos." : e.code==="disabled" ? "Falta la clave secreta de Supabase en Vercel." : e.code===404 ? "Solo funciona en la web publicada." : "No se pudo hablar con Strava. Inténtalo otra vez.";
+const stravaErr = e => e.code==="premium" ? "Conectar Strava o Garmin es Premium." : e.code==="garmin_disabled" ? "Falta configurar Garmin en Vercel (GARMIN_CLIENT_ID y GARMIN_CLIENT_SECRET)." : e.code==="strava_disabled" ? "Falta configurar Strava en Vercel (STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET)." : e.code==="no_table" ? "Falta crear la tabla: ejecuta supabase/strava.sql en Supabase." : e.code==="strava_rate" ? "Strava está saturado ahora mismo. Prueba en unos minutos." : e.code==="disabled" ? "Falta la clave secreta de Supabase en Vercel." : e.code===404 ? "Solo funciona en la web publicada." : "No se pudo hablar con Strava. Inténtalo otra vez.";
 function connSection(){
-  const C = S.strava, last = C?.list?.[0];
-  return `<div class="card strava"><div class="st-h"><span class="st-logo" aria-hidden="true">S</span><div><b>Strava</b><small>${C ? `Conectado${C.athlete ? " como "+esc(C.athlete) : ""}` : "No conectado"}</small></div>${C?`<span class="st-on">●</span>`:""}</div>
+  const msg = stravaMsg ? `<p class="note conn-msg"><b>${esc(stravaMsg)}</b></p>` : "";
+  if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Conecta tu reloj o Strava</h3>
+      <p class="note">Con Premium, cada carrera, salida en bici o entreno que guardes en <b>Strava</b> o en tu reloj <b>Garmin</b> llega solo a la app con sus calorías: en Inicio, en el Diario y en Progreso. Eliges el que uses.</p>
+      <div class="conn-logos"><span class="st-logo" aria-hidden="true">S</span><span class="gm-logo" aria-hidden="true">G</span></div>
+      <button class="btn" data-act="prof-sec" data-k="premium">Hazte Premium</button></div>${msg}`;
+  const C = S.strava, G = S.garmin, last = C?.list?.[0], glast = G?.list?.[0];
+  return `<p class="note">Conecta el que uses (o los dos). Las actividades salen en Inicio, en el Diario y en Progreso.</p>
+    <div class="card strava"><div class="st-h"><span class="st-logo" aria-hidden="true">S</span><div><b>Strava</b><small>${C ? `Conectado${C.athlete ? " como "+esc(C.athlete) : ""}` : "No conectado"}</small></div>${C?`<span class="st-on">●</span>`:""}</div>
     ${C ? `<p class="note">Tus actividades llegan solas cada vez que abres la app. ${last ? `Última: ${SPORT_ICO(last.type)} ${esc(sportName(last.type))}, ${dayLabel(last.day).toLowerCase()}.` : "Aún no hay actividades en los últimos 3 meses."}</p>
-      <label class="tgl"><input type="checkbox" id="stAddEx" ${S.settings.addEx?"checked":""}><span>Sumar las calorías del ejercicio a lo que puedes comer ese día</span></label>
-      <p class="note" style="margin-top:-4px">Desactívalo si tu plan ya cuenta con el ejercicio.</p>
       <button class="btn soft" data-act="strava-sync" ${stravaBusy?"disabled":""}>Sincronizar ahora</button>
-      <button class="btn danger" data-act="strava-off">Desconectar</button>`
-    : `<p class="note">Conecta tu cuenta y cada carrera, salida en bici o entreno que guardes en Strava aparecerá en la app con sus calorías: en Inicio, en el Diario y en Progreso.</p>
-      <button class="btn st-btn" data-act="strava-on">Conectar con Strava</button>`}
-    ${stravaMsg ? `<p class="note" id="stMsg"><b>${esc(stravaMsg)}</b></p>` : ""}</div>
-    <p class="note">Solo se leen tus actividades; la app nunca publica nada en tu Strava. Puedes quitar el permiso cuando quieras desde aquí o desde Strava › Ajustes › Mis aplicaciones.</p>`;
+      <button class="btn danger" data-act="conn-off" data-s="strava">Desconectar Strava</button>`
+    : `<p class="note">Trae tus actividades de los últimos 3 meses y las nuevas cada vez que abras la app.</p><button class="btn st-btn" data-act="conn-on" data-s="strava">Conectar con Strava</button>`}</div>
+    <div class="card garmin"><div class="st-h"><span class="gm-logo" aria-hidden="true">G</span><div><b>Garmin Connect</b><small>${G ? "Conectado" : "No conectado"}</small></div>${G?`<span class="st-on">●</span>`:""}</div>
+    ${G ? `<p class="note">Cada actividad que guarde tu reloj llega sola a la app al sincronizarse con Garmin Connect. ${glast ? `Última: ${SPORT_ICO(glast.type)} ${esc(sportName(glast.type))}, ${dayLabel(glast.day).toLowerCase()}.` : "Aún no ha llegado ninguna: aparecerán desde tu próxima actividad."}</p>
+      <button class="btn danger" data-act="conn-off" data-s="garmin">Desconectar Garmin</button>`
+    : `<p class="note">Las actividades nuevas de tu reloj llegan solas. Garmin no envía las anteriores a la conexión.</p><button class="btn gm-btn" data-act="conn-on" data-s="garmin">Conectar con Garmin</button>`}</div>
+    ${C || G ? `<div class="card"><label class="tgl"><input type="checkbox" id="stAddEx" ${S.settings.addEx?"checked":""}><span>Sumar las calorías del ejercicio a lo que puedes comer ese día</span></label>
+      <p class="note" style="margin:0">Desactívalo si tu plan ya cuenta con el ejercicio.</p></div>` : ""}
+    ${msg}
+    <p class="note">Solo se leen tus actividades; la app nunca publica nada en tu Strava ni en tu Garmin. Puedes quitar el permiso cuando quieras desde aquí o desde la propia app de Strava o Garmin Connect.</p>`;
 }
 function stravaCard(){
-  const L = S.strava?.list || []; if (!S.strava) return "";
+  const L = allActs(); if (!S.strava && !S.garmin) return "";
   const ws = weekStart(today()), wk = L.filter(a => a.day >= ws), km = wk.reduce((a,x)=>a+(x.km||0),0), kc = wk.reduce((a,x)=>a+(x.kcal||0),0), dur = wk.reduce((a,x)=>a+(x.dur||0),0);
   const bars = []; for (let i=27;i>=0;i--){ const d = addDays(today(),-i); bars.push({x:shortDay(d), y:exKcal(d)}); }
   const mx = Math.max(1, ...bars.map(b=>b.y));
-  return `<div class="card"><div class="top"><h2>Actividades</h2><span class="note">Strava</span></div>
+  return `<div class="card"><div class="top"><h2>Actividades</h2><span class="note">${[S.strava?"Strava":"", S.garmin?"Garmin":""].filter(Boolean).join(" · ")}</span></div>
     <div class="nu-big"><div><b>${wk.length}</b><span>esta semana</span></div><div><b>${String(r1(km)).replace(".",",")}</b><span>km</span></div><div><b>${fmt(kc)}</b><span>kcal</span></div></div>
     <div class="st-bars" role="img" aria-label="Calorías de ejercicio por día, últimas 4 semanas">${bars.map(b=>`<i style="height:${Math.max(2,b.y/mx*100)}%" title="${b.x}: ${fmt(b.y)} kcal"></i>`).join("")}</div>
     <p class="note" style="margin:0">Calorías de ejercicio por día · últimas 4 semanas · ${fmtMin(dur)} esta semana</p>
-    <div class="list">${L.slice(0,8).map(a => `<a class="li st-act" href="https://www.strava.com/activities/${a.id}" target="_blank" rel="noopener"><span class="st-i" aria-hidden="true">${SPORT_ICO(a.type)}</span><span class="n"><b>${esc(a.name || sportName(a.type))}</b><small>${dayLabel(a.day)} · ${actLine(a)}</small></span><span class="st-v">Ver en Strava ›</span></a>`).join("") || `<div class="li note">Sin actividades en los últimos 3 meses.</div>`}</div></div>`;
+    <div class="list">${L.slice(0,8).map(a => { const href = actLink(a), inner = `<span class="st-i" aria-hidden="true">${SPORT_ICO(a.type)}</span><span class="n"><b>${esc(a.name || sportName(a.type))}</b><small>${dayLabel(a.day)} · ${actLine(a)}</small></span>`;
+      return href ? `<a class="li st-act" href="${href}" target="_blank" rel="noopener">${inner}<span class="st-v ${a.src}">Ver en ${a.src==="garmin"?"Garmin":"Strava"} ›</span></a>` : `<div class="li st-act">${inner}</div>`; }).join("") || `<div class="li note">Aún no hay actividades.</div>`}</div></div>`;
 }
 /* ---------- plan semanal ---------- */
 const WDAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
@@ -931,7 +947,7 @@ function viewProfile(){
     ${row("goals","🎯","Objetivos", `${fmt(g.kcal)} kcal · ${g.p} g proteína`)}
   </div>
   <div class="prof-group">
-    ${row("conn","🔗","Conexiones", S.strava ? "Strava conectado" : "Conecta Strava")}
+    ${row("conn","🔗","Conexiones", S.strava || S.garmin ? [S.strava?"Strava":"", S.garmin?"Garmin":""].filter(Boolean).join(" y ") + " conectado" + (S.strava && S.garmin ? "s" : "") : "Strava o Garmin ⭐")}
     ${row("account","👤","Cuenta", "Email y contraseña")}
     ${row("io","📥","Importar y exportar", "Tu plan, copias de seguridad, MyFitnessPal")}
     ${row("privacy","🔒","Privacidad y datos", "Borrar datos, eliminar cuenta, términos")}
@@ -1242,9 +1258,10 @@ function premiumStatus(){
 }
 function premFeats(on){
   const F = [["plate","📸","Foto al plato con IA","Haz una foto a lo que vas a comer: la IA reconoce cada alimento y calcula gramos, calorías y macros. Tú solo revisas y añades."],
-             ["code","▥","Foto al código de barras","Para lo envasado: foto al código y salen sus calorías, macros, fibra, azúcar y sal de la etiqueta."]];
+             ["code","▥","Foto al código de barras","Para lo envasado: foto al código y salen sus calorías, macros, fibra, azúcar y sal de la etiqueta."],
+             ["conn","🔗","Strava o Garmin","Tus carreras, salidas en bici y entrenos llegan solos con sus calorías. Conecta el que uses."]];
   return `<div class="prem-feats">${F.map(([k,i,t,d]) => `<div class="prem-f"><span class="prem-fi" aria-hidden="true">${i}</span><div><b>${t}</b><p class="note">${d}</p>
-    ${on?`<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>`:""}</div></div>`).join("")}</div>`;
+    ${on ? k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
 }
 const mealNow = () => { const h = new Date().getHours() + new Date().getMinutes()/60; return h < 11 ? "Desayuno" : h < 16.5 ? "Comida" : h < 20 ? "Snacks" : "Cena"; };
 function premiumPitch(){
@@ -1661,10 +1678,10 @@ document.addEventListener("click", e => {
   const act = el.dataset.act, row = el.closest("[data-ei]"), ei = row ? +row.dataset.ei : -1, si = row?.dataset.si!=null ? +row.dataset.si : -1;
   const a = S.active, c = sheetCtx;
   switch (act){
-    case "strava-on": { el.disabled = true; el.textContent = "Abriendo Strava…"; stravaCall("start").then(r => { location.href = r.url; }).catch(e => { stravaMsg = stravaErr(e); render(); }); break; }
+    case "conn-on": { const sv = el.dataset.s; el.disabled = true; el.textContent = `Abriendo ${sv==="garmin"?"Garmin":"Strava"}…`; stravaCall("start", sv).then(r => { location.href = r.url; }).catch(e => { stravaMsg = stravaErr(e); render(); }); break; }
     case "strava-sync": stravaSync(true); break;
-    case "strava-off": el.outerHTML = `<div class="stack"><p class="note">¿Desconectar Strava? Se borran de la app las actividades traídas (en Strava no se toca nada).</p><button class="btn danger" data-act="strava-off-yes">Sí, desconectar</button></div>`; break;
-    case "strava-off-yes": el.disabled = true; stravaCall("disconnect").then(() => { S.strava = null; stravaMsg = "Strava desconectado."; render(); }).catch(e => { stravaMsg = stravaErr(e); render(); }); break;
+    case "conn-off": { const N = el.dataset.s==="garmin" ? "Garmin" : "Strava"; el.outerHTML = `<div class="stack"><p class="note">¿Desconectar ${N}? Se borran de la app las actividades traídas (en ${N} no se toca nada).</p><button class="btn danger" data-act="conn-off-yes" data-s="${el.dataset.s}">Sí, desconectar</button></div>`; break; }
+    case "conn-off-yes": { const sv = el.dataset.s; el.disabled = true; stravaCall("disconnect", sv).then(() => { S[sv] = null; stravaMsg = `${sv==="garmin"?"Garmin":"Strava"} desconectado.`; render(); }).catch(e => { stravaMsg = stravaErr(e); render(); }); break; }
     case "prof-sec": stravaMsg = ""; tab = "profile"; profSec = el.dataset.k || null; render(); scrollTo(0,0); break;
     case "tab": if (el.dataset.tab === "profile") profSec = null; tab = el.dataset.tab; closeSheet(); render(); scrollTo(0,0); break;
     case "close": closeSheet(); break;
@@ -1887,9 +1904,12 @@ document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("sheet").
 
 function checkHash(){
   const h = location.hash; if (h==="#watch") clearHash();
-  const m = h.match(/^#strava=(\w+)/); if (!m || !user) return; clearHash();
-  tab = "profile"; profSec = "conn"; stravaMsg = {ok:"✓ Strava conectado. Tus actividades ya están en la app.", cancel:"Has cancelado la conexión con Strava.", scope:"Para conectar, deja marcada la casilla de ver tus actividades.", error:"No se pudo conectar con Strava. Inténtalo otra vez."}[m[1]] || "";
-  if (m[1]==="ok") confetti(); render(); }
+  const m = h.match(/^#(strava|garmin)=(\w+)/); if (!m || !user) return; clearHash();
+  const N = m[1]==="strava" ? "Strava" : "Garmin";
+  tab = "profile"; profSec = "conn"; stravaMsg = {ok: m[1]==="strava" ? "✓ Strava conectado. Tus actividades ya están en la app." : "✓ Garmin conectado. A partir de ahora, cada actividad que guarde tu reloj llegará sola a la app.",
+    cancel:`Has cancelado la conexión con ${N}.`, scope:"Para conectar, deja marcada la casilla de ver tus actividades.", premium:`Conectar ${N} es Premium.`, error:`No se pudo conectar con ${N}. Inténtalo otra vez.`}[m[2]] || "";
+  if (m[1]==="garmin" && m[2]==="ok") applyDoc("garmin", {connected:true, list:[], synced:Date.now()});
+  if (m[2]==="ok") confetti(); render(); }
 window.addEventListener("hashchange", checkHash);
 init();
 })();

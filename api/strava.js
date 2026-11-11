@@ -5,7 +5,7 @@
 // - POST /api/strava {action:"disconnect"} → desconecta y borra lo traído
 // Variables en Vercel: STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, SUPABASE_SERVICE_ROLE_KEY.
 import crypto from "node:crypto";
-import { sbAdmin } from "./_sb.js";
+import { sbAdmin, hasPremium, hasPremiumById } from "./_sb.js";
 
 const ID = () => (process.env.STRAVA_CLIENT_ID || "").trim();
 const SECRET = () => (process.env.STRAVA_CLIENT_SECRET || "").trim();
@@ -26,6 +26,7 @@ export default async function handler(req, res) {
     const [uid, ts, sig] = String(state).split(".");
     if (!uid || sign(`${uid}.${ts}`) !== sig || Date.now() - Number(ts) > 3600_000) return back("error");
     if (!String(scope).includes("activity:read")) return back("scope");
+    if (!(await hasPremiumById(sb, uid))) return back("premium");
     try {
       const t = await stravaToken({ code, grant_type: "authorization_code" });
       await sb.call(`/rest/v1/strava`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -43,6 +44,7 @@ export default async function handler(req, res) {
   if (!me?.id) return res.status(401).json({ code: "not_granted" });
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
 
+  if (body.action !== "disconnect" && !(await hasPremium(sb, me))) return res.status(402).json({ code: "premium" });
   try {
     if (body.action === "start") {
       const ts = String(Date.now()), state = `${me.id}.${ts}.${sign(`${me.id}.${ts}`)}`;

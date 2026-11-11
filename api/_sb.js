@@ -20,3 +20,32 @@ export function sbAdmin() {
     },
   };
 }
+
+// ¿Tiene Premium? (administradores y regalados incluidos)
+const FREE = ["ametsaule@gmail.com"];
+export async function hasPremium(sb, me) {
+  const mail = (me?.email || "").toLowerCase();
+  const admins = (process.env.ADMIN_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (FREE.includes(mail) || admins.includes(mail)) return true;
+  try {
+    const row = (await sb.call(`/rest/v1/premium?select=until&user_id=eq.${me.id}`))?.[0];
+    return !!row && (!row.until || row.until >= new Date().toISOString().slice(0, 10));
+  } catch { return false; }
+}
+export async function hasPremiumById(sb, id) {
+  try {
+    const u = await sb.call(`/auth/v1/admin/users/${id}`);
+    return hasPremium(sb, { id, email: u?.email });
+  } catch { return false; }
+}
+// Guarda/mezcla actividades en el documento del usuario ("strava" o "garmin")
+export async function mergeActivities(sb, uid, docId, extra, items) {
+  const prev = (await sb.call(`/rest/v1/docs?select=data&user_id=eq.${uid}&id=eq.${docId}`))?.[0]?.data || {};
+  const map = new Map((prev.list || []).map((a) => [String(a.id), a]));
+  for (const a of items) map.set(String(a.id), { ...map.get(String(a.id)), ...a });
+  const cut = Date.now() - 180 * 86400_000;
+  const list = [...map.values()].filter((a) => a.start >= cut).sort((a, b) => b.start - a.start).slice(0, 300);
+  const data = { ...prev, ...extra, connected: true, synced: Date.now(), list };
+  await sb.call(`/rest/v1/docs`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: uid, id: docId, data }) });
+  return data;
+}

@@ -171,3 +171,12 @@ public/                 iconos, manifest y páginas legales (privacidad.html, te
 - **Supabase gratis:** 500 MB de base de datos, 1 GB de archivos y 50.000 usuarios activos al mes. Los **vídeos** son lo que antes se llena: con mucha gente subiendo vídeos tendrás que pasar al plan Pro (unos 25 $/mes) o bajar el tamaño máximo (`MAX_VIDEO_MB` en `src/main.js` y `file_size_limit` en `schema.sql`). En el plan gratuito el proyecto se pausa tras una semana sin uso.
 - **Vercel Hobby (gratis):** sirve para proyectos personales y **no comerciales**. Si pones anuncios, suscripciones o cobras por la app, necesitas Vercel Pro.
 - **IA:** cada estimación cuesta dinero de tu cuenta de Anthropic. Con la web abierta, déjala desactivada hasta que tengas usuarios y pon un límite de gasto mensual en console.anthropic.com. La función ya limita a 5 consultas por minuto y usuario.
+
+## Conexiones con Strava y Garmin (Premium)
+
+En Perfil › Conexiones cada usuario Premium conecta Strava, Garmin o los dos. Sus actividades salen en Inicio, Diario (calorías de ejercicio opcionales) y Progreso.
+
+1. En Supabase › SQL Editor ejecuta `supabase/conexiones.sql`.
+2. **Strava** (exige suscripción de Strava de pago para el desarrollador): crea la app en strava.com/settings/api con *Authorization Callback Domain* = tu dominio (p. ej. `pesayplato.vercel.app`) y añade en Vercel `STRAVA_CLIENT_ID` y `STRAVA_CLIENT_SECRET`.
+3. **Garmin** (programa Starter, gratis tras aprobación): pide acceso en developer.garmin.com › Garmin Connect Developer Program. En el portal, pon como *Redirect URL* `https://TU-DOMINIO/api/garmin` y como endpoint de avisos (push) de **Activities** y **Deregistrations** la misma `https://TU-DOMINIO/api/garmin`. Añade en Vercel `GARMIN_CLIENT_ID` y `GARMIN_CLIENT_SECRET`.
+4. Redeploy.

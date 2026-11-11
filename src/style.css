@@ -551,7 +551,7 @@ nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
 .adm-st b{font-family:var(--display);font-size:26px;line-height:1.1;color:var(--accent)}.adm-st span{font-size:12px;color:var(--muted)}
 
 /* ---------- Strava ---------- */
-.strava .st-h{display:flex;align-items:center;gap:12px}
+.st-h{display:flex;align-items:center;gap:12px}
 .st-logo{width:44px;height:44px;border-radius:12px;background:#FC4C02;color:#fff;font-weight:900;font-size:24px;display:grid;place-items:center;flex:none}
 .st-h b{display:block;font-size:17px}.st-h small{color:var(--muted);font-size:13px}.st-h > div{flex:1}
 .st-on{color:var(--ok);font-size:14px}
@@ -567,3 +567,9 @@ nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
 .st-v{color:#FC4C02;font-size:12px;font-weight:700;white-space:nowrap}
 .equation.ex{grid-template-columns:1fr auto 1fr auto 1fr;max-width:380px}.equation.ex .big{font-size:26px}
 .card.today .st-day span{background:rgba(255,255,255,.18);color:#fff}
+.gm-logo{width:44px;height:44px;border-radius:12px;background:#111;color:#fff;font-weight:900;font-size:24px;display:grid;place-items:center;flex:none;border:1px solid var(--line)}
+.gm-btn{background:#111!important;color:#fff!important}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .gm-btn{background:#fff!important;color:#111!important}}
+.st-v.garmin{color:var(--accent)}
+.conn-logos{display:flex;gap:10px}
+.conn-msg{margin:0}
