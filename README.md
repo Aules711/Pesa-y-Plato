@@ -63,18 +63,18 @@ Sin esto, los emails de confirmar cuenta y cambiar contraseña llevarían a una 
 
 Recomendado en **Authentication › Emails**: cambia los textos de los emails a español. El servicio de email gratuito de Supabase envía muy pocos correos por hora; antes de abrirla al público, configura un SMTP propio (por ejemplo Resend o Brevo) en **Authentication › SMTP Settings**.
 
-### 5. (Opcional) Estimación de comidas con IA
+### 5. Foto al plato con IA (Premium)
 
-La pestaña «Con IA» del diario usa la API de Anthropic y **cuesta dinero por uso** (céntimos por cada estimación con un modelo pequeño).
+En Diario › Añadir alimento › **Foto**, la persona hace una foto a su plato y la IA reconoce cada alimento y calcula gramos, calorías y macros (luego puede corregir los gramos). Usa la API de Anthropic y **cuesta dinero por cada foto** (unos céntimos), por eso es solo para Premium.
 
-1. Crea una clave en [console.anthropic.com](https://console.anthropic.com) y ponle un límite de gasto mensual.
+1. Crea una clave en [console.anthropic.com](https://console.anthropic.com) y ponle un **límite de gasto mensual**.
 2. En Vercel › Settings › Environment Variables añade:
    - `ANTHROPIC_API_KEY` = tu clave (**sin** prefijo `VITE_`, así nunca llega al navegador)
-   - `ANTHROPIC_MODEL` = `claude-haiku-5-5` (opcional; es el valor por defecto)
-   - cambia `VITE_AI_ENABLED` a `true`
+   - `ANTHROPIC_MODEL` = opcional; por defecto `claude-sonnet-5-5`
+   - `VITE_AI_ENABLED` = `true` si además quieres la pestaña «Con IA» (describir la comida con texto, también Premium)
 3. Vuelve a desplegar (Deployments › ⋯ › Redeploy).
 
-La función `api/estimate.js` solo responde a usuarios con sesión iniciada y limita a 8 consultas por minuto y usuario.
+La función `api/estimate.js` comprueba que la persona tiene sesión y Premium, y limita a 5 fotos por minuto y 40 al día por persona.
 
 ---
 

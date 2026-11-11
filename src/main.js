@@ -162,11 +162,11 @@ const dl = { async save({filename, data}){
   setTimeout(() => URL.revokeObjectURL(a.href), 5000); } };
 
 /* ---- IA (función /api/estimate en Vercel) ---- */
-async function aiEstimate(text){
+async function aiEstimate(text, image){
   const { data:{ session } } = await sb.auth.getSession();
-  const r = await fetch("/api/estimate", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({text})});
+  const r = await fetch("/api/estimate", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({text, image})});
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw {code: j.code || (r.status===429 ? "rate_limited" : r.status===401 ? "not_granted" : "error")};
+  if (!r.ok) throw {code: j.code || (r.status===429 ? "rate_limited" : r.status===401 ? "not_granted" : r.status===402 ? "premium" : r.status===404 ? "disabled" : "error")};
   return j;
 }
 
@@ -259,7 +259,7 @@ function landingHTML(card, mode){
     <section class="lf"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
         ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida y cena. Solo escribes los gramos.")}
-        ${feat("scan","Foto al código de barras ⭐","Haz una foto al código del paquete y la app trae sus kcal, proteínas, hidratos y grasas por 100 g. Función Premium: 3 € al mes.")}
+        ${feat("scan","Foto al plato con IA ⭐","Haz una foto a lo que vas a comer y la IA reconoce cada alimento y calcula gramos, calorías y macros. Y foto al código de barras para lo envasado. Premium: 3 € al mes.")}
         ${feat("ring","Calorías y macros del día","Un anillo te dice cuánto te queda, y las barras cuánta proteína, hidratos y grasa llevas.")}
         ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Y si tu plan trae objetivo por día, se usa ese.")}
         ${feat("chart","Tu progreso a la vista","Peso corporal y calorías de las últimas semanas, para ver la tendencia y no fijarte en un solo día.")}
@@ -273,7 +273,7 @@ function landingHTML(card, mode){
         <li><b>Apunta lo que comes</b><span>Gramos y ✓. O haz una foto al código de barras de lo que no esté en tu plan.</span></li></ol></section>
     <section class="lauth" id="lauth"><div class="lauth-txt"><h2 class="lsec">${mode==="signup"?"Crea tu cuenta":mode==="forgot"?"Recupera tu contraseña":"Entra en tu cuenta"}</h2><p class="note">${mode==="signup"?"Es gratis. Solo necesitas un email.":mode==="forgot"?"Te enviamos un enlace para elegir una nueva.":"¿Aún no tienes cuenta? Créala gratis en un minuto."}</p></div>${card}</section>
     <section class="lfaqs"><h2 class="lsec">Preguntas frecuentes</h2>
-      ${faq("¿Cuánto cuesta?","La app es gratis. La foto al código de barras es Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
+      ${faq("¿Cuánto cuesta?","La app es gratis. Las fotos con IA al plato y al código de barras son Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
       ${faq("¿Tengo que descargar algo?","No. Es una web que funciona en el navegador. En el iPhone, abre la web en Safari, pulsa Compartir y «Añadir a pantalla de inicio» para tenerla como una app.")}
       ${faq("¿Puedo meter la dieta que ya sigo?","Sí. En Diario › Crear a mano montas cada día de la semana con sus alimentos y gramos habituales. A partir de ahí, cada día te aparece ya puesto y solo cambias los gramos si hace falta.")}
       ${faq("¿Y si un producto no sale al hacerle la foto?","Los datos vienen de Open Food Facts, una base de datos abierta. Si un producto no está, créalo en «Crear» copiando la etiqueta y se queda guardado para la próxima vez.")}
@@ -828,7 +828,7 @@ function viewProfile(){
       ${importState.items?.length?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="imp-confirm" ${importState.busy?"disabled":""}>${importState.busy?"Importando…":"Importar"}</button><button class="btn ghost" data-act="imp-cancel" ${importState.busy?"disabled":""}>Cancelar</button></div>`:`<button class="btn ghost" data-act="imp-cancel">Cerrar</button>`}
       <span class="note" id="impProg">${esc(importState.progress||"")}</span></div>` : "";
   return `<h1>Perfil</h1>
-  <div class="card"><h2>Premium</h2>${isPremium() ? `<p><b>⭐ ${esc(premiumStatus())}</b></p><p class="note">Tienes la foto al código de barras en Diario › Añadir alimento › Foto.</p>` : premiumPitch()}
+  <div class="card"><h2>Premium</h2>${isPremium() ? `<p><b>⭐ ${esc(premiumStatus())}</b></p><p class="note">Tienes las fotos con IA y al código de barras en Diario › Añadir alimento › Foto.</p>` : premiumPitch()}
     ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>
   <div class="card"><h2>Cuenta</h2><div class="top"><span style="overflow-wrap:anywhere">${esc(user?.email||"")}</span><button class="btn ghost" data-act="logout">Cerrar sesión</button></div>
     <form id="fPass" class="stack"><label class="f">Cambiar contraseña<input id="newPass" type="password" minlength="6" autocomplete="new-password" placeholder="Nueva contraseña (mín. 6 caracteres)"></label><button class="btn soft" type="submit">Guardar contraseña</button><span class="note" id="passMsg"></span></form></div>
@@ -1046,10 +1046,13 @@ function drawFood(){
     <label class="f">Ración (nombre)<input id="cSn" placeholder="unidad"></label><label class="f">Ración (g)<input id="cSg" inputmode="decimal" placeholder="9"></label></div>
     <span class="msg" id="cMsg" hidden></span><button class="btn" data-act="create-food">Crear y elegir cantidad</button>`;
   if (c.t==="scan" && !isPremium()){ P.innerHTML = premiumPitch(); return; }
-  if (c.t==="scan"){ P.innerHTML = `<div class="scan-photo"><div class="scan-ill" aria-hidden="true">📷</div>
-    <p class="note" id="scanMsg" style="text-align:center">Haz una foto al código de barras del envase, de cerca, de frente y con buena luz.</p>
-    <label class="btn" style="cursor:pointer;text-align:center">📷 Hacer una foto del código<input type="file" id="scanPhoto" accept="image/*" capture="environment" hidden></label></div>
-    <p class="note">Los datos vienen de Open Food Facts, una base de datos abierta. Comprueba que coinciden con la etiqueta.</p>`; return; }
+  if (c.t==="scan"){ P.innerHTML = `<label class="ai-big"><span class="ai-ico" aria-hidden="true">📸</span><span><b>Foto del plato</b><small>La IA reconoce lo que hay y calcula gramos, calorías y macros</small></span><input type="file" id="platePhoto" accept="image/*" hidden></label>
+    <input id="plateHint" placeholder="Opcional: añade detalles (salsa, aceite…)" aria-label="Detalles del plato">
+    <div id="aiOut" class="stack"></div>
+    <div class="or"><span>o</span></div>
+    <label class="btn ghost" style="cursor:pointer;text-align:center">▥ Foto del código de barras<input type="file" id="scanPhoto" accept="image/*" capture="environment" hidden></label>
+    <p class="note" id="scanMsg">Para productos envasados: foto al código, de cerca y de frente. Los datos vienen de Open Food Facts.</p>`; return; }
+  if (c.t==="ai" && !isPremium()){ P.innerHTML = premiumPitch(); return; }
   if (c.t==="ai") P.innerHTML = `<p class="note">Describe lo que has comido y la IA calcula una estimación. Revísala antes de añadirla.</p>
     <textarea id="aiText" placeholder="Un plato de macarrones con tomate y atún, una manzana y un vaso de leche"></textarea>
     <button class="btn" data-act="ai-run" id="aiBtn">Calcular</button><div id="aiOut" class="stack"></div>`;
@@ -1089,17 +1092,46 @@ function openEditEntry(id){
     <label class="f">Carbohidratos (g)<input id="eC" inputmode="decimal" value="${r1(e.c)}"></label><label class="f">Grasas (g)<input id="eF" inputmode="decimal" value="${r1(e.f)}"></label></div>
     <button class="btn" data-act="entry-save">Guardar cambios</button><button class="btn danger" data-act="entry-del">Quitar del diario</button>`, {kind:"entry", editId:id});
 }
+const aiErr = code => code==="not_granted" ? "Tu sesión ha caducado. Vuelve a entrar." : code==="premium" ? "Esta función es Premium." : code==="disabled" ? "La IA aún no está activada en la web (falta la clave de Anthropic en Vercel)." : code==="rate_limited" ? "Has hecho muchas fotos seguidas. Espera un poco y vuelve a probar." : code==="too_big" ? "La foto es demasiado grande. Prueba con otra." : "No se pudo analizar ahora. Inténtalo otra vez.";
+function aiItems(res){ return (res?.items||[]).map(i => ({name:String(i.name), g:r0(parseNum(i.grams)), per:{kcal:parseNum(i.kcal100), p:parseNum(i.p100), c:parseNum(i.c100), f:parseNum(i.f100)}, on:true})); }
+function drawAI(res, thumb){
+  const c = sheetCtx, out = $("aiOut"); if (!out) return; c.ai = aiItems(res);
+  if (!c.ai.length){ out.innerHTML = `<p class="msg">${esc(res?.note || "No he reconocido comida. Prueba con otra foto, con el plato entero y buena luz.")}</p>`; return; }
+  out.innerHTML = `<div class="ai-res">${thumb?`<img src="${thumb}" alt="">`:""}<div><b>${esc(res.dish || "Tu comida")}</b><p class="note">Revisa los gramos: la IA calcula a ojo. Quita lo que no hayas comido.</p></div></div>
+    ${res.note?`<p class="note ai-note">${esc(res.note)}</p>`:""}
+    <div class="ai-list">${c.ai.map((i,k)=>`<div class="ai-it"><input type="checkbox" data-aion="${k}" checked aria-label="Incluir ${esc(i.name)}"><span class="n">${esc(i.name)}<small data-aim="${k}"></small></span>
+      <label class="ai-g"><input data-aig="${k}" inputmode="decimal" value="${i.g}" aria-label="Gramos de ${esc(i.name)}">g</label><b data-aik="${k}"></b></div>`).join("")}</div>
+    <button class="btn" data-act="ai-add" id="aiAdd"></button>`;
+  updateAI();
+}
+function updateAI(){
+  const c = sheetCtx; if (!c?.ai) return; let tot = 0, n = 0;
+  c.ai.forEach((i,k) => { const v = nutr(i, i.g); const K = document.querySelector(`[data-aik="${k}"]`), M = document.querySelector(`[data-aim="${k}"]`);
+    if (K) K.textContent = fmt(v.kcal) + " kcal"; if (M) M.textContent = `P ${r0(v.p)} · C ${r0(v.c)} · G ${r0(v.f)}`;
+    if (i.on && i.g > 0){ tot += v.kcal; n++; } });
+  const b = $("aiAdd"); if (b){ b.disabled = !n; b.textContent = `Añadir ${n>1?"todo ":""}a ${c.meal} · ${fmt(tot)} kcal`; }
+}
 async function runAI(){
   const text = $("aiText").value.trim(); if (!text) return;
   const btn = $("aiBtn"); btn.disabled = true; btn.textContent = "Calculando…"; $("aiOut").innerHTML = "";
-  try {
-    const res = await aiEstimate(text);
-    const items = (res?.items||[]).filter(i=>i && i.name).map(i=>({name:String(i.name), g:parseNum(i.grams), kcal:parseNum(i.kcal), p:parseNum(i.p), c:parseNum(i.c), f:parseNum(i.f)}));
-    sheetCtx.ai = items;
-    $("aiOut").innerHTML = items.length ? `<div class="list">${items.map(i=>`<div class="li" style="cursor:default"><span class="n">${esc(i.name)}<small>${r0(i.g)} g · P ${r0(i.p)} · C ${r0(i.c)} · G ${r0(i.f)}</small></span><span class="tnum">${fmt(i.kcal)} kcal</span></div>`).join("")}</div>
-      <button class="btn" data-act="ai-add">Añadir ${items.length>1?"todo ":""}a ${esc(sheetCtx.meal)} · ${fmt(items.reduce((a,i)=>a+i.kcal,0))} kcal</button>` : `<p class="msg">No he podido sacar una estimación. Prueba a describirlo con más detalle.</p>`;
-  } catch(e){ $("aiOut").innerHTML = `<p class="msg">${e.code==="not_granted"?"Tu sesión ha caducado. Vuelve a entrar.":e.code==="disabled"?"La estimación con IA no está activada en esta instalación.":e.code==="rate_limited"?"Demasiadas consultas seguidas. Espera un poco.":"No se pudo calcular ahora. Inténtalo otra vez."}</p>`; }
+  try { drawAI(await aiEstimate(text)); } catch(e){ $("aiOut").innerHTML = `<p class="msg">${aiErr(e.code)}</p>`; }
   btn.disabled = false; btn.textContent = "Calcular";
+}
+async function shrinkPhoto(file, max = 1280){
+  const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = URL.createObjectURL(file); });
+  const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement("canvas");
+  c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(img.src); return c.toDataURL("image/jpeg", .82);
+}
+async function platePhoto(file){
+  const out = $("aiOut"), c = sheetCtx; if (!out) return;
+  out.innerHTML = `<div class="ai-wait"><span class="spin" aria-hidden="true"></span>Mirando tu plato…</div>`;
+  try {
+    const url = await shrinkPhoto(file); if (sheetCtx !== c) return;
+    out.querySelector(".ai-wait")?.insertAdjacentHTML("afterbegin", `<img src="${url}" alt="">`);
+    const res = await aiEstimate(($("plateHint")?.value || "").trim(), url); if (sheetCtx !== c) return;
+    drawAI(res, url);
+  } catch(e){ if (sheetCtx === c) out.innerHTML = `<p class="msg">${aiErr(e.code)}</p>`; }
 }
 
 /* ================= Premium ================= */
@@ -1127,8 +1159,8 @@ function premiumStatus(){
 }
 function premiumPitch(){
   const ph = adminInfo.phone, concept = `Premium ${user?.email || ""}`;
-  return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Foto del código de barras</h3>
-    <p class="note">Haz una foto al código de barras de cualquier producto y la app saca sus kcal, proteínas, hidratos y grasas al momento.</p>
+  return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Fotos que lo calculan todo</h3>
+    <p class="note">📸 Haz una foto a tu plato y la IA reconoce los alimentos y calcula gramos, calorías y macros. ▥ Y con una foto al código de barras de cualquier producto envasado, sus datos al momento.</p>
     <div class="prem-price"><b>${esc(adminInfo.price||"3")} €</b><span>al mes</span></div>
     ${ph ? `<ol class="prem-steps">
       <li><span>Envía <b>${esc(adminInfo.price||"3")} €</b> por <b>Bizum</b> al</span><div class="copy"><code>${esc(fmtPhone(ph))}</code><button class="btn soft" data-act="copy" data-v="${esc(String(ph).replace(/\D/g,""))}">Copiar</button></div></li>
@@ -1667,7 +1699,7 @@ document.addEventListener("click", e => {
       const sg = parseNum($("cSg").value); const f = {name, kcal:k, p:parseNum($("cP").value), c:parseNum($("cC").value), f:parseNum($("cF").value), servings: sg>0 ? [{n:$("cSn").value.trim()||"ración", g:sg}] : []};
       put("foods", {list:[...S.foods.filter(x=>x.name!==name), f]}); c.t = "search"; c.food = f; c.qty = null; c.unit = null; drawFood(); break; }
     case "ai-run": runAI(); break;
-    case "ai-add": addEntries(c.meal, (c.ai||[]).map(i=>({name:i.name, qty:i.g, unit:"g", kcal:i.kcal, p:i.p, c:i.c, f:i.f, src:"estimado con IA"}))); closeSheet(); break;
+    case "ai-add": addEntries(c.meal, (c.ai||[]).filter(i => i.on && i.g > 0).map(i => ({name:i.name, qty:i.g, unit:"g", g:i.g, per:i.per, servings:[], ...nutr(i, i.g), src:"foto con IA"}))); closeSheet(); confetti(); break;
     case "entry-save": { const L = S.diary[day], i = L.findIndex(z=>z.id===c.editId); if (i>=0) L[i] = {...L[i], name:$("eN").value.trim()||L[i].name, kcal:parseNum($("eK").value), p:parseNum($("eP").value), c:parseNum($("eC").value), f:parseNum($("eF").value)};
       putDay(day); closeSheet(); render(); break; }
     case "entry-del": S.diary[day] = (S.diary[day]||[]).filter(z=>z.id!==c.editId); putDay(day); closeSheet(); render(); break;
@@ -1693,6 +1725,7 @@ document.addEventListener("input", e => {
   else if (t.dataset.we){ const [ei,si,f] = t.dataset.we.split(":"); sheetCtx.w.exercises[+ei].sets[+si][f] = t.value; }
   else if (t.id==="fq"){ sheetCtx.q = t.value; drawFoodResults(); }
   else if (t.id==="fdQ"){ updateFoodDetail(); }
+  else if (t.dataset.aig != null && sheetCtx?.ai){ sheetCtx.ai[+t.dataset.aig].g = parseNum(t.value); updateAI(); }
   else if (t.dataset.pl){ planDraft[t.dataset.pl] = t.value; updatePlanRow(t.dataset.pl); }
   else if (t.dataset.pe){ const [n,m,i] = t.dataset.pe.split("|"); const it = S.plan[n]?.[m]?.[+i]; if (it){ it.g = parseNum(t.value); clearTimeout(window._pe); window._pe = setTimeout(savePlan, 600); } }
   else if (t.id==="ppq"){ sheetCtx.q = t.value; drawPlanPicker(); }
@@ -1707,6 +1740,8 @@ document.addEventListener("change", async e => {
     $("fdQ").value = r1(grams/gOf(t.value)) || (t.value==="g"?100:1); updateFoodDetail(); }
   else if (t.id==="progEx"){ progEx = t.value; render(); }
   else if (t.id==="exVid" && t.files?.[0]){ const prev = sheetCtx.prev; await uploadVideo(t.files[0]); if (sheetCtx) sheetCtx.prev ||= prev; }
+  else if (t.dataset.aion != null && sheetCtx?.ai){ sheetCtx.ai[+t.dataset.aion].on = t.checked; t.closest(".ai-it")?.classList.toggle("off", !t.checked); updateAI(); }
+  else if (t.id==="platePhoto" && t.files?.[0]){ platePhoto(t.files[0]); t.value = ""; }
   else if (t.id==="scanPhoto" && t.files?.[0]){ stopScan(); scanPhoto(t.files[0]); t.value = ""; }
   else if (t.id==="impH" && t.files?.[0]){ parseHealthFile(t.files[0]); }
   else if (t.id==="gAddEx" || t.id==="gSteps"){ await put("settings", {...S.settings, addEx:$("gAddEx").checked, stepGoal:Math.max(0,parseNum($("gSteps").value))||10000}); }
