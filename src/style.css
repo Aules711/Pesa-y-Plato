@@ -349,3 +349,14 @@ nav.tabbar{border-top:0;box-shadow:0 -6px 20px -14px rgba(16,28,56,.35)}
 @media (prefers-reduced-motion:reduce){.wcard:hover{transform:none}}
 .daynav .lbl{font-family:var(--display);text-transform:uppercase;font-size:26px;letter-spacing:.01em}
 .title-in{font-family:var(--display);text-transform:uppercase;font-size:28px;letter-spacing:.01em}
+
+/* plan dentro de cada comida */
+.pl-box{background:var(--accent-soft);border-top:1px solid var(--line);padding:10px 14px 12px;display:flex;flex-direction:column;gap:4px}
+.pl-tag{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.pl-row.pend{padding:6px 0}
+.pl-chk{flex:none;width:34px;height:34px;border-radius:50%;border:2px solid var(--accent);background:var(--surface);color:var(--accent);font-weight:700;cursor:pointer}
+.pl-chk:hover{background:var(--accent);color:#fff}
+.pl-all{margin-top:6px}
+.plan-bar{display:flex;justify-content:space-between;align-items:center;gap:8px 12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px;font-size:13px;color:var(--muted)}
+.plan-bar b{color:var(--ink);font-variant-numeric:tabular-nums}
+.plan-bar .link{padding:0;font-size:13px}
