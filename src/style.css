@@ -458,3 +458,43 @@ nav.tabbar.four{grid-template-columns:repeat(4,1fr)}
 :root[data-theme="dark"]{--accent-strong:#2550C4}
 .card.today{background:var(--accent-strong)}
 .hm-d{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* ---------- Nutrientes ---------- */
+nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
+.nu-seg{display:flex;background:var(--surface);border-radius:12px;padding:4px;gap:4px;margin:0 0 10px;box-shadow:0 1px 0 var(--line)}
+.nu-seg button{flex:1;border:0;background:none;padding:9px 4px;border-radius:9px;font:inherit;font-weight:600;font-size:14px;color:var(--muted);cursor:pointer}
+.nu-seg button.on{background:var(--accent);color:#fff}
+.nu-range{display:flex;align-items:center;gap:6px;margin:0 0 12px}
+.nu-range button{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:5px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.nu-range button.on{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.nu-range .note{margin-left:auto;font-size:12px}
+.nu-th,.nu-tr{display:grid;grid-template-columns:minmax(0,1fr) 54px 64px 58px 30px;align-items:baseline;gap:4px;font-variant-numeric:tabular-nums}
+.nu-th{font-size:12px;color:var(--muted);font-weight:600;padding:0 0 6px;border-bottom:1px solid var(--line)}
+.nu-th span,.nu-tr>*:not(:first-child){text-align:right}
+.nu-item{display:block;width:100%;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 0 9px;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.nu-item:last-child{border-bottom:0}
+.nu-item .bar{margin-top:7px}
+.nu-item.ind .nu-n{padding-left:14px;font-weight:400;color:var(--muted)}
+.nu-n{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nu-tr b{font-size:15px}
+.nu-tr span{font-size:14px}
+.nu-u{color:var(--muted);font-size:12px!important}
+.neg{color:var(--danger)}.pos{color:var(--ok);font-weight:700}
+.nu-foot{font-size:12px;margin:10px 4px}
+.nu-big{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;margin-bottom:12px}
+.nu-big b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.nu-big span{font-size:12px;color:var(--muted)}
+.nu-main{height:10px}.nu-main i{background:var(--accent)}
+.nu-row{padding:8px 0}.nu-l{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;font-size:14px}
+.nu-row .bar i{background:var(--accent)}
+.nu-mac{display:flex;flex-direction:column;align-items:center;gap:16px}
+.nu-pie{width:170px;height:170px;border-radius:50%;display:grid;place-items:center;position:relative}
+.nu-pie span{width:108px;height:108px;border-radius:50%;background:var(--surface);display:grid;place-content:center;text-align:center;font-weight:700;font-size:22px}
+.nu-pie small{display:block;font-size:12px;color:var(--muted);font-weight:500}
+.nu-mac .nu-tbl{width:100%}
+.nu-mac .nu-th,.nu-mac .nu-tr{grid-template-columns:minmax(0,1fr) 70px 80px}
+.nu-mac .nu-tr{padding:10px 0;border-bottom:1px solid var(--line)}.nu-mac .nu-tr:last-child{border:0}
+.nu-mac .nu-tr small{margin-left:6px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}
+.nu-empty{text-align:center}.nu-empty .btn{margin-top:10px}
+@media (max-width:360px){.nu-th,.nu-tr{grid-template-columns:minmax(0,1fr) 46px 54px 50px 24px}.nu-n{font-size:14px}}
+.nu-item.ind .nu-n{white-space:normal;font-size:14px;line-height:1.2}

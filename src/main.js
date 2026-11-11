@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import "./style.css";
+import { microFor, microFromOFF, MICRO_KEYS } from "./micros.js";
 
 let sb = null;
 
@@ -335,11 +336,11 @@ function bestsBefore(name, beforeStart){ let kg=0, rm=0, has=false;
 /* ================= render principal ================= */
 function render(){
   if (!TRAIN_ON && tab==="train") tab = "home";
-  const tb = $("tabbar"); tb.classList.toggle("four", !TRAIN_ON); tb.querySelector('[data-tab="train"]').hidden = !TRAIN_ON;
+  const tb = $("tabbar"); tb.classList.toggle("six", TRAIN_ON); tb.querySelector('[data-tab="train"]').hidden = !TRAIN_ON;
   document.querySelectorAll("#tabbar button").forEach(b => { b.toggleAttribute("aria-current", b.dataset.tab===tab); if (b.dataset.tab===tab) b.setAttribute("aria-current","page");
     b.classList.toggle("live", b.dataset.tab==="train" && !!S.active); });
   const top = `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
-  const views = {home:viewHome, train:viewTrain, food:viewFood, progress:viewProgress, profile:viewProfile};
+  const views = {home:viewHome, train:viewTrain, food:viewFood, nutri:viewNutri, progress:viewProgress, profile:viewProfile};
   $("main").innerHTML = top + views[tab]();
   if (tab !== lastTab){ lastTab = tab; $("main").classList.remove("enter"); void $("main").offsetWidth; $("main").classList.add("enter"); }
   requestAnimationFrame(() => document.querySelectorAll("[data-ring]").forEach(el => el.style.strokeDashoffset = el.dataset.ring));
@@ -572,6 +573,78 @@ function viewFood(){
     ${planBar()}</div>
   ${planEmpty()}
   ${meals}`;
+}
+/* ---------- Nutrientes (al estilo MyFitnessPal) ---------- */
+let nutriSub = "nut", nutriRange = "dia";
+const NUTRI = [ // clave, nombre, unidad, objetivo(g, kcal), tipo: goal = llegar · limit = no pasarse · none = sin objetivo, sangría
+  ["p","Proteínas","g",g=>g.p,"goal",0], ["c","Carbohidratos","g",g=>g.c,"goal",0], ["fib","Fibra","g",g=>Math.round(Math.max(25,14*g.kcal/1000)),"goal",1],
+  ["azu","Azúcar","g",g=>Math.round(90*g.kcal/2000),"limit",1], ["f","Grasas","g",g=>g.f,"goal",0], ["sat","Saturadas","g",g=>Math.round(g.kcal*.1/9),"limit",1],
+  ["poli","Poliinsaturadas","g",null,"none",1], ["mono","Monoinsaturadas","g",null,"none",1], ["col","Colesterol","mg",()=>300,"limit",0],
+  ["na","Sodio","mg",()=>2000,"limit",0], ["k","Potasio","mg",()=>3500,"goal",0], ["ca","Calcio","mg",()=>800,"goal",0], ["fe","Hierro","mg",()=>14,"goal",0],
+  ["mg","Magnesio","mg",()=>375,"goal",0], ["va","Vitamina A","µg",()=>800,"goal",0], ["vc","Vitamina C","mg",()=>80,"goal",0], ["vd","Vitamina D","µg",()=>5,"goal",0],
+  ["b12","Vitamina B12","µg",()=>2.5,"goal",0], ["fol","Ácido fólico","µg",()=>200,"goal",0] ];
+const nutriDays = () => nutriRange === "sem" ? Array.from({length:7}, (_,i) => addDays(day, i-6)) : [day];
+function entryMicros(e){
+  const base = microFor(e.name), m = e.per?.m ? {...(base||{}), ...e.per.m} : base; if (!m) return null;
+  const g = +e.g || (e.per?.kcal ? (+e.kcal||0) / e.per.kcal * 100 : 0), k = g/100;
+  const o = {}; for (const key of MICRO_KEYS) o[key] = (+m[key]||0) * k; o.na = o.sal * 400; return o;
+}
+function nutriData(){
+  const ds = nutriDays(), logged = ds.filter(d => (S.diary[d]||[]).length), n = Math.max(1, logged.length);
+  const tot = {kcal:0,p:0,c:0,f:0}, items = [], meals = Object.fromEntries(MEALS.map(m=>[m,0])); let kcalNoData = 0, noData = 0;
+  for (const d of ds) for (const e of (S.diary[d]||[])){
+    for (const k of ["kcal","p","c","f"]) tot[k] += +e[k]||0;
+    meals[e.meal] = (meals[e.meal]||0) + (+e.kcal||0);
+    const m = entryMicros(e); if (m) items.push({e, m}); else { noData++; kcalNoData += +e.kcal||0; }
+  }
+  const val = {}; for (const r of NUTRI) val[r[0]] = (["p","c","f"].includes(r[0]) ? tot[r[0]] : items.reduce((a,x)=>a+(x.m[r[0]]||0),0)) / n;
+  for (const k in tot) tot[k] /= n; for (const k in meals) meals[k] /= n;
+  return {tot, val, items, meals, noData, kcalNoData:kcalNoData/n, n, logged:logged.length, g:goalsFor(day)};
+}
+const nfmt = (v, u) => u === "g" ? (v < 10 ? String(r1(v)).replace(".",",") : fmt(v)) : (v < 10 ? String(r1(v)).replace(".",",") : fmt(v));
+function viewNutri(){
+  const D = nutriData(), g = D.g, sem = nutriRange === "sem";
+  const head = `<div class="daynav"><button class="iconb" data-act="day-prev" aria-label="Día anterior">‹</button>
+    <div style="text-align:center"><div class="lbl">${sem ? `Semana hasta ${dayLabel(day).toLowerCase()}` : dayLabel(day)}</div>${day!==today()?`<button class="link" data-act="day-today" style="padding:0;font-size:13px">Volver a hoy</button>`:""}</div>
+    <button class="iconb" data-act="day-next" aria-label="Día siguiente">›</button></div>
+    <div class="seg nu-seg" role="tablist">${[["cal","Calorías"],["nut","Nutrientes"],["mac","Macros"]].map(([k,l])=>`<button role="tab" data-act="nutri-sub" data-k="${k}" ${nutriSub===k?'aria-selected="true" class="on"':""}>${l}</button>`).join("")}</div>
+    <div class="nu-range">${[["dia","Día"],["sem","Semana"]].map(([k,l])=>`<button data-act="nutri-range" data-k="${k}" class="${nutriRange===k?"on":""}">${l}</button>`).join("")}${sem?`<span class="note">Media de ${D.logged || 0} día${D.logged===1?"":"s"} con registros</span>`:""}</div>`;
+  if (!D.items.length && !D.noData) return head + `<div class="card nu-empty"><h3>Aún no hay nada apuntado</h3><p class="note">Cuando añadas comidas en el Diario, aquí verás tus proteínas, hidratos, grasas, fibra, azúcar, vitaminas y minerales.</p><button class="btn" data-act="tab" data-tab="food">Ir al Diario</button></div>`;
+  let body = "";
+  if (nutriSub === "cal"){
+    const totK = D.tot.kcal || 1, cols = ["var(--accent)","var(--carb)","var(--prot)","var(--fat)"];
+    body = `<div class="card"><div class="nu-big"><div><b>${fmt(D.tot.kcal)}</b><span>Total</span></div><div><b>${fmt(g.kcal)}</b><span>Objetivo</span></div><div><b class="${D.tot.kcal>g.kcal?"neg":""}">${fmt(g.kcal - D.tot.kcal)}</b><span>Restan</span></div></div>
+      <div class="bar nu-main"><i style="width:${Math.min(100, D.tot.kcal/g.kcal*100)}%"></i></div></div>
+      <div class="card"><h3>Por comida</h3>${MEALS.map((m,i)=>`<div class="nu-row"><div class="nu-l"><span>${m}</span><span class="note">${fmt(D.meals[m])} kcal · ${r0(D.meals[m]/totK*100)} %</span></div><div class="bar"><i style="width:${D.meals[m]/totK*100}%;background:${cols[i]}"></i></div></div>`).join("")}</div>`;
+  } else if (nutriSub === "mac"){
+    const kp = D.tot.p*4, kc = D.tot.c*4, kf = D.tot.f*9, sum = kp+kc+kf || 1, gs = g.p*4 + g.c*4 + g.f*9 || 1;
+    const pc = [kc/sum*100, kf/sum*100, kp/sum*100], gp = [g.c*4/gs*100, g.f*9/gs*100, g.p*4/gs*100];
+    const pie = `conic-gradient(var(--carb) 0 ${pc[0]}%, var(--fat) ${pc[0]}% ${pc[0]+pc[1]}%, var(--prot) ${pc[0]+pc[1]}% 100%)`;
+    body = `<div class="card nu-mac"><div class="nu-pie" style="background:${sum>1?pie:"var(--line)"}"><span>${fmt(D.tot.kcal)}<small>kcal</small></span></div>
+      <div class="nu-tbl"><div class="nu-th"><span></span><span>Total</span><span>Objetivo</span></div>
+      ${[["Carbohidratos","var(--carb)",D.tot.c],["Grasas","var(--fat)",D.tot.f],["Proteínas","var(--prot)",D.tot.p]].map(([l,c,gr],i)=>`<div class="nu-tr"><span><i class="dot" style="background:${c}"></i>${l}<small class="note">${r0(gr)} g</small></span><b>${r0(pc[i])} %</b><span>${r0(gp[i])} %</span></div>`).join("")}</div></div>
+      <p class="note nu-foot">Porcentaje de las calorías que vienen de cada macro (4 kcal por gramo de proteína o hidrato, 9 por gramo de grasa).</p>`;
+  } else {
+    body = `<div class="card nu-list"><div class="nu-th"><span></span><span>Total</span><span>Objetivo</span><span>Restan</span></div>
+      ${NUTRI.map(([k,l,u,gf,type,ind]) => { const v = D.val[k], goal = gf ? gf(g) : null, left = goal!=null ? goal - v : null;
+        const pct = goal ? Math.min(100, v/goal*100) : 0, bad = type==="limit" && left < 0, ok = type==="goal" && left <= 0;
+        const col = bad ? "var(--danger)" : ok ? "var(--ok)" : ["p"].includes(k)?"var(--prot)":["c","fib","azu"].includes(k)?"var(--carb)":["f","sat","poli","mono"].includes(k)?"var(--fat)":"var(--accent)";
+        return `<button class="nu-item ${ind?"ind":""}" data-act="nutri-detail" data-k="${k}"><div class="nu-tr"><span class="nu-n">${l}</span><b>${nfmt(v,u)}</b><span>${goal!=null?nfmt(goal,u):"-"}</span><span class="${bad?"neg":ok?"pos":""}">${left==null?"-":ok?"✓":nfmt(left,u)}</span><span class="nu-u">${u} ›</span></div>
+          ${goal!=null?`<div class="bar"><i style="width:${pct}%;background:${col}"></i></div>`:""}</button>`; }).join("")}</div>
+      ${D.noData?`<p class="note nu-foot">${D.noData} alimento${D.noData>1?"s":""} sin datos de vitaminas y minerales (${fmt(D.kcalNoData)} kcal): cuentan en calorías y macros pero no en el resto.</p>`:""}
+      <p class="note nu-foot">Fibra, azúcar, vitaminas y minerales son estimaciones a partir de tablas de composición de alimentos (o de la etiqueta, si lo escaneaste). Objetivos orientativos según las recomendaciones de la UE y la OMS para adultos; el azúcar, las saturadas, el colesterol y el sodio son límites que conviene no pasar.</p>`;
+  }
+  return head + body;
+}
+function openNutriDetail(k){
+  const r = NUTRI.find(x => x[0]===k); if (!r) return; const [, l, u] = r, D = nutriData();
+  const get = x => ["p","c","f"].includes(k) ? (+x.e[k]||0) : (x.m[k]||0);
+  const src = ["p","c","f"].includes(k) ? nutriDays().flatMap(d => (S.diary[d]||[]).map(e => ({e}))) : D.items;
+  const agg = {}; for (const x of src){ const v = get(x); if (v > 0) agg[x.e.name] = (agg[x.e.name]||0) + v; }
+  const list = Object.entries(agg).sort((a,b)=>b[1]-a[1]), tot = list.reduce((a,x)=>a+x[1],0) || 1;
+  openSheet(l, list.length ? `<p class="note">${nutriRange==="sem"?"Últimos 7 días":dayLabel(day)}: de dónde sale tu ${l.toLowerCase()}.</p>
+    ${list.slice(0,15).map(([n,v])=>`<div class="nu-row"><div class="nu-l"><span>${esc(n)}</span><b>${nfmt(v,u)} ${u}</b></div><div class="bar"><i style="width:${v/tot*100}%"></i></div></div>`).join("")}`
+    : `<p class="note">Ningún alimento apuntado aporta ${l.toLowerCase()}.</p>`);
 }
 /* ---------- plan semanal ---------- */
 const WDAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
@@ -1170,7 +1243,7 @@ async function lookupBarcode(code){
     if (!pr || kcal == null){ msg("Este producto no está en la base de datos o no tiene la información nutricional. Créalo en «Crear» copiando la etiqueta."); return; }
     const name = [pr.product_name_es || pr.product_name || "Producto " + code, (pr.brands||"").split(",")[0].trim()].filter(Boolean).join(" · ");
     const sq = parseFloat(pr.serving_quantity);
-    const food = {name, code, kcal:r1(kcal), p:r1(n.proteins_100g||0), c:r1(n.carbohydrates_100g||0), f:r1(n.fat_100g||0), servings: sq > 0 ? [{n:"ración", g:r1(sq)}] : []};
+    const food = {name, code, kcal:r1(kcal), p:r1(n.proteins_100g||0), c:r1(n.carbohydrates_100g||0), f:r1(n.fat_100g||0), m:microFromOFF(n), servings: sq > 0 ? [{n:"ración", g:r1(sq)}] : []};
     await put("foods", {list:[...S.foods.filter(f => f.code !== code && f.name !== name), food]});
     if (sheetCtx !== c) return;
     c.t = "search"; c.food = food; c.qty = null; c.unit = null; drawFood();
@@ -1544,6 +1617,9 @@ document.addEventListener("click", e => {
     case "day-prev": day = addDays(day,-1); render(); break;
     case "day-next": day = addDays(day,1); render(); break;
     case "day-today": day = today(); render(); break;
+    case "nutri-sub": nutriSub = el.dataset.k; render(); break;
+    case "nutri-range": nutriRange = el.dataset.k; render(); break;
+    case "nutri-detail": openNutriDetail(el.dataset.k); break;
     case "add-food": openAddFood(el.dataset.meal); break;
     case "plan-edit": openPlanEditor(+el.dataset.d || wdayOf(day)); break;
     case "plan-day": openPlanEditor(+el.dataset.d); break;
@@ -1572,7 +1648,7 @@ document.addEventListener("click", e => {
     case "pick-food": c.food = c.list[+el.dataset.i]; c.qty = null; c.unit = null; drawFoodDetail(); break;
     case "food-back": c.food = null; drawFood(); break;
     case "food-add": { const v = foodCalc(); if (!(v.g>0)) break; const x = c.food;
-      const entry = {name:x.name, qty:v.qty, unit:v.unit, g:v.g, per:{kcal:x.kcal,p:x.p,c:x.c,f:x.f}, servings:x.servings||[], kcal:v.kcal, p:v.p, c:v.c, f:v.f};
+      const entry = {name:x.name, qty:v.qty, unit:v.unit, g:v.g, per:{kcal:x.kcal,p:x.p,c:x.c,f:x.f, ...(x.m?{m:x.m}:{})}, servings:x.servings||[], kcal:v.kcal, p:v.p, c:v.c, f:v.f};
       if (c.editId){ const L = S.diary[day]; const i = L.findIndex(z=>z.id===c.editId); if (i>=0) L[i] = {...L[i], ...entry}; putDay(day); closeSheet(); render(); }
       else { addEntries(c.meal, [entry]); closeSheet(); } break; }
     case "quick-add": { const k = parseNum($("qK").value); if (!(k>0)){ const m = $("qMsg"); m.textContent = "Escribe las calorías."; m.hidden = false; break; }
