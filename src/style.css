@@ -362,3 +362,33 @@ nav.tabbar{border-top:0;box-shadow:0 -6px 20px -14px rgba(16,28,56,.35)}
 .plan-bar .link{padding:0;font-size:13px}
 .plan-title{font-size:13px;font-weight:600;color:var(--accent)}
 .pl-dish{font-family:var(--display);text-transform:uppercase;font-size:18px;letter-spacing:.01em;color:var(--ink);margin-top:2px}
+
+/* ===== más chula ===== */
+#main.enter > *{animation:rise .38s cubic-bezier(.2,.7,.2,1) both}
+#main.enter > *:nth-child(2){animation-delay:.03s}#main.enter > *:nth-child(3){animation-delay:.06s}#main.enter > *:nth-child(4){animation-delay:.09s}#main.enter > *:nth-child(5){animation-delay:.12s}#main.enter > *:nth-child(n+6){animation-delay:.15s}
+@keyframes rise{from{opacity:.001;transform:translateY(10px)}to{opacity:1;transform:none}}
+.confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:60}
+
+.hello{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.hello h1{font-family:var(--display);font-size:40px;line-height:1;text-transform:uppercase;margin:2px 0 0}
+.hello-date{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.streak{display:flex;align-items:center;gap:6px;background:var(--surface);box-shadow:var(--shadow);border-radius:999px;padding:7px 12px 7px 9px;font-size:12px;color:var(--muted);flex:none}
+.streak b{font-family:var(--display);font-size:22px;line-height:1;color:var(--ink)}
+.streak .fire{font-size:18px;filter:grayscale(1);opacity:.5}
+.streak.on .fire{filter:none;opacity:1;animation:flame 1.6s ease-in-out infinite}
+.streak.on b{color:var(--prot)}
+@keyframes flame{0%,100%{transform:scale(1) rotate(-3deg)}50%{transform:scale(1.15) rotate(3deg)}}
+
+.ring-wrap{position:relative;width:150px;max-width:100%;aspect-ratio:1;margin:4px auto 0}
+.ring{width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:12}
+.ring-bg{stroke:var(--surface2)}
+.ring-fg{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset 1s cubic-bezier(.2,.7,.2,1)}
+.ring-fg.over{stroke:var(--danger)}
+.ring-c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-c b{font-family:var(--display);font-size:38px;line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
+.ring-c b.neg{color:var(--danger)}
+.ring-c span{font-size:12px;color:var(--muted);font-weight:600}
+.equation{grid-template-columns:1fr auto 1fr;max-width:320px;margin:0 auto;width:100%}
+.bar i{transition:width .8s cubic-bezier(.2,.7,.2,1)}
+@media (prefers-reduced-motion:reduce){#main.enter > *{animation:none}.streak.on .fire{animation:none}.ring-fg,.bar i{transition:none}}

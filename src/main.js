@@ -325,8 +325,34 @@ function render(){
   const top = `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
   const views = {home:viewHome, train:viewTrain, food:viewFood, progress:viewProgress, profile:viewProfile};
   $("main").innerHTML = top + views[tab]();
+  if (tab !== lastTab){ lastTab = tab; $("main").classList.remove("enter"); void $("main").offsetWidth; $("main").classList.add("enter"); }
+  requestAnimationFrame(() => document.querySelectorAll("[data-ring]").forEach(el => el.style.strokeDashoffset = el.dataset.ring));
   tick();
 }
+let lastTab = null;
+
+/* ---------- confeti ---------- */
+function confetti(){
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const c = document.createElement("canvas"); c.className = "confetti"; document.body.appendChild(c);
+  const x = c.getContext("2d"), W = c.width = innerWidth * devicePixelRatio, H = c.height = innerHeight * devicePixelRatio;
+  const cols = ["#2C6CF0","#F5A64C","#1B8550","#7C55E6","#0D9DAE","#E8364F"];
+  const P = Array.from({length:140}, () => ({x:W/2 + (Math.random()-.5)*W*.2, y:H*.35, vx:(Math.random()-.5)*W*.018, vy:-Math.random()*H*.022 - H*.006,
+    r:(4 + Math.random()*5)*devicePixelRatio, c:cols[Math.random()*cols.length|0], a:Math.random()*6, s:(Math.random()-.5)*.3}));
+  const t0 = performance.now();
+  (function f(t){ const k = (t - t0) / 1800; x.clearRect(0,0,W,H);
+    for (const p of P){ p.vy += H*.0009; p.x += p.vx; p.y += p.vy; p.a += p.s; x.save(); x.globalAlpha = Math.max(0, 1-k); x.translate(p.x,p.y); x.rotate(p.a); x.fillStyle = p.c; x.fillRect(-p.r/2,-p.r/4,p.r,p.r/2); x.restore(); }
+    if (k < 1) requestAnimationFrame(f); else c.remove(); })(t0);
+}
+
+/* ---------- racha ---------- */
+function streak(){
+  const active = d => (S.diary[d]||[]).length || S.workouts.some(w => iso(new Date(w.start))===d);
+  let d = today(); if (!active(d)) d = addDays(d,-1); let n = 0;
+  while (active(d) && n < 999){ n++; d = addDays(d,-1); }
+  return n;
+}
+function greet(){ const h = new Date().getHours(); return h<6 ? "Buenas noches" : h<14 ? "Buenos días" : h<21 ? "Buenas tardes" : "Buenas noches"; }
 
 /* ---------- Inicio ---------- */
 function viewHome(){
@@ -335,7 +361,10 @@ function viewHome(){
   const tot = dayTotals(t), remaining = S.settings.kcal - tot.kcal;
   const dots = ["L","M","X","J","V","S","D"].map((l,i)=>{ const d = addDays(ws,i); return `<div>${l}<i class="${wd.has(d)?"on":""} ${d===t?"today":""}"></i></div>`; }).join("");
   const feed = S.workouts.slice(0,15).map(workoutCard).join("");
-  return `<div class="top"><h1>Inicio</h1>${S.active?`<button class="btn" data-act="tab" data-tab="train">Seguir entreno · <span data-elapsed></span></button>`:""}</div>
+  const st = streak(), td = parseDay(today());
+  return `<div class="hello"><div><span class="hello-date">${DIA[td.getDay()]} ${td.getDate()} ${MES[td.getMonth()]}</span><h1>${greet()}</h1></div>
+    <div class="streak ${st?"on":""}" title="Días seguidos apuntando comidas o entrenando"><span class="fire" aria-hidden="true">🔥</span><b>${st}</b><span>${st===1?"día":"días"} de racha</span></div></div>
+  <div class="top">${S.active?`<button class="btn" data-act="tab" data-tab="train">Seguir entreno · <span data-elapsed></span></button>`:""}</div>
   <div class="grid2">
     <div class="card"><h2>Esta semana</h2><div><span class="big">${count}</span> <span class="note">/ ${S.settings.days} entrenos</span></div><div class="dots">${dots}</div></div>
     <div class="card today"><h2>Hoy</h2><div><span class="big" style="color:${remaining<0?"var(--danger)":"var(--accent)"}">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"}</span></div>
@@ -446,6 +475,7 @@ async function finishWorkout(){
   clearTimeout(saveT); stopRest();
   S.active = null; await put("w-"+w.id, w); await del("active");
   tab = "home"; render();
+  confetti();
   openSheet("Entreno guardado", `<div class="done-hero"><span class="note">${esc(w.title)}</span><span class="big">${fmt(volume(w))} kg</span><span class="note">${fmtDur(w.end-w.start)} · ${doneSets(w)} series · ${exs.length} ejercicios</span></div>
     ${prList.length?`<div class="card"><h2>🏆 Nuevos récords</h2>${prList.map(p=>`<div>${esc(p)}</div>`).join("")}</div>`:""}
     <button class="btn soft" data-act="routine-from" data-id="${esc(w.id)}">Guardar como rutina</button><button class="btn" data-act="close">Listo</button>`);
@@ -503,8 +533,11 @@ function viewFood(){
     <div style="text-align:center"><div class="lbl">${dayLabel(day)}</div>${day!==today()?`<button class="link" data-act="day-today" style="padding:0;font-size:13px">Volver a hoy</button>`:""}</div>
     <button class="iconb" data-act="day-next" aria-label="Día siguiente">›</button></div>
   <div class="card"><h2>Calorías restantes</h2>
-    <div class="equation"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div><div class="op">=</div>
-      <div class="rem ${remaining<0?"neg":""}"><div class="big">${fmt(remaining)}</div><span>Restantes</span></div></div>
+    ${(() => { const R = 54, C = 2*Math.PI*R, pct = Math.min(1, g.kcal ? tot.kcal/g.kcal : 0), over = tot.kcal > g.kcal;
+      return `<div class="ring-wrap"><svg class="ring" viewBox="0 0 132 132" role="img" aria-label="${fmt(tot.kcal)} de ${fmt(g.kcal)} kcal">
+        <circle cx="66" cy="66" r="${R}" class="ring-bg"/><circle cx="66" cy="66" r="${R}" class="ring-fg ${over?"over":""}" stroke-dasharray="${C}" style="stroke-dashoffset:${C}" data-ring="${C*(1-pct)}"/></svg>
+        <div class="ring-c"><b class="${remaining<0?"neg":""}">${fmt(Math.abs(remaining))}</b><span>${remaining<0?"de más":"restantes"}</span></div></div>`; })()}
+    <div class="equation"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div></div>
     <div class="macros">${mac("Carbohidratos",tot.c,g.c,"var(--carb)")}${mac("Grasas",tot.f,g.f,"var(--fat)")}${mac("Proteínas",tot.p,g.p,"var(--prot)")}</div>
     ${planBar()}</div>
   ${planEmpty()}
@@ -527,7 +560,7 @@ const savePlan = () => put("plan", {days:S.plan});
 function planEmpty(){
   const n = wdayOf(day); if (hasPlanFor(day)) return "";
   const any = Object.keys(S.plan||{}).some(k=>planHas(k));
-  return `<div class="card plan-empty"><div><h3>Plan semanal</h3><p class="note">${any ? `No tienes nada planificado para el ${WDAYS[n-1].toLowerCase()}.` : "Importa tu plan de comidas: cada día aparecerá ya puesto en su desayuno, comida y cena, y solo tendrás que escribir los gramos."}</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn" style="cursor:pointer">Importar mi plan<input type="file" id="impPlan" accept=".json,application/json" hidden></label><button class="btn ghost" data-act="plan-edit" data-d="${n}">${any?"Editar plan":"Crear a mano"}</button></div></div>`;
+  return `<div class="card plan-empty"><div><h3>Tu plan de comidas</h3><p class="note">${any ? `No tienes nada planificado para el ${WDAYS[n-1].toLowerCase()}.` : "Importa tu plan (semanal o de un mes): cada día aparecerá ya puesto en su desayuno, comida y cena, y solo tendrás que escribir los gramos."}</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn" style="cursor:pointer">Importar mi plan<input type="file" id="impPlan" accept=".json,application/json" hidden></label><button class="btn ghost" data-act="plan-edit" data-d="${n}">${any?"Editar plan":"Crear a mano"}</button></div></div>`;
 }
 const planOpts = items => [...new Set(items.map(f=>f.opt).filter(Boolean))];
 function planOpt(m, items){
@@ -1314,9 +1347,9 @@ document.addEventListener("click", e => {
     case "plan-opt": planDraft[day+"|"+el.dataset.m+"|opt"] = el.dataset.o; render(); break;
     case "plan30-off": el.parentElement.innerHTML = `¿Quitar el plan de ${S.planDates?.length||30} días? Lo ya apuntado se queda. <button class="link" data-act="plan30-off-yes">Quitar</button>`; break;
     case "plan30-off-yes": S.planDates = null; del("plandates"); render(); break;
-    case "plan-one": { const m = el.dataset.m, i = +el.dataset.i, f = curPlan(day)[m]?.[i]; if (f){ logPlan(m, [[f,i]]); putDay(day); render(); } break; }
+    case "plan-one": { const m = el.dataset.m, i = +el.dataset.i, f = curPlan(day)[m]?.[i]; if (f){ logPlan(m, [[f,i]]); putDay(day); render(); if (!MEALS.some(mm => planPending(mm).length)) confetti(); } break; }
     case "plan-add": logPlan(el.dataset.m, planPending(el.dataset.m)); putDay(day); render(); break;
-    case "plan-add-all": MEALS.forEach(m => logPlan(m, planPending(m))); putDay(day); render(); break;
+    case "plan-add-all": MEALS.forEach(m => logPlan(m, planPending(m))); putDay(day); render(); confetti(); break;
     case "copy-yesterday": { const m = el.dataset.meal; const list = (S.diary[addDays(day,-1)]||[]).filter(x=>x.meal===m).map(({id,ex,...x})=>x); addEntries(m, list); break; }
     case "edit-entry": openEditEntry(el.dataset.id); break;
     case "ftab": c.t = el.dataset.t; c.food = null; drawFood(); break;
