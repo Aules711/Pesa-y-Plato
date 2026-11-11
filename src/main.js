@@ -1018,6 +1018,8 @@ async function runAI(){
 
 /* ================= Premium ================= */
 let premium = null, adminInfo = {admin:false, phone:null, price:"3"};
+const FREE_PREMIUM = ["ametsaule@gmail.com"];   // cuentas con Premium gratis para siempre
+const isFreePremium = () => FREE_PREMIUM.includes((user?.email || "").toLowerCase());
 async function callAdmin(action, body){
   const { data:{ session } } = await sb.auth.getSession();
   const r = await fetch("/api/admin", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({action, ...(body||{})})});
@@ -1028,10 +1030,11 @@ async function loadPremium(){
   premium = p.status==="fulfilled" ? p.value.data : null; if (a.status==="fulfilled") adminInfo = a.value;
   render(); if (sheetCtx?.kind==="food" && sheetCtx.t==="scan") drawFood();
 }
-const isPremium = () => adminInfo.admin || (!!premium && (!premium.until || premium.until >= today()));
+const isPremium = () => adminInfo.admin || isFreePremium() || (!!premium && (!premium.until || premium.until >= today()));
 const fmtPhone = p => String(p||"").replace(/\D/g,"").replace(/^(\d{3})(\d{3})(\d{3})$/,"$1 $2 $3");
 function premiumStatus(){
   if (adminInfo.admin) return "Eres administrador: tienes todo activado.";
+  if (isFreePremium()) return "Tienes Premium para siempre. 🎁";
   if (!premium) return "";
   if (!premium.until) return "Tienes Premium para siempre. 🎁";
   return premium.until >= today() ? `Tienes Premium hasta el ${longDay(premium.until)}.` : `Tu Premium terminó el ${longDay(premium.until)}.`;
