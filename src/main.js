@@ -191,7 +191,7 @@ async function start(u){
 function authView(mode, msg){
   if (mode==="signup" && !SIGNUP_OPEN) mode = "login";
   const A = $("auth"); A.hidden = false; $("app").hidden = true;
-  const m = msg ? `<p class="${msg.ok?"note":"msg"}" style="${msg.ok?"color:var(--ok)":""}">${esc(msg.t)}</p>` : "";
+  const m = msg ? `<p class="${msg.ok?"note":"msg"}" style="${msg.ok?"color:var(--ok)":""}">${esc(msg.t)}</p>${msg.resend?`<button type="button" class="btn soft" data-resend="${esc(msg.resend)}">Reenviar email de confirmación</button>`:""}` : "";
   if (mode==="reset"){ A.className = "auth"; A.innerHTML = `<form class="auth-card" id="fReset"><h1>Nueva contraseña</h1><label class="f">Contraseña nueva<input id="aPass" type="password" minlength="6" required autocomplete="new-password"></label>${m}<button class="btn" type="submit">Guardar contraseña</button></form>`; return; }
   const signup = mode==="signup", forgot = mode==="forgot";
   const card = `<form class="auth-card" id="fAuth" data-mode="${mode}">
@@ -275,17 +275,21 @@ function landingHTML(card, mode){
     </section>
     <footer class="lfoot"><span>© ${new Date().getFullYear()} Pesa y Plato</span><span><a href="/terminos.html">Términos</a> · <a href="/privacidad.html">Privacidad</a></span></footer>`;
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-auth]"); if (!b) return; authView(b.dataset.auth);
+document.addEventListener("click", async e => { const rs = e.target.closest("[data-resend]");
+  if (rs){ rs.disabled = true; const { error } = await sb.auth.resend({type:"signup", email:rs.dataset.resend, options:{emailRedirectTo:location.origin}});
+    authView("login", error ? {t: /rate|seconds|limit/i.test(error.message) ? "Espera un minuto antes de pedir otro email." : "No se pudo reenviar. Inténtalo en un rato."} : {ok:true, t:"Te hemos enviado otro email de confirmación. Revisa también el spam."}); return; }
+  const b = e.target.closest("[data-auth]"); if (!b) return; authView(b.dataset.auth);
   if (b.hasAttribute("data-go")) setTimeout(() => { $("lauth")?.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth", block:"start"}); $("aEmail")?.focus({preventScroll:true}); }, 30); });
 document.addEventListener("submit", async e => {
   if (e.target.id==="fAuth"){ e.preventDefault(); const mode = e.target.dataset.mode, email = $("aEmail").value.trim(), pass = $("aPass")?.value, btn = e.target.querySelector("button[type=submit]");
     btn.disabled = true;
-    if (mode==="login"){ const { error } = await sb.auth.signInWithPassword({email, password:pass}); if (error) authView("login", {t: /confirm/i.test(error.message) ? "Confirma tu email antes de entrar (revisa tu bandeja de entrada)." : SIGNUP_OPEN ? "Email o contraseña incorrectos." : "Email o contraseña incorrectos. Si aún no tienes acceso, pídeselo a quien te pasó el enlace."}); }
+    if (mode==="login"){ const { error } = await sb.auth.signInWithPassword({email, password:pass}); if (error && /confirm/i.test(error.message)){ authView("login", {t:"Confirma tu email antes de entrar: revisa tu bandeja de entrada y la carpeta de spam.", resend:email}); }
+      else if (error) authView("login", {t: /confirm/i.test(error.message) ? "Confirma tu email antes de entrar (revisa tu bandeja de entrada)." : SIGNUP_OPEN ? "Email o contraseña incorrectos." : "Email o contraseña incorrectos. Si aún no tienes acceso, pídeselo a quien te pasó el enlace."}); }
     else if (mode==="signup"){ const invite = ($("aInvite")?.value || "").trim().toUpperCase();
       const meta = {consent_at:new Date().toISOString(), consent_version:"2026-11"}; if (invite) meta.invite = invite;
       const { data, error } = await sb.auth.signUp({email, password:pass, options:{emailRedirectTo:location.origin, data:meta}});
       if (error) authView("signup", {t: /registered|exists/i.test(error.message) ? "Ya hay una cuenta con ese email. Entra con tu contraseña." : /password/i.test(error.message) ? "La contraseña debe tener al menos 6 caracteres." : /signups? (are )?not allowed|disabled/i.test(error.message) ? "El registro está cerrado ahora mismo." : /rate|limit/i.test(error.message) ? "Demasiados intentos. Espera unos minutos." : INVITE_REQUIRED ? "Ese código de invitación no es válido o ya se ha usado." : "No se pudo crear la cuenta. Inténtalo otra vez."});
-      else if (!data.session) authView("login", {ok:true, t:"Te hemos enviado un email para confirmar la cuenta. Ábrelo y luego entra aquí."}); }
+      else if (!data.session) authView("login", {ok:true, t:"Te hemos enviado un email para confirmar la cuenta. Ábrelo y luego entra aquí. Si no llega, mira en spam.", resend:email}); }
     else { const { error } = await sb.auth.resetPasswordForEmail(email, {redirectTo:location.origin}); authView("login", error ? {t:"No se pudo enviar el email."} : {ok:true, t:"Si existe una cuenta con ese email, te llegará un enlace para cambiar la contraseña."}); } }
   if (e.target.id==="fReset"){ e.preventDefault(); const { error } = await sb.auth.updateUser({password:$("aPass").value});
     if (error) authView("reset", {t:"No se pudo cambiar. Usa al menos 6 caracteres."}); else { $("auth").hidden = true; if (!user){ const { data:{ session } } = await sb.auth.getSession(); if (session) start(session.user); } } }
