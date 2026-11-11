@@ -88,6 +88,7 @@ let tab = "home", day = today(), metric = "kg", progEx = "";
 let memMode = false, activeLoaded = false, user = null;
 const AI_ON = import.meta.env.VITE_AI_ENABLED === "true";
 const SIGNUP_OPEN = import.meta.env.VITE_ALLOW_SIGNUP === "true";
+const TRAIN_ON = false;   // sección de entrenos oculta por ahora: poner true para volver a mostrarla
 const INVITE_REQUIRED = import.meta.env.VITE_INVITE_REQUIRED === "true";
 const smp = AI_ON ? {} : null;
 const MAX_VIDEO_MB = 50;
@@ -320,6 +321,8 @@ function bestsBefore(name, beforeStart){ let kg=0, rm=0, has=false;
 
 /* ================= render principal ================= */
 function render(){
+  if (!TRAIN_ON && tab==="train") tab = "home";
+  const tb = $("tabbar"); tb.classList.toggle("four", !TRAIN_ON); tb.querySelector('[data-tab="train"]').hidden = !TRAIN_ON;
   document.querySelectorAll("#tabbar button").forEach(b => { b.toggleAttribute("aria-current", b.dataset.tab===tab); if (b.dataset.tab===tab) b.setAttribute("aria-current","page");
     b.classList.toggle("live", b.dataset.tab==="train" && !!S.active); });
   const top = `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
@@ -364,7 +367,7 @@ function viewHome(){
   const st = streak(), td = parseDay(today());
   return `<div class="hello"><div><span class="hello-date">${DIA[td.getDay()]} ${td.getDate()} ${MES[td.getMonth()]}</span><h1>${greet()}</h1></div>
     <div class="streak ${st?"on":""}" title="Días seguidos apuntando comidas o entrenando"><span class="fire" aria-hidden="true">🔥</span><b>${st}</b><span>${st===1?"día":"días"} de racha</span></div></div>
-  <div class="top">${S.active?`<button class="btn" data-act="tab" data-tab="train">Seguir entreno · <span data-elapsed></span></button>`:""}</div>
+  ${!TRAIN_ON ? homeFood(t, tot, remaining) : `<div class="top">${S.active?`<button class="btn" data-act="tab" data-tab="train">Seguir entreno · <span data-elapsed></span></button>`:""}</div>
   <div class="grid2">
     <div class="card"><h2>Esta semana</h2><div><span class="big">${count}</span> <span class="note">/ ${S.settings.days} entrenos</span></div><div class="dots">${dots}</div></div>
     <div class="card today"><h2>Hoy</h2><div><span class="big" style="color:${remaining<0?"var(--danger)":"var(--accent)"}">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"}</span></div>
@@ -373,7 +376,21 @@ function viewHome(){
   </div>
   <div class="top"><h2>Entrenos</h2>${S.workouts.length?`<span class="note">${S.workouts.length} en total</span>`:""}</div>
   ${feed || `<div class="empty"><span>Aún no hay entrenos guardados. Empieza uno o importa tu historial de Hevy o Strong.</span>
-     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn" data-act="start-empty">Empezar entreno</button><button class="btn ghost" data-act="tab" data-tab="profile">Importar</button></div></div>`}`;
+     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn" data-act="start-empty">Empezar entreno</button><button class="btn ghost" data-act="tab" data-tab="profile">Importar</button></div></div>`}`}`;
+}
+function homeFood(t, tot, remaining){
+  const g = goalsFor(t), P = curPlan(t), dishes = P.dishes || {};
+  const meals = MEALS.map(m => { const items = (P[m]||[]).filter(f => !f.opt || f.opt === (planOpts(P[m]).length ? planOpts(P[m])[0] : null));
+      const logged = (S.diary[t]||[]).filter(e => e.meal===m), lk = logged.reduce((a,e)=>a+(+e.kcal||0),0);
+      if (!items.length && !logged.length) return "";
+      const pk = items.reduce((a,f)=>a+nutr(f,f.g).kcal,0);
+      return `<button class="hm-row" data-act="tab" data-tab="food"><span class="hm-m">${m}</span><span class="hm-d">${esc(dishes[m] || (items[0]?.name ?? logged.map(e=>e.name).join(", ")))}</span>
+        <span class="hm-k ${logged.length?"ok":""}">${logged.length ? "✓ "+fmt(lk) : fmt(pk)} kcal</span></button>`; }).join("");
+  return `<div class="card today"><h2>Hoy</h2><div><span class="big">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"} de ${fmt(g.kcal)}</span></div>
+      <div class="hm-mac">${[["Proteínas",tot.p,g.p],["Carbohidratos",tot.c,g.c],["Grasas",tot.f,g.f]].map(([l,v,o])=>`<div><span>${l}</span><b>${r0(v)} / ${r0(o)} g</b><i style="--w:${Math.min(100,o?v/o*100:0)}%"></i></div>`).join("")}</div>
+      <button class="btn soft" data-act="tab" data-tab="food">Abrir diario</button></div>
+    ${meals ? `<div class="card"><div class="top"><h2>${P._n ? "Hoy toca · día "+P._n : "Hoy toca"}</h2><button class="link" data-act="tab" data-tab="food">Ver diario</button></div><div class="hm-list">${meals}</div></div>`
+      : `<div class="card"><h2>Tu plan de comidas</h2><p class="note">Importa tu plan y aquí verás qué te toca comer cada día.</p><button class="btn" data-act="tab" data-tab="food">Ir al Diario</button></div>`}`;
 }
 const WTYPES = {Running:"Correr",Walking:"Caminar",Cycling:"Ciclismo",TraditionalStrengthTraining:"Fuerza",FunctionalStrengthTraining:"Fuerza funcional",HighIntensityIntervalTraining:"HIIT",
   Swimming:"Natación",Soccer:"Fútbol",Basketball:"Baloncesto",Tennis:"Tenis",Paddle:"Pádel",PickleBall:"Pickleball",Elliptical:"Elíptica",Rowing:"Remo",Yoga:"Yoga",Hiking:"Senderismo",CoreTraining:"Core",
@@ -695,11 +712,12 @@ function viewProgress(){
   const kp = []; for (let i=13;i>=0;i--){ const d = addDays(today(),-i); kp.push({x:shortDay(d), y:r0(dayTotals(d).kcal)}); }
   const seg = (m,l) => `<button data-act="metric" data-m="${m}" aria-pressed="${metric===m}">${l}</button>`;
   return `<h1>Progreso</h1>
-  <div class="card"><h2>Ejercicio</h2>
+  ${TRAIN_ON ? `  <div class="card"><h2>Ejercicio</h2>
     ${used.length?`<select id="progEx" aria-label="Ejercicio">${used.map(n=>`<option ${n===progEx?"selected":""}>${esc(n)}</option>`).join("")}</select>
     <button class="btn soft" data-act="ex-info" data-name="${esc(progEx)}">▶ Ver vídeo y técnica</button><div class="seg">${seg("kg","Peso máx.")}${seg("rm","1RM est.")}${seg("vol","Volumen")}</div>
     ${lineChart(pts,{color:"var(--accent)",label:"Progreso de "+progEx,empty:""})}${rec}`:`<p class="note">Cuando guardes entrenos verás aquí tu progreso por ejercicio.</p>`}</div>
   <div class="card"><h2>Series por músculo · esta semana</h2>${mus || `<p class="note">Sin series esta semana todavía.</p>`}</div>
+` : ""}
   <div class="card"><div class="top"><h2>Peso corporal</h2>${bwDiff!=null?`<span class="note tnum">${bwDiff>0?"+":""}${bwDiff.toLocaleString("es-ES")} kg desde ${shortDay(bw[0][0])}</span>`:""}</div>
     <form id="fWeight" style="display:flex;gap:8px"><input id="bwIn" inputmode="decimal" placeholder="Peso de hoy (kg)" value="${S.body[today()]?.kg??""}" aria-label="Peso de hoy en kg"><button class="btn" type="submit">Guardar</button></form>
     ${lineChart(bwPts,{color:"var(--ok)",label:"Peso corporal",empty:"Apunta tu peso para ver la tendencia."})}</div>
@@ -726,7 +744,7 @@ function viewProfile(){
     <p class="note tnum">Tus macros suman ${fmt(mk)} kcal${Math.abs(mk-g.kcal)>100?` (${mk>g.kcal?"+":""}${fmt(mk-g.kcal)} respecto al objetivo)`:""}.</p>
     <button class="btn" type="submit">Guardar objetivos</button><span class="note" id="goalMsg"></span></form>
   <div class="card"><h2>Importar</h2>
-    <label class="f">Entrenos · CSV de Hevy o Strong<input type="file" id="impW" accept=".csv,text/csv"></label>
+    <label class="f" ${TRAIN_ON?"":"hidden"}>Entrenos · CSV de Hevy o Strong<input type="file" id="impW" accept=".csv,text/csv"></label>
     <label class="f">Comidas · CSV de MyFitnessPal<input type="file" id="impF" accept=".csv,text/csv"></label>
     <label class="f">Copia de seguridad o plan semanal (.json)<input type="file" id="impJ" accept=".json,application/json"></label>
     <p class="note">En Hevy: Perfil › Ajustes › Exportar e importar datos › Exportar entrenos. En MyFitnessPal (web): Ajustes › Exportar datos; usa el archivo «Nutrition Summary». Si vuelves a importar el mismo archivo no se duplica nada.</p></div>
