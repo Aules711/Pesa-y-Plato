@@ -1,4 +1,4 @@
-# Pesa y Plato
+# beinghealthy
 
 Entrenos al estilo Hevy, diario de comidas al estilo MyFitnessPal, plan semanal de comidas, progreso y vídeos de ejercicios. Web instalable en el móvil, con cuentas de usuario.
 
@@ -30,7 +30,7 @@ Entrenos al estilo Hevy, diario de comidas al estilo MyFitnessPal, plan semanal 
    ```bash
    git init
    git add .
-   git commit -m "Primera versión de Pesa y Plato"
+   git commit -m "Primera versión de beinghealthy"
    git branch -M main
    git remote add origin https://github.com/TU-USUARIO/pesa-y-plato.git
    git push -u origin main

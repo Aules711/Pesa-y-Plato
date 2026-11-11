@@ -1,4 +1,4 @@
--- Pesa y Plato · Premium
+-- beinghealthy · Premium
 -- Ejecútalo en Supabase › SQL Editor (después de schema.sql). Se puede ejecutar más de una vez.
 -- Cada fila = una persona con Premium. "until" vacío = Premium para siempre (regalado).
 create table if not exists public.premium (

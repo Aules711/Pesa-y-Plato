@@ -1,4 +1,4 @@
--- Pesa y Plato · registro solo con código de invitación
+-- beinghealthy · registro solo con código de invitación
 -- Ejecútalo en Supabase › SQL Editor DESPUÉS de schema.sql. Se puede ejecutar más de una vez.
 -- Con esto, Supabase rechaza cualquier registro que no traiga un código válido,
 -- aunque alguien intente saltarse la pantalla de la app.

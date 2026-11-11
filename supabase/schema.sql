@@ -1,4 +1,4 @@
--- Pesa y Plato · base de datos
+-- beinghealthy · base de datos
 -- Pega todo esto en Supabase › SQL Editor › New query y pulsa «Run». Se puede ejecutar más de una vez.
 
 -- 1. Datos de cada usuario ------------------------------------------------------
