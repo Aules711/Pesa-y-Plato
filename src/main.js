@@ -828,7 +828,7 @@ function viewProfile(){
       ${importState.items?.length?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="imp-confirm" ${importState.busy?"disabled":""}>${importState.busy?"Importando…":"Importar"}</button><button class="btn ghost" data-act="imp-cancel" ${importState.busy?"disabled":""}>Cancelar</button></div>`:`<button class="btn ghost" data-act="imp-cancel">Cerrar</button>`}
       <span class="note" id="impProg">${esc(importState.progress||"")}</span></div>` : "";
   return `<h1>Perfil</h1>
-  <div class="card"><h2>Premium</h2>${isPremium() ? `<p><b>⭐ ${esc(premiumStatus())}</b></p><p class="note">Tienes las fotos con IA y al código de barras en Diario › Añadir alimento › Foto.</p>` : premiumPitch()}
+  <div class="card"><h2>Premium</h2>${isPremium() ? `<div class="prem"><span class="prem-badge">⭐ ${esc(premiumStatus())}</span>${premFeats(true)}<p class="note">También las tienes en Diario › Añadir alimento › Foto.</p></div>` : premiumPitch()}
     ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>
   <div class="card"><h2>Cuenta</h2><div class="top"><span style="overflow-wrap:anywhere">${esc(user?.email||"")}</span><button class="btn ghost" data-act="logout">Cerrar sesión</button></div>
     <form id="fPass" class="stack"><label class="f">Cambiar contraseña<input id="newPass" type="password" minlength="6" autocomplete="new-password" placeholder="Nueva contraseña (mín. 6 caracteres)"></label><button class="btn soft" type="submit">Guardar contraseña</button><span class="note" id="passMsg"></span></form></div>
@@ -1157,10 +1157,17 @@ function premiumStatus(){
   if (!premium.until) return "Tienes Premium para siempre. 🎁";
   return premium.until >= today() ? `Tienes Premium hasta el ${longDay(premium.until)}.` : `Tu Premium terminó el ${longDay(premium.until)}.`;
 }
+function premFeats(on){
+  const F = [["plate","📸","Foto al plato con IA","Haz una foto a lo que vas a comer: la IA reconoce cada alimento y calcula gramos, calorías y macros. Tú solo revisas y añades."],
+             ["code","▥","Foto al código de barras","Para lo envasado: foto al código y salen sus calorías, macros, fibra, azúcar y sal de la etiqueta."]];
+  return `<div class="prem-feats">${F.map(([k,i,t,d]) => `<div class="prem-f"><span class="prem-fi" aria-hidden="true">${i}</span><div><b>${t}</b><p class="note">${d}</p>
+    ${on?`<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>`:""}</div></div>`).join("")}</div>`;
+}
+const mealNow = () => { const h = new Date().getHours() + new Date().getMinutes()/60; return h < 11 ? "Desayuno" : h < 16.5 ? "Comida" : h < 20 ? "Snacks" : "Cena"; };
 function premiumPitch(){
   const ph = adminInfo.phone, concept = `Premium ${user?.email || ""}`;
   return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Fotos que lo calculan todo</h3>
-    <p class="note">📸 Haz una foto a tu plato y la IA reconoce los alimentos y calcula gramos, calorías y macros. ▥ Y con una foto al código de barras de cualquier producto envasado, sus datos al momento.</p>
+    ${premFeats(false)}
     <div class="prem-price"><b>${esc(adminInfo.price||"3")} €</b><span>al mes</span></div>
     ${ph ? `<ol class="prem-steps">
       <li><span>Envía <b>${esc(adminInfo.price||"3")} €</b> por <b>Bizum</b> al</span><div class="copy"><code>${esc(fmtPhone(ph))}</code><button class="btn soft" data-act="copy" data-v="${esc(String(ph).replace(/\D/g,""))}">Copiar</button></div></li>
@@ -1684,6 +1691,9 @@ document.addEventListener("click", e => {
     case "plan-add-all": MEALS.forEach(m => logPlan(m, planPending(m))); putDay(day); render(); confetti(); break;
     case "copy-yesterday": { const m = el.dataset.meal; const list = (S.diary[addDays(day,-1)]||[]).filter(x=>x.meal===m).map(({id,ex,...x})=>x); addEntries(m, list); break; }
     case "edit-entry": openEditEntry(el.dataset.id); break;
+    case "prem-use": { day = today(); tab = "food"; render(); openAddFood(mealNow()); sheetCtx.t = "scan"; drawFood();
+      document.querySelectorAll("#ftabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t==="scan"));
+      $(el.dataset.k==="plate" ? "platePhoto" : "scanPhoto")?.click(); break; }
     case "ftab": stopScan(); c.t = el.dataset.t; c.food = null; drawFood(); break;
     case "scan-lookup": { const v = ($("scanCode").value||"").replace(/\D/g,""); if (v.length >= 8) lookupBarcode(v); else $("scanMsg").textContent = "El código tiene que tener al menos 8 números."; break; }
     case "pick-food": c.food = c.list[+el.dataset.i]; c.qty = null; c.unit = null; drawFoodDetail(); break;
