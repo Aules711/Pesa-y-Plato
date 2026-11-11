@@ -961,8 +961,8 @@ function drawFood(){
   if (c.t==="scan" && !isPremium()){ P.innerHTML = premiumPitch(); return; }
   if (c.t==="scan"){ P.innerHTML = `<div class="scan"><video id="scanV" playsinline muted autoplay></video><div class="scan-frame" aria-hidden="true"></div></div>
     <p class="note" id="scanMsg" style="text-align:center">Abriendo la cámara…</p>
+    <label class="btn ${IOS?"":"ghost"}" style="cursor:pointer;text-align:center">📷 Hacer una foto del código<input type="file" id="scanPhoto" accept="image/*" capture="environment" hidden></label>
     <div style="display:flex;gap:8px"><input id="scanCode" inputmode="numeric" placeholder="O escribe el código (8410…)" aria-label="Código de barras"><button class="btn soft" data-act="scan-lookup">Buscar</button></div>
-    <label class="btn ghost" style="cursor:pointer;text-align:center">Hacer una foto del código<input type="file" id="scanPhoto" accept="image/*" capture="environment" hidden></label>
     <p class="note">Los datos vienen de Open Food Facts, una base de datos abierta. Comprueba que coinciden con la etiqueta.</p>`; startScan(); return; }
   if (c.t==="ai") P.innerHTML = `<p class="note">Describe lo que has comido y la IA calcula una estimación. Revísala antes de añadirla.</p>
     <textarea id="aiText" placeholder="Un plato de macarrones con tomate y atún, una manzana y un vaso de leche"></textarea>
@@ -1107,36 +1107,50 @@ function updateWizard(){
 
 /* ================= códigos de barras ================= */
 let scan = null;
-function stopScan(){ if (!scan) return; try { scan.stop?.(); } catch {} try { scan.stream?.getTracks().forEach(t => t.stop()); } catch {} clearInterval(scan.timer); scan = null; }
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints > 1);
+const CAM = {video:{facingMode:{ideal:"environment"}, width:{ideal:1920}, height:{ideal:1080}, advanced:[{focusMode:"continuous"}]}, audio:false};
+async function zxReader(){
+  const [{ BrowserMultiFormatReader }, { DecodeHintType, BarcodeFormat }] = await Promise.all([import("@zxing/browser"), import("@zxing/library")]);
+  const hints = new Map([[DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E]], [DecodeHintType.TRY_HARDER, true]]);
+  return new BrowserMultiFormatReader(hints, {delayBetweenScanAttempts:150});
+}
+function stopScan(){ if (!scan) return; try { scan.stop?.(); } catch {} try { scan.stream?.getTracks().forEach(t => t.stop()); } catch {} clearInterval(scan.timer); clearTimeout(scan.hint); scan = null; }
 async function startScan(){
   stopScan(); const v = $("scanV"), msg = t => { const el = $("scanMsg"); if (el) el.textContent = t; };
   if (!navigator.mediaDevices?.getUserMedia){ msg("Este navegador no deja usar la cámara. Haz una foto del código o escríbelo."); return; }
-  const me = scan = {};
+  const me = scan = {}, found = code => { if (scan !== me) return; stopScan(); try { navigator.vibrate?.(80); } catch {} lookupBarcode(code); };
   try {
-    if ("BarcodeDetector" in window && (await BarcodeDetector.getSupportedFormats()).includes("ean_13")){
+    me.stream = await navigator.mediaDevices.getUserMedia(CAM).catch(() => navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}, audio:false}));
+    if (scan !== me){ me.stream.getTracks().forEach(t=>t.stop()); return; }
+    v.setAttribute("playsinline",""); v.muted = true; v.srcObject = me.stream; await v.play().catch(()=>{});
+    msg("Pon el código de barras dentro del recuadro, a unos 15 cm.");
+    me.hint = setTimeout(() => { if (scan === me) msg("¿No lo lee? Acércalo un poco, busca buena luz o pulsa «Hacer una foto del código»."); }, 8000);
+    if ("BarcodeDetector" in window && (await BarcodeDetector.getSupportedFormats().catch(()=>[])).includes("ean_13")){
       const det = new BarcodeDetector({formats:["ean_13","ean_8","upc_a","upc_e"]});
-      me.stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-      if (scan !== me){ me.stream.getTracks().forEach(t=>t.stop()); return; }
-      v.srcObject = me.stream; await v.play().catch(()=>{});
-      msg("Apunta al código de barras del producto.");
       me.timer = setInterval(async () => { if (scan !== me || v.readyState < 2) return;
-        try { const r = await det.detect(v); if (r[0]?.rawValue){ const code = r[0].rawValue; stopScan(); lookupBarcode(code); } } catch {} }, 300);
+        try { const r = await det.detect(v); if (r[0]?.rawValue) found(r[0].rawValue); } catch {} }, 250);
     } else {
-      const { BrowserMultiFormatReader } = await import("@zxing/browser");
-      const reader = new BrowserMultiFormatReader();
-      const ctl = await reader.decodeFromConstraints({video:{facingMode:"environment"}}, v, (res) => {
-        if (res && scan === me){ const code = res.getText(); stopScan(); lookupBarcode(code); } });
-      if (scan !== me){ ctl.stop(); return; }
+      const reader = await zxReader(); if (scan !== me) return;
+      const ctl = await reader.decodeFromStream(me.stream, v, (res) => { if (res) found(res.getText()); });
       me.stop = () => ctl.stop();
-      msg("Apunta al código de barras del producto.");
     }
-  } catch(e){ if (scan === me) scan = null; msg(e?.name==="NotAllowedError" ? "No has dado permiso para la cámara. Puedes hacer una foto del código o escribirlo." : "No se pudo abrir la cámara. Haz una foto del código o escríbelo."); }
+  } catch(e){ if (scan === me) scan = null; msg(e?.name==="NotAllowedError" ? (IOS ? "No hay permiso para la cámara. En el iPhone: Ajustes › Safari › Cámara › Permitir, y vuelve a abrir la app. O usa «Hacer una foto del código»." : "No has dado permiso para la cámara. Puedes hacer una foto del código o escribirlo.") : "No se pudo abrir la cámara. Usa «Hacer una foto del código» o escribe los números."); }
 }
 async function scanPhoto(file){
   const msg = t => { const el = $("scanMsg"); if (el) el.textContent = t; }; msg("Leyendo la foto…");
-  try { const { BrowserMultiFormatReader } = await import("@zxing/browser"); const url = URL.createObjectURL(file);
-    const r = await new BrowserMultiFormatReader().decodeFromImageUrl(url); URL.revokeObjectURL(url); lookupBarcode(r.getText()); }
-  catch { msg("No encuentro el código en la foto. Prueba más cerca, con buena luz, o escríbelo."); }
+  try {
+    const reader = await zxReader();
+    const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = URL.createObjectURL(file); });
+    // las fotos del iPhone son enormes: probamos varios tamaños y giros
+    for (const max of [1600, 1100, 2400, 800]) for (const rot of [0, 90]){
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)), w = Math.round(img.naturalWidth*k), h = Math.round(img.naturalHeight*k);
+      const c = document.createElement("canvas"); c.width = rot ? h : w; c.height = rot ? w : h; const x = c.getContext("2d");
+      if (rot){ x.translate(c.width/2, c.height/2); x.rotate(Math.PI/2); x.drawImage(img, -w/2, -h/2, w, h); } else x.drawImage(img, 0, 0, w, h);
+      try { const r = reader.decodeFromCanvas(c); if (r){ URL.revokeObjectURL(img.src); return lookupBarcode(r.getText()); } } catch {}
+    }
+    URL.revokeObjectURL(img.src);
+    msg("No encuentro el código en la foto. Haz la foto más cerca, de frente y con buena luz, o escribe los números.");
+  } catch { msg("No se pudo leer la foto. Escribe los números del código."); }
 }
 async function lookupBarcode(code){
   const c = sheetCtx, msg = t => { const el = $("scanMsg"); if (el) el.textContent = t; };
