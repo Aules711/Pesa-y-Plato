@@ -354,6 +354,7 @@ function render(){
   if (fresh){ lastTab = tab; $("main").classList.remove("enter"); void $("main").offsetWidth; $("main").classList.add("enter");
     requestAnimationFrame(() => document.querySelectorAll("[data-ring]").forEach(el => el.style.strokeDashoffset = el.dataset.ring)); }
   else { $("main").classList.remove("enter"); document.querySelectorAll("[data-ring]").forEach(el => { el.style.transition = "none"; el.style.strokeDashoffset = el.dataset.ring; }); if (scrollY !== y) scrollTo(0, y); }
+  if (tab==="profile" && profSec==="admin") drawAdmin();
   tick();
 }
 let lastTab = null;
@@ -840,6 +841,7 @@ function viewProfile(){
   const back = t => `<div class="prof-back"><button class="iconb" data-act="prof-sec" data-k="" aria-label="Volver al perfil">‹</button><h1>${t}</h1></div>`;
   const S2 = {
     plan: ["Mi plan de comidas", planSection()],
+    admin: ["Administración", adminSection()],
     premium: ["Premium", `<div class="card"><h2>Premium</h2>${isPremium() ? `<div class="prem"><span class="prem-badge">⭐ ${esc(premiumStatus())}</span>${premFeats(true)}<p class="note">También las tienes en Diario › Añadir alimento › Foto.</p></div>` : premiumPitch()}
     ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>`],
     goals: ["Objetivos", `<form class="card" id="fGoals"><div class="top"><h2>Objetivos diarios</h2><button type="button" class="link" data-act="wizard">Calcular mis objetivos</button></div>
@@ -859,8 +861,6 @@ function viewProfile(){
     <label class="f">Copia de seguridad o plan semanal (.json)<input type="file" id="impJ" accept=".json,application/json"></label>
     <p class="note">En Hevy: Perfil › Ajustes › Exportar e importar datos › Exportar entrenos. En MyFitnessPal (web): Ajustes › Exportar datos; usa el archivo «Nutrition Summary». Si vuelves a importar el mismo archivo no se duplica nada.</p></div>${imp}<div class="card"><h2>Exportar</h2>
     ${dl?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" data-act="export-json">Copia completa (.json)</button><button class="btn ghost" data-act="export-w">Entrenos (.csv)</button><button class="btn ghost" data-act="export-f">Comidas (.csv)</button></div>`:`<p class="note">Las descargas no están disponibles en esta vista.</p>`}</div>`],
-    examples: ["Datos de ejemplo", `<div class="card"><h2>Datos de ejemplo</h2><p class="note">Tres semanas inventadas de entrenos, comidas y peso para ver cómo funciona todo. Salen marcadas como «ejemplo» y se borran de golpe.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" data-act="load-ex">Cargar ejemplos</button><button class="btn danger" data-act="clear-ex">Borrar ejemplos</button></div><span class="note" id="exMsg"></span></div>`],
     privacy: ["Privacidad y datos", `<div class="card"><h2>Tus datos y tu cuenta</h2><p class="note">Tus datos solo los ves tú. Puedes descargarlos en «Exportar», borrarlos o eliminar tu cuenta por completo.</p>
     <div id="wipeBox" class="stack"><button class="btn danger block" data-act="wipe">Borrar todos mis datos</button><button class="btn danger block" data-act="delacc">Eliminar mi cuenta</button></div></div><div class="card"><h2>Documentos legales</h2><p class="note legal"><a href="/terminos.html" target="_blank" rel="noopener">Términos de uso</a> · <a href="/privacidad.html" target="_blank" rel="noopener">Política de privacidad</a></p></div>`],
   };
@@ -878,10 +878,9 @@ function viewProfile(){
   <div class="prof-group">
     ${row("account","👤","Cuenta", "Email y contraseña")}
     ${row("io","📥","Importar y exportar", "Tu plan, copias de seguridad, MyFitnessPal")}
-    ${row("examples","🧪","Datos de ejemplo", "Para ver cómo funciona")}
     ${row("privacy","🔒","Privacidad y datos", "Borrar datos, eliminar cuenta, términos")}
   </div>
-  ${adminInfo.admin ? `<div class="prof-group">${row("","🛠️","Panel de administración","Activar o regalar Premium","admin")}</div>` : ""}
+  ${isOwner() ? `<div class="prof-group">${row("admin","🛠️","Portal de administrador","Ver usuarios y dar Premium")}</div>` : ""}
   <button class="btn ghost block prof-out" data-act="logout">Cerrar sesión</button>`;
 }
 /* ================= hoja inferior ================= */
@@ -1205,22 +1204,39 @@ function premiumPitch(){
     : `<p class="note">El Premium aún no está disponible. Vuelve a mirarlo pronto.</p>`}
     <p class="note">Sin Premium puedes seguir buscando alimentos y creando los tuyos con los datos de la etiqueta.</p></div>`;
 }
-async function openAdmin(){
-  openSheet("Panel de administración", `<p class="note">Activa el Premium cuando te llegue un Bizum (busca el email que venga en el concepto) o regálalo a quien quieras.</p>
-    <input id="admQ" placeholder="Buscar por email" autocomplete="off" aria-label="Buscar usuario"><div id="admList" class="stack"><p class="note">Cargando usuarios…</p></div>`, {kind:"admin", users:[], q:""});
-  try { const r = await callAdmin("list"); if (sheetCtx?.kind!=="admin") return; sheetCtx.users = r.users; drawAdmin(); }
-  catch(e){ $("admList").innerHTML = `<p class="msg">${e.code===403?"Tu cuenta no es administradora.":e.code==="disabled"?"Falta configurar SUPABASE_SERVICE_ROLE_KEY en Vercel.":"No se pudo cargar la lista. Comprueba que has ejecutado supabase/premium.sql."}</p>`; }
+const isOwner = () => adminInfo.admin || isFreePremium();
+const adm = {users:null, q:"", f:"all", err:null, loading:false};
+const premOn = P => P && (!P.until || P.until >= today());
+function adminSection(){
+  if (!adm.users && !adm.loading && !adm.err) loadAdmin();
+  return `<div id="admStats" class="adm-stats"></div>
+    <div class="card"><input id="admQ" value="${esc(adm.q)}" placeholder="Buscar por email" autocomplete="off" aria-label="Buscar usuario">
+      <div class="chips" id="admF"></div><div id="admList" class="stack"><p class="note">Cargando usuarios…</p></div></div>
+    <p class="note">Cuando te llegue un Bizum, busca el email que venga en el concepto y pulsa «+1 mes». «Regalar» da Premium para siempre.</p>
+    <button class="btn ghost block" data-act="adm-reload">Actualizar lista</button>`;
+}
+async function loadAdmin(){
+  adm.loading = true;
+  try { const r = await callAdmin("list"); adm.users = r.users; adm.err = null; }
+  catch(e){ adm.err = e.code===403 ? "Esta cuenta no es administradora." : (e.code==="disabled" || e.code===501) ? "Falta poner SUPABASE_SERVICE_ROLE_KEY en Vercel (Settings › Environment Variables) y hacer Redeploy." : e.code===404 ? "El portal solo funciona en la web publicada (pesayplato.vercel.app)." : "No se pudo cargar la lista. Comprueba que has ejecutado supabase/premium.sql en Supabase."; }
+  adm.loading = false; drawAdmin();
 }
 function drawAdmin(){
-  const c = sheetCtx, q = c.q.trim().toLowerCase(), list = c.users.filter(u => !q || (u.email||"").toLowerCase().includes(q));
-  const act = list.filter(u => u.premium && (!u.premium.until || u.premium.until >= today())).length;
-  $("admList").innerHTML = `<p class="note">${c.users.length} usuarios · ${act} con Premium activo</p><div class="list">${list.slice(0,200).map(u => { const P = u.premium, on = P && (!P.until || P.until >= today());
-    return `<div class="adm-u"><div class="n"><b>${esc(u.email)}</b><small>${on ? (P.until ? `Premium hasta el ${longDay(P.until)}` : "Premium para siempre 🎁") : P ? `Caducó el ${longDay(P.until)}` : "Sin Premium"} · alta ${u.created ? longDay(u.created.slice(0,10)) : "—"}</small></div>
-      <div class="adm-b"><button class="btn soft" data-act="adm-grant" data-id="${esc(u.id)}" data-m="1">+1 mes</button><button class="btn ghost" data-act="adm-gift" data-id="${esc(u.id)}">Regalar</button>${P?`<button class="btn danger" data-act="adm-revoke" data-id="${esc(u.id)}">Quitar</button>`:""}</div></div>`; }).join("") || `<div class="li note">Nadie con ese email.</div>`}</div>`;
+  const L = $("admList"); if (!L) return;
+  if (adm.err){ L.innerHTML = `<p class="msg">${esc(adm.err)}</p>`; $("admStats").innerHTML = ""; return; }
+  if (!adm.users){ return; }
+  const U = adm.users, week = addDays(today(), -7), nAct = U.filter(u => premOn(u.premium)).length, nNew = U.filter(u => (u.created||"").slice(0,10) >= week).length;
+  $("admStats").innerHTML = [["Usuarios", U.length], ["Con Premium", nAct], ["Nuevos (7 días)", nNew]].map(([l,v]) => `<div class="card adm-st"><b>${fmt(v)}</b><span>${l}</span></div>`).join("");
+  $("admF").innerHTML = [["all","Todos"],["on","Con Premium"],["off","Sin Premium"]].map(([k,l]) => `<button class="chip" data-act="adm-f" data-f="${k}" aria-pressed="${adm.f===k}">${l}</button>`).join("");
+  const q = adm.q.trim().toLowerCase();
+  const list = U.filter(u => (!q || (u.email||"").toLowerCase().includes(q)) && (adm.f==="all" || (adm.f==="on") === !!premOn(u.premium)));
+  L.innerHTML = `<div class="list">${list.slice(0,300).map(u => { const P = u.premium, on = premOn(P);
+    return `<div class="adm-u"><div class="n"><b>${esc(u.email)}</b><small>${on ? (P.until ? `⭐ Premium hasta el ${longDay(P.until)}` : "⭐ Premium para siempre 🎁") : P ? `Caducó el ${longDay(P.until)}` : "Sin Premium"} · alta ${u.created ? longDay(u.created.slice(0,10)) : "—"}${u.last ? ` · última vez ${longDay(u.last.slice(0,10))}` : ""}</small></div>
+      <div class="adm-b"><button class="btn soft" data-act="adm-grant" data-id="${esc(u.id)}" data-m="1">+1 mes</button>${P?.until===null && on ? "" : `<button class="btn ghost" data-act="adm-gift" data-id="${esc(u.id)}">Regalar</button>`}${P?`<button class="btn danger" data-act="adm-revoke" data-id="${esc(u.id)}">Quitar</button>`:""}</div></div>`; }).join("") || `<div class="li note">Nadie con ese filtro.</div>`}</div>`;
 }
 async function admDo(action, body, btn){
-  btn.disabled = true;
-  try { await callAdmin(action, body); const r = await callAdmin("list"); if (sheetCtx?.kind==="admin"){ sheetCtx.users = r.users; drawAdmin(); }
+  btn.disabled = true; btn.textContent = "…";
+  try { await callAdmin(action, body); const r = await callAdmin("list"); adm.users = r.users; drawAdmin();
     if (body.user_id === user.id) loadPremium(); }
   catch { btn.disabled = false; btn.textContent = "Error, reintenta"; }
 }
@@ -1609,7 +1625,9 @@ document.addEventListener("click", e => {
     case "finish": finishWorkout(); break;
     case "watch-paste": openWatchPaste(); break;
     case "wizard": openGoalWizard(false); break;
-    case "admin": openAdmin(); break;
+    case "admin": profSec = "admin"; tab = "profile"; render(); break;
+    case "adm-f": adm.f = el.dataset.f; drawAdmin(); break;
+    case "adm-reload": adm.users = null; adm.err = null; render(); break;
     case "adm-grant": admDo("grant", {user_id:el.dataset.id, months:+el.dataset.m}, el); break;
     case "adm-gift": admDo("grant", {user_id:el.dataset.id, forever:true}, el); break;
     case "adm-revoke": admDo("revoke", {user_id:el.dataset.id}, el); break;
@@ -1759,7 +1777,7 @@ document.addEventListener("input", e => {
   if (t.dataset.f && S.active){ const row = t.closest("[data-ei]"); const s = S.active.exercises[+row.dataset.ei].sets[+row.dataset.si]; s[t.dataset.f] = t.value; updateLiveStats(); saveActive(); }
   else if (t.id==="wTitle" && S.active){ S.active.title = t.value; saveActive(); }
   else if (t.id==="pkSearch"){ sheetCtx.filter = t.value; drawPicker(); }
-  else if (t.id==="admQ"){ sheetCtx.q = t.value; drawAdmin(); }
+  else if (t.id==="admQ"){ adm.q = t.value; drawAdmin(); }
   else if (t.id==="libSearch"){ sheetCtx.q = t.value; drawLibrary(); }
   else if (t.dataset.we){ const [ei,si,f] = t.dataset.we.split(":"); sheetCtx.w.exercises[+ei].sets[+si][f] = t.value; }
   else if (t.id==="fq"){ sheetCtx.q = t.value; drawFoodResults(); }

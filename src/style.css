@@ -545,3 +545,7 @@ nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
 .prof-out{margin-top:4px}
 .prof-back{display:flex;align-items:center;gap:8px;margin-bottom:6px}.prof-back h1{margin:0}
 #main .prof-head{display:flex;flex-direction:row;align-items:center;text-align:left;gap:14px}
+.adm-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.adm-stats:empty{display:none}
+#main .adm-st{padding:12px 8px;gap:2px;text-align:center}
+.adm-st b{font-family:var(--display);font-size:26px;line-height:1.1;color:var(--accent)}.adm-st span{font-size:12px;color:var(--muted)}

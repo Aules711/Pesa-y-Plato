@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data?.user) return res.status(401).json({ code: "not_granted" });
   const me = data.user;
-  const admins = (process.env.ADMIN_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const admins = ["ametsaule@gmail.com", ...(process.env.ADMIN_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)];
   const isAdmin = admins.includes((me.email || "").toLowerCase());
 
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
