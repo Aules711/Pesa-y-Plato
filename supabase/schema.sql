@@ -1,4 +1,4 @@
--- beinghealthy · base de datos
+-- BEINGHEALTHY · base de datos
 -- Pega todo esto en Supabase › SQL Editor › New query y pulsa «Run». Se puede ejecutar más de una vez.
 
 -- 1. Datos de cada usuario ------------------------------------------------------

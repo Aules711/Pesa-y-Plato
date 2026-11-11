@@ -196,7 +196,7 @@ function authView(mode, msg){
   if (mode==="reset"){ A.className = "auth"; A.innerHTML = `<form class="auth-card" id="fReset"><h1>Nueva contraseña</h1><label class="f">Contraseña nueva<input id="aPass" type="password" minlength="6" required autocomplete="new-password"></label>${m}<button class="btn" type="submit">Guardar contraseña</button></form>`; return; }
   const signup = mode==="signup", forgot = mode==="forgot";
   const card = `<form class="auth-card" id="fAuth" data-mode="${mode}">
-    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><h1>beinghealthy</h1></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><h1>BEINGHEALTHY</h1></div>
     <p class="note">${signup?(INVITE_REQUIRED?"Crea tu cuenta con tu email. Necesitas el código de invitación que te han pasado.":"Crea tu cuenta para guardar tus entrenos y comidas."):forgot?"Te enviamos un email para cambiar la contraseña.":SIGNUP_OPEN?"Tus entrenos, comidas y progreso en un solo sitio.":"Acceso solo por invitación. Entra con el email y la contraseña que te han dado."}</p>
     <label class="f">Email<input id="aEmail" type="email" required autocomplete="email"></label>
     ${forgot?"":`<label class="f">Contraseña${signup?" (mín. 6 caracteres)":""}<input id="aPass" type="password" minlength="6" required autocomplete="${signup?"new-password":"current-password"}"></label>`}
@@ -225,7 +225,7 @@ const ic = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 function landingHTML(card, mode){
   const feat = (k,t,d) => `<div class="lf-item"><span class="lf-ic">${ic(k)}</span><h3>${t}</h3><p>${d}</p></div>`;
   const faq = (q,a) => `<details class="lf-faq"><summary>${q}</summary><p>${a}</p></details>`;
-  return `<header class="lh"><div class="lh-in"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><b>beinghealthy</b></a>
+  return `<header class="lh"><div class="lh-in"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><b>BEINGHEALTHY</b></a>
       <nav>${SIGNUP_OPEN?`<button class="btn soft" data-auth="signup" data-go>Crear cuenta</button>`:""}<button class="btn ghost" data-auth="login" data-go>Entrar</button></nav></div></header>
     <section class="hero"><div class="hero-txt">
         <span class="kicker">Gratis · En el móvil y el ordenador</span>
@@ -274,7 +274,7 @@ function landingHTML(card, mode){
       ${faq("¿Quién puede ver mis datos?","Solo tú. Cada cuenta ve únicamente sus propios datos. Más detalles en la política de privacidad.")}
       ${faq("¿Sirve como consejo médico o nutricional?","No. Es una herramienta para registrar lo que comes y ver tu progreso. Las calorías propuestas son orientativas: para un plan de dieta, consulta a un dietista-nutricionista.")}
     </section>
-    <footer class="lfoot"><span>© ${new Date().getFullYear()} beinghealthy</span><span><a href="/terminos.html">Términos</a> · <a href="/privacidad.html">Privacidad</a></span></footer>`;
+    <footer class="lfoot"><span>© ${new Date().getFullYear()} BEINGHEALTHY</span><span><a href="/terminos.html">Términos</a> · <a href="/privacidad.html">Privacidad</a></span></footer>`;
 }
 document.addEventListener("click", async e => { const rs = e.target.closest("[data-resend]");
   if (rs){ rs.disabled = true; const { error } = await sb.auth.resend({type:"signup", email:rs.dataset.resend, options:{emailRedirectTo:location.origin}});
@@ -1164,7 +1164,7 @@ function calcGoals(v){
 function openGoalWizard(first){
   const pr = S.settings.profile || {}, lastW = Object.entries(S.body||{}).sort(([a],[b])=>a<b?1:-1)[0]?.[1]?.kg;
   const opt = (id, cur, list) => `<select id="${id}">${list.map(([v,l])=>`<option value="${v}" ${v===cur?"selected":""}>${l}</option>`).join("")}</select>`;
-  openSheet(first ? "Bienvenido a beinghealthy" : "Calcular mis objetivos", `${first?`<p class="note">Vamos a calcular cuántas calorías y proteína te convienen al día. Son 20 segundos; puedes cambiarlo cuando quieras en Perfil.</p>`:""}
+  openSheet(first ? "Bienvenido a BEINGHEALTHY" : "Calcular mis objetivos", `${first?`<p class="note">Vamos a calcular cuántas calorías y proteína te convienen al día. Son 20 segundos; puedes cambiarlo cuando quieras en Perfil.</p>`:""}
     <div class="grid2"><label class="f">Sexo${opt("wSex", pr.sex||"m", [["m","Hombre"],["f","Mujer"]])}</label><label class="f">Edad<input id="wAge" type="number" inputmode="numeric" min="14" max="100" value="${pr.age||""}" placeholder="25"></label>
       <label class="f">Altura (cm)<input id="wH" type="number" inputmode="numeric" value="${pr.h||""}" placeholder="175"></label><label class="f">Peso (kg)<input id="wW" type="number" inputmode="decimal" value="${pr.w||lastW||""}" placeholder="75"></label></div>
     <label class="f">Actividad${opt("wAct", pr.act||"lig", [["sed","Poca: trabajo sentado y casi sin ejercicio"],["lig","Ligera: ejercicio 1–3 días por semana"],["mod","Moderada: ejercicio 3–5 días o trabajo de pie"],["alt","Alta: ejercicio intenso casi a diario o trabajo físico"]])}</label>
@@ -1323,7 +1323,7 @@ function importFoodCSV(text, fname){
 }
 function importJSON(text, fname){
   let d; try { d = JSON.parse(text); } catch { return {title:"Archivo no válido", summary:fname+" no es un JSON válido."}; }
-  if (d?.app!=="pesa-y-plato") return {title:"Formato no reconocido", summary:"Este JSON no es una copia de beinghealthy."};
+  if (d?.app!=="pesa-y-plato") return {title:"Formato no reconocido", summary:"Este JSON no es una copia de BEINGHEALTHY."};
   if (d.plan30){ const n = d.plan30.days.length;
     const hoy = parseDay(today()).getDate();
     return {kind:"plan30", items:[d.plan30], title:`${d.plan30.title} · ${n} días`, summary:`Cada día del mes tendrá su menú: el día 1 de cada mes el menú del día 1, el día 2 el del día 2… Hoy (${hoy}) te toca el del día ${Math.min(hoy, n)}. Sustituye cualquier plan mensual que tuvieras.`}; }
@@ -1409,7 +1409,7 @@ function openShortcutGuide(){
   const step = (n, t, d) => `<div style="display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px"><span class="play has" style="width:26px;height:26px;font-size:13px;font-weight:700">${n}</span><div><b>${t}</b>${d?`<div class="note">${d}</div>`:""}</div></div>`;
   openSheet("Configurar atajo", `<p class="note">Se hace una sola vez en el iPhone (unos 3 minutos). Después, cada noche te llega un aviso: lo tocas, pegas y listo.</p>
     <div class="card"><h2>A · Crear el atajo</h2>
-      ${step(1,"Abre la app Atajos y toca +","Llámalo «beinghealthy».")}
+      ${step(1,"Abre la app Atajos y toca +","Llámalo «BEINGHEALTHY».")}
       ${step(2,"Añade «Buscar muestras de salud»","Tipo: Pasos · Fecha de inicio: hoy · Agrupar por: Día · Límite: 1.")}
       ${step(3,"Añade «Obtener detalles de muestras de salud»","Elige «Valor».")}
       ${step(4,"Repite los pasos 2 y 3 con «Energía activa»","")}
@@ -1421,7 +1421,7 @@ function openShortcutGuide(){
       ${step(1,"En Atajos, ve a Automatización y toca +","")}
       ${step(2,"Elige «Hora del día»","Por ejemplo 22:00, diariamente.")}
       ${step(3,"Marca «Ejecutar inmediatamente»","Así no te pregunta antes de ejecutarlo.")}
-      ${step(4,"Elige el atajo «beinghealthy»","")}</div>
+      ${step(4,"Elige el atajo «BEINGHEALTHY»","")}</div>
     <p class="note">Al abrirse, la app te mostrará la pantalla para pegar. Si la pruebas ahora a mano, pulsa este botón:</p>
     <button class="btn soft" data-act="watch-paste">Probar la pantalla de pegar</button>`, {kind:"guide"});
 }
