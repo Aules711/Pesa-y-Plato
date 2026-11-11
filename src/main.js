@@ -252,7 +252,7 @@ function landingHTML(card, mode){
     <section class="lf"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
         ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida y cena. Solo escribes los gramos.")}
-        ${feat("scan","Escanea el código de barras ⭐","Apunta con la cámara al paquete y la app trae sus kcal, proteínas, hidratos y grasas por 100 g. Función Premium: 3 € al mes.")}
+        ${feat("scan","Foto al código de barras ⭐","Haz una foto al código del paquete y la app trae sus kcal, proteínas, hidratos y grasas por 100 g. Función Premium: 3 € al mes.")}
         ${feat("ring","Calorías y macros del día","Un anillo te dice cuánto te queda, y las barras cuánta proteína, hidratos y grasa llevas.")}
         ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Y si tu plan trae objetivo por día, se usa ese.")}
         ${feat("chart","Tu progreso a la vista","Peso corporal y calorías de las últimas semanas, para ver la tendencia y no fijarte en un solo día.")}
@@ -263,13 +263,13 @@ function landingHTML(card, mode){
     <section class="lsteps"><h2 class="lsec">Empieza en un minuto</h2>
       <ol><li><b>Crea tu cuenta</b><span>Con tu email y una contraseña. Confirma desde el correo que te llega.</span></li>
         <li><b>Pon tu objetivo o tu plan</b><span>Calcula tus calorías en un paso, o mete el plan de comidas que ya sigues.</span></li>
-        <li><b>Apunta lo que comes</b><span>Gramos y ✓. O escanea el código de barras de lo que no esté en tu plan.</span></li></ol></section>
+        <li><b>Apunta lo que comes</b><span>Gramos y ✓. O haz una foto al código de barras de lo que no esté en tu plan.</span></li></ol></section>
     <section class="lauth" id="lauth"><div class="lauth-txt"><h2 class="lsec">${mode==="signup"?"Crea tu cuenta":mode==="forgot"?"Recupera tu contraseña":"Entra en tu cuenta"}</h2><p class="note">${mode==="signup"?"Es gratis. Solo necesitas un email.":mode==="forgot"?"Te enviamos un enlace para elegir una nueva.":"¿Aún no tienes cuenta? Créala gratis en un minuto."}</p></div>${card}</section>
     <section class="lfaqs"><h2 class="lsec">Preguntas frecuentes</h2>
-      ${faq("¿Cuánto cuesta?","La app es gratis. El escáner de códigos de barras es Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
+      ${faq("¿Cuánto cuesta?","La app es gratis. La foto al código de barras es Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
       ${faq("¿Tengo que descargar algo?","No. Es una web que funciona en el navegador. En el iPhone, abre la web en Safari, pulsa Compartir y «Añadir a pantalla de inicio» para tenerla como una app.")}
       ${faq("¿Puedo meter la dieta que ya sigo?","Sí. En Diario › Crear a mano montas cada día de la semana con sus alimentos y gramos habituales. A partir de ahí, cada día te aparece ya puesto y solo cambias los gramos si hace falta.")}
-      ${faq("¿Y si un producto no sale al escanearlo?","Los datos vienen de Open Food Facts, una base de datos abierta. Si un producto no está, créalo en «Crear» copiando la etiqueta y se queda guardado para la próxima vez.")}
+      ${faq("¿Y si un producto no sale al hacerle la foto?","Los datos vienen de Open Food Facts, una base de datos abierta. Si un producto no está, créalo en «Crear» copiando la etiqueta y se queda guardado para la próxima vez.")}
       ${faq("¿Puedo pasar mis datos de MyFitnessPal?","Sí. Exporta el archivo «Nutrition Summary» desde la web de MyFitnessPal e impórtalo en Perfil › Importar.")}
       ${faq("¿Quién puede ver mis datos?","Solo tú. Cada cuenta ve únicamente sus propios datos. Más detalles en la política de privacidad.")}
       ${faq("¿Sirve como consejo médico o nutricional?","No. Es una herramienta para registrar lo que comes y ver tu progreso. Las calorías propuestas son orientativas: para un plan de dieta, consulta a un dietista-nutricionista.")}
@@ -632,7 +632,7 @@ function viewNutri(){
         return `<button class="nu-item ${ind?"ind":""}" data-act="nutri-detail" data-k="${k}"><div class="nu-tr"><span class="nu-n">${l}</span><b>${nfmt(v,u)}</b><span>${goal!=null?nfmt(goal,u):"-"}</span><span class="${bad?"neg":ok?"pos":""}">${left==null?"-":ok?"✓":nfmt(left,u)}</span><span class="nu-u">${u} ›</span></div>
           ${goal!=null?`<div class="bar"><i style="width:${pct}%;background:${col}"></i></div>`:""}</button>`; }).join("")}</div>
       ${D.noData?`<p class="note nu-foot">${D.noData} alimento${D.noData>1?"s":""} sin datos de vitaminas y minerales (${fmt(D.kcalNoData)} kcal): cuentan en calorías y macros pero no en el resto.</p>`:""}
-      <p class="note nu-foot">Fibra, azúcar, vitaminas y minerales son estimaciones a partir de tablas de composición de alimentos (o de la etiqueta, si lo escaneaste). Objetivos orientativos según las recomendaciones de la UE y la OMS para adultos; el azúcar, las saturadas, el colesterol y el sodio son límites que conviene no pasar.</p>`;
+      <p class="note nu-foot">Fibra, azúcar, vitaminas y minerales son estimaciones a partir de tablas de composición de alimentos (o de la etiqueta, si le hiciste foto al código). Objetivos orientativos según las recomendaciones de la UE y la OMS para adultos; el azúcar, las saturadas, el colesterol y el sodio son límites que conviene no pasar.</p>`;
   }
   return head + body;
 }
@@ -818,7 +818,7 @@ function viewProfile(){
       ${importState.items?.length?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="imp-confirm" ${importState.busy?"disabled":""}>${importState.busy?"Importando…":"Importar"}</button><button class="btn ghost" data-act="imp-cancel" ${importState.busy?"disabled":""}>Cancelar</button></div>`:`<button class="btn ghost" data-act="imp-cancel">Cerrar</button>`}
       <span class="note" id="impProg">${esc(importState.progress||"")}</span></div>` : "";
   return `<h1>Perfil</h1>
-  <div class="card"><h2>Premium</h2>${isPremium() ? `<p><b>⭐ ${esc(premiumStatus())}</b></p><p class="note">Tienes el escáner de códigos de barras en Diario › Añadir alimento › Escanear.</p>` : premiumPitch()}
+  <div class="card"><h2>Premium</h2>${isPremium() ? `<p><b>⭐ ${esc(premiumStatus())}</b></p><p class="note">Tienes la foto al código de barras en Diario › Añadir alimento › Foto.</p>` : premiumPitch()}
     ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>
   <div class="card"><h2>Cuenta</h2><div class="top"><span style="overflow-wrap:anywhere">${esc(user?.email||"")}</span><button class="btn ghost" data-act="logout">Cerrar sesión</button></div>
     <form id="fPass" class="stack"><label class="f">Cambiar contraseña<input id="newPass" type="password" minlength="6" autocomplete="new-password" placeholder="Nueva contraseña (mín. 6 caracteres)"></label><button class="btn soft" type="submit">Guardar contraseña</button><span class="note" id="passMsg"></span></form></div>
@@ -1012,7 +1012,7 @@ function recentFoods(){ const seen = new Map(); const days = Object.keys(S.diary
   for (const d of days) for (const e of S.diary[d]) if (e.per && !seen.has(e.name)) seen.set(e.name, {name:e.name, ...e.per, servings:e.servings||[]});
   return [...seen.values()].slice(0,12); }
 function openAddFood(meal){
-  openSheet("Añadir a "+meal, `<div class="seg" id="ftabs"><button data-act="ftab" data-t="search" aria-pressed="true">Buscar</button><button data-act="ftab" data-t="scan" aria-pressed="false">Escáner</button><button data-act="ftab" data-t="quick" aria-pressed="false">Rápido</button><button data-act="ftab" data-t="create" aria-pressed="false">Crear</button>${smp?`<button data-act="ftab" data-t="ai" aria-pressed="false">Con IA</button>`:""}</div><div id="fpane" class="stack"></div>`,
+  openSheet("Añadir a "+meal, `<div class="seg" id="ftabs"><button data-act="ftab" data-t="search" aria-pressed="true">Buscar</button><button data-act="ftab" data-t="scan" aria-pressed="false">Foto</button><button data-act="ftab" data-t="quick" aria-pressed="false">Rápido</button><button data-act="ftab" data-t="create" aria-pressed="false">Crear</button>${smp?`<button data-act="ftab" data-t="ai" aria-pressed="false">Con IA</button>`:""}</div><div id="fpane" class="stack"></div>`,
     {kind:"food", meal, t:"search", q:"", food:null});
   drawFood();
 }
@@ -1036,11 +1036,10 @@ function drawFood(){
     <label class="f">Ración (nombre)<input id="cSn" placeholder="unidad"></label><label class="f">Ración (g)<input id="cSg" inputmode="decimal" placeholder="9"></label></div>
     <span class="msg" id="cMsg" hidden></span><button class="btn" data-act="create-food">Crear y elegir cantidad</button>`;
   if (c.t==="scan" && !isPremium()){ P.innerHTML = premiumPitch(); return; }
-  if (c.t==="scan"){ P.innerHTML = `<div class="scan"><video id="scanV" playsinline muted autoplay></video><div class="scan-frame" aria-hidden="true"></div></div>
-    <p class="note" id="scanMsg" style="text-align:center">Abriendo la cámara…</p>
-    <label class="btn ${IOS?"":"ghost"}" style="cursor:pointer;text-align:center">📷 Hacer una foto del código<input type="file" id="scanPhoto" accept="image/*" capture="environment" hidden></label>
-    <div style="display:flex;gap:8px"><input id="scanCode" inputmode="numeric" placeholder="O escribe el código (8410…)" aria-label="Código de barras"><button class="btn soft" data-act="scan-lookup">Buscar</button></div>
-    <p class="note">Los datos vienen de Open Food Facts, una base de datos abierta. Comprueba que coinciden con la etiqueta.</p>`; startScan(); return; }
+  if (c.t==="scan"){ P.innerHTML = `<div class="scan-photo"><div class="scan-ill" aria-hidden="true">📷</div>
+    <p class="note" id="scanMsg" style="text-align:center">Haz una foto al código de barras del envase, de cerca, de frente y con buena luz.</p>
+    <label class="btn" style="cursor:pointer;text-align:center">📷 Hacer una foto del código<input type="file" id="scanPhoto" accept="image/*" capture="environment" hidden></label></div>
+    <p class="note">Los datos vienen de Open Food Facts, una base de datos abierta. Comprueba que coinciden con la etiqueta.</p>`; return; }
   if (c.t==="ai") P.innerHTML = `<p class="note">Describe lo que has comido y la IA calcula una estimación. Revísala antes de añadirla.</p>
     <textarea id="aiText" placeholder="Un plato de macarrones con tomate y atún, una manzana y un vaso de leche"></textarea>
     <button class="btn" data-act="ai-run" id="aiBtn">Calcular</button><div id="aiOut" class="stack"></div>`;
@@ -1118,8 +1117,8 @@ function premiumStatus(){
 }
 function premiumPitch(){
   const ph = adminInfo.phone, concept = `Premium ${user?.email || ""}`;
-  return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Escáner de códigos de barras</h3>
-    <p class="note">Apunta al código de cualquier producto y la app saca sus kcal, proteínas, hidratos y grasas al momento.</p>
+  return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Foto del código de barras</h3>
+    <p class="note">Haz una foto al código de barras de cualquier producto y la app saca sus kcal, proteínas, hidratos y grasas al momento.</p>
     <div class="prem-price"><b>${esc(adminInfo.price||"3")} €</b><span>al mes</span></div>
     ${ph ? `<ol class="prem-steps">
       <li><span>Envía <b>${esc(adminInfo.price||"3")} €</b> por <b>Bizum</b> al</span><div class="copy"><code>${esc(fmtPhone(ph))}</code><button class="btn soft" data-act="copy" data-v="${esc(String(ph).replace(/\D/g,""))}">Copiar</button></div></li>
@@ -1229,13 +1228,13 @@ async function scanPhoto(file){
       try { const r = reader.decodeFromCanvas(c); if (r){ URL.revokeObjectURL(img.src); return lookupBarcode(r.getText()); } } catch {}
     }
     URL.revokeObjectURL(img.src);
-    msg("No encuentro el código en la foto. Haz la foto más cerca, de frente y con buena luz, o escribe los números.");
-  } catch { msg("No se pudo leer la foto. Escribe los números del código."); }
+    msg("No encuentro el código en la foto. Hazla más cerca, de frente y con buena luz, y vuelve a probar.");
+  } catch { msg("No se pudo leer la foto. Prueba a hacer otra."); }
 }
 async function lookupBarcode(code){
   const c = sheetCtx, msg = t => { const el = $("scanMsg"); if (el) el.textContent = t; };
   const mine = S.foods.find(f => f.code === code); if (mine){ c.t = "search"; c.food = mine; c.qty = null; c.unit = null; drawFood(); return; }
-  msg(`Buscando ${code}…`); if ($("scanCode")) $("scanCode").value = code;
+  msg(`Buscando ${code}…`);
   try {
     const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_es,brands,nutriments,serving_quantity,quantity&lc=es`);
     const j = await r.json(); const pr = j.product, n = pr?.nutriments || {};

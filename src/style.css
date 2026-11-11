@@ -498,3 +498,5 @@ nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
 .nu-empty{text-align:center}.nu-empty .btn{margin-top:10px}
 @media (max-width:360px){.nu-th,.nu-tr{grid-template-columns:minmax(0,1fr) 46px 54px 50px 24px}.nu-n{font-size:14px}}
 .nu-item.ind .nu-n{white-space:normal;font-size:14px;line-height:1.2}
+.scan-photo{display:flex;flex-direction:column;gap:12px;align-items:stretch;padding:8px 0}
+.scan-ill{font-size:44px;text-align:center;width:88px;height:88px;line-height:88px;border-radius:24px;background:var(--accent-soft);margin:6px auto 0}
