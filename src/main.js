@@ -108,6 +108,7 @@ function applyDoc(id, v){
   else if (id==="active") S.active = v || null;
   else if (id==="media"){ S.media = JSON.parse(JSON.stringify(v?.map || {})); for (const m of Object.values(S.media)) m.url = mediaUrls[m.id] || ""; queueMediaUrls(); }
   else if (id==="health") S.health = {days:v?.days||{}, wos:v?.wos||[]};
+  else if (id==="strava") S.strava = v?.connected ? v : null;
 }
 let q = Promise.resolve();
 function enqueue(fn){ const p = q.then(fn); q = p.catch(()=>{}); return p; }
@@ -179,7 +180,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {strava:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -187,7 +188,8 @@ async function start(u){
   if (user) return; user = u; $("auth").hidden = true; $("app").hidden = false;
   setBanner("Cargando tus datos…"); render();
   try { await loadAll(); setBanner(""); loadPremium(); } catch(e){ console.error(e); setBanner("No se pudieron cargar tus datos. Revisa la conexión y vuelve a abrir la app."); }
-  render(); checkHash();
+  render(); checkHash(); stravaSync(false);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) stravaSync(false); });
   if (!S.settings.onboarded && !location.hash.includes("watch")) openGoalWizard(true);
   sb.channel("docs-" + user.id).on("postgres_changes", {event:"*", schema:"public", table:"docs", filter:`user_id=eq.${user.id}`}, p => {
     const id = p.new?.id ?? p.old?.id; if (!id || id==="active") return;
@@ -386,7 +388,7 @@ function greet(){ const h = new Date().getHours(); return h<6 ? "Buenas noches" 
 function viewHome(){
   const t = today(), ws = weekStart(t), wd = workoutDays();
   const count = [...wd].filter(d=>d>=ws && d<=addDays(ws,6)).length;
-  const tot = dayTotals(t), remaining = goalsFor(t).kcal - tot.kcal;
+  const tot = dayTotals(t), remaining = goalsFor(t).kcal - tot.kcal + exAdd(t);
   const dots = ["L","M","X","J","V","S","D"].map((l,i)=>{ const d = addDays(ws,i); return `<div>${l}<i class="${wd.has(d)?"on":""} ${d===t?"today":""}"></i></div>`; }).join("");
   const feed = S.workouts.slice(0,15).map(workoutCard).join("");
   const st = streak(), td = parseDay(today());
@@ -413,9 +415,10 @@ function homeFood(t, tot, remaining){
         <span class="hm-k ${logged.length?"ok":""}">${logged.length ? "✓ "+fmt(lk) : fmt(pk)} kcal</span></button>`; }).join("");
   return `<div class="card today"><h2>Hoy</h2><div><span class="big">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"} de ${fmt(g.kcal)}</span></div>
       <div class="hm-mac">${[["Proteínas",tot.p,g.p],["Carbohidratos",tot.c,g.c],["Grasas",tot.f,g.f]].map(([l,v,o])=>`<div><span>${l}</span><b>${r0(v)} / ${r0(o)} g</b><i style="--w:${Math.min(100,o?v/o*100:0)}%"></i></div>`).join("")}</div>
+      ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(a=>`<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`).join("")}</div>` : ""}
       <button class="btn soft" data-act="tab" data-tab="food">Abrir diario</button></div>
     ${meals ? `<div class="card"><div class="top"><h2>${P._n ? "Hoy toca · día "+P._n : "Hoy toca"}</h2><button class="link" data-act="tab" data-tab="food">Ver diario</button></div><div class="hm-list">${meals}</div></div>`
-      : `<div class="card"><h2>Tu plan de comidas</h2><p class="note">Importa tu plan y aquí verás qué te toca comer cada día.</p><button class="btn" data-act="tab" data-tab="food">Ir al Diario</button></div>`}`;
+      : `<div class="card"><h2>Tu plan de comidas</h2><p class="note">Importa tu plan y aquí verás qué te toca comer cada día.</p><button class="btn" data-act="prof-sec" data-k="plan">Importar mi plan</button></div>`}`;
 }
 const WTYPES = {Running:"Correr",Walking:"Caminar",Cycling:"Ciclismo",TraditionalStrengthTraining:"Fuerza",FunctionalStrengthTraining:"Fuerza funcional",HighIntensityIntervalTraining:"HIIT",
   Swimming:"Natación",Soccer:"Fútbol",Basketball:"Baloncesto",Tennis:"Tenis",Paddle:"Pádel",PickleBall:"Pickleball",Elliptical:"Elíptica",Rowing:"Remo",Yoga:"Yoga",Hiking:"Senderismo",CoreTraining:"Core",
@@ -562,7 +565,7 @@ setInterval(tick, 1000);
 
 /* ---------- Diario ---------- */
 function viewFood(){
-  const tot = dayTotals(day), g = goalsFor(day), exK = 0, remaining = g.kcal - tot.kcal + exK;
+  const tot = dayTotals(day), g = goalsFor(day), exK = exAdd(day), remaining = g.kcal - tot.kcal + exK;
   const mac = (lab,v,goal,color) => `<div class="macro"><span>${lab}</span><b>${r0(v)} <span class="note">/ ${goal} g</span></b><div class="bar"><i style="width:${Math.min(100,goal?v/goal*100:0)}%;background:${color}"></i></div></div>`;
   const meals = MEALS.map(m=>{
     const list = (S.diary[day]||[]).filter(e=>e.meal===m), k = list.reduce((a,e)=>a+(+e.kcal||0),0);
@@ -579,7 +582,8 @@ function viewFood(){
       return `<div class="ring-wrap"><svg class="ring" viewBox="0 0 132 132" role="img" aria-label="${fmt(tot.kcal)} de ${fmt(g.kcal)} kcal">
         <circle cx="66" cy="66" r="${R}" class="ring-bg"/><circle cx="66" cy="66" r="${R}" class="ring-fg ${over?"over":""}" stroke-dasharray="${C}" style="stroke-dashoffset:${C}" data-ring="${C*(1-pct)}"/></svg>
         <div class="ring-c"><b class="${remaining<0?"neg":""}">${fmt(Math.abs(remaining))}</b><span>${remaining<0?"de más":"restantes"}</span></div></div>`; })()}
-    <div class="equation"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div></div>
+    <div class="equation ${exK?"ex":""}"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div>${exK?`<div class="op">+</div><div><div class="big">${fmt(exK)}</div><span>Ejercicio</span></div>`:""}</div>
+    ${actsOn(day).length ? `<div class="st-day">${actsOn(day).map(a=>`<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`).join("")}</div>` : ""}
     <div class="macros">${mac("Carbohidratos",tot.c,g.c,"var(--carb)")}${mac("Grasas",tot.f,g.f,"var(--fat)")}${mac("Proteínas",tot.p,g.p,"var(--prot)")}</div>
     ${planBar()}</div>
   ${meals}`;
@@ -655,6 +659,55 @@ function openNutriDetail(k){
   openSheet(l, list.length ? `<p class="note">${nutriRange==="sem"?"Últimos 7 días":dayLabel(day)}: de dónde sale tu ${l.toLowerCase()}.</p>
     ${list.slice(0,15).map(([n,v])=>`<div class="nu-row"><div class="nu-l"><span>${esc(n)}</span><b>${nfmt(v,u)} ${u}</b></div><div class="bar"><i style="width:${v/tot*100}%"></i></div></div>`).join("")}`
     : `<p class="note">Ningún alimento apuntado aporta ${l.toLowerCase()}.</p>`);
+}
+/* ---------- Strava ---------- */
+let stravaMsg = "", stravaBusy = false;
+const SPORTS = {Run:"Carrera",TrailRun:"Trail",VirtualRun:"Carrera (cinta)",Walk:"Caminata",Hike:"Senderismo",Ride:"Bici",MountainBikeRide:"Bici de montaña",GravelRide:"Gravel",EBikeRide:"Bici eléctrica",VirtualRide:"Bici (rodillo)",
+  Swim:"Natación",WeightTraining:"Pesas",Workout:"Entreno",Crossfit:"CrossFit",HighIntensityIntervalTraining:"HIIT",Yoga:"Yoga",Pilates:"Pilates",Elliptical:"Elíptica",StairStepper:"Escaleras",Rowing:"Remo",
+  Soccer:"Fútbol",Tennis:"Tenis",Padel:"Pádel",Basketball:"Baloncesto",Badminton:"Bádminton",Golf:"Golf",Kayaking:"Kayak",Surfing:"Surf",AlpineSki:"Esquí",Snowboard:"Snowboard",RockClimbing:"Escalada",Boxing:"Boxeo"};
+const SPORT_ICO = t => /Run/.test(t) ? "🏃" : /Ride/.test(t) ? "🚴" : /Swim/.test(t) ? "🏊" : /Walk|Hike/.test(t) ? "🚶" : /Weight|Crossfit|Workout|HIIT/.test(t) ? "🏋️" : /Yoga|Pilates/.test(t) ? "🧘" : /Soccer/.test(t) ? "⚽" : /Tennis|Padel|Badminton/.test(t) ? "🎾" : "💪";
+const sportName = t => SPORTS[t] || String(t||"Actividad").replace(/([a-z])([A-Z])/g,"$1 $2");
+const actsOn = d => (S.strava?.list || []).filter(a => a.day === d);
+const exKcal = d => actsOn(d).reduce((a,x) => a + (+x.kcal||0), 0);
+const exAdd = d => S.settings.addEx ? exKcal(d) : 0;
+const fmtMin = sec => { const m = Math.round(sec/60); return m >= 60 ? `${Math.floor(m/60)} h ${m%60 ? (m%60)+" min" : ""}`.trim() : `${m} min`; };
+const actLine = a => [fmtMin(a.dur), a.km ? String(r1(a.km)).replace(".",",")+" km" : "", a.kcal ? fmt(a.kcal)+" kcal" : ""].filter(Boolean).join(" · ");
+async function stravaCall(action){
+  const { data:{ session } } = await sb.auth.getSession();
+  const r = await fetch("/api/strava", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({action})});
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw {code:j.code || r.status, detail:j.detail}; return j;
+}
+async function stravaSync(force){
+  if (!S.strava || stravaBusy) return; if (!force && Date.now() - (S.strava.synced||0) < 10*60*1000) return;
+  stravaBusy = true; if (force){ stravaMsg = "Sincronizando…"; render(); }
+  try { const d = await stravaCall("sync"); applyDoc("strava", d); if (force) stravaMsg = d.connected ? `✓ Al día. ${(d.list||[]).length} actividades de los últimos meses.` : "Strava se ha desconectado (quitaste el permiso desde Strava). Vuelve a conectarlo."; }
+  catch(e){ if (force) stravaMsg = stravaErr(e); }
+  stravaBusy = false; if (force || tab !== "profile") render();
+}
+const stravaErr = e => e.code==="strava_disabled" ? "Falta configurar Strava en Vercel (STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET)." : e.code==="no_table" ? "Falta crear la tabla: ejecuta supabase/strava.sql en Supabase." : e.code==="strava_rate" ? "Strava está saturado ahora mismo. Prueba en unos minutos." : e.code==="disabled" ? "Falta la clave secreta de Supabase en Vercel." : e.code===404 ? "Solo funciona en la web publicada." : "No se pudo hablar con Strava. Inténtalo otra vez.";
+function connSection(){
+  const C = S.strava, last = C?.list?.[0];
+  return `<div class="card strava"><div class="st-h"><span class="st-logo" aria-hidden="true">S</span><div><b>Strava</b><small>${C ? `Conectado${C.athlete ? " como "+esc(C.athlete) : ""}` : "No conectado"}</small></div>${C?`<span class="st-on">●</span>`:""}</div>
+    ${C ? `<p class="note">Tus actividades llegan solas cada vez que abres la app. ${last ? `Última: ${SPORT_ICO(last.type)} ${esc(sportName(last.type))}, ${dayLabel(last.day).toLowerCase()}.` : "Aún no hay actividades en los últimos 3 meses."}</p>
+      <label class="tgl"><input type="checkbox" id="stAddEx" ${S.settings.addEx?"checked":""}><span>Sumar las calorías del ejercicio a lo que puedes comer ese día</span></label>
+      <p class="note" style="margin-top:-4px">Desactívalo si tu plan ya cuenta con el ejercicio.</p>
+      <button class="btn soft" data-act="strava-sync" ${stravaBusy?"disabled":""}>Sincronizar ahora</button>
+      <button class="btn danger" data-act="strava-off">Desconectar</button>`
+    : `<p class="note">Conecta tu cuenta y cada carrera, salida en bici o entreno que guardes en Strava aparecerá en la app con sus calorías: en Inicio, en el Diario y en Progreso.</p>
+      <button class="btn st-btn" data-act="strava-on">Conectar con Strava</button>`}
+    ${stravaMsg ? `<p class="note" id="stMsg"><b>${esc(stravaMsg)}</b></p>` : ""}</div>
+    <p class="note">Solo se leen tus actividades; la app nunca publica nada en tu Strava. Puedes quitar el permiso cuando quieras desde aquí o desde Strava › Ajustes › Mis aplicaciones.</p>`;
+}
+function stravaCard(){
+  const L = S.strava?.list || []; if (!S.strava) return "";
+  const ws = weekStart(today()), wk = L.filter(a => a.day >= ws), km = wk.reduce((a,x)=>a+(x.km||0),0), kc = wk.reduce((a,x)=>a+(x.kcal||0),0), dur = wk.reduce((a,x)=>a+(x.dur||0),0);
+  const bars = []; for (let i=27;i>=0;i--){ const d = addDays(today(),-i); bars.push({x:shortDay(d), y:exKcal(d)}); }
+  const mx = Math.max(1, ...bars.map(b=>b.y));
+  return `<div class="card"><div class="top"><h2>Actividades</h2><span class="note">Strava</span></div>
+    <div class="nu-big"><div><b>${wk.length}</b><span>esta semana</span></div><div><b>${String(r1(km)).replace(".",",")}</b><span>km</span></div><div><b>${fmt(kc)}</b><span>kcal</span></div></div>
+    <div class="st-bars" role="img" aria-label="Calorías de ejercicio por día, últimas 4 semanas">${bars.map(b=>`<i style="height:${Math.max(2,b.y/mx*100)}%" title="${b.x}: ${fmt(b.y)} kcal"></i>`).join("")}</div>
+    <p class="note" style="margin:0">Calorías de ejercicio por día · últimas 4 semanas · ${fmtMin(dur)} esta semana</p>
+    <div class="list">${L.slice(0,8).map(a => `<a class="li st-act" href="https://www.strava.com/activities/${a.id}" target="_blank" rel="noopener"><span class="st-i" aria-hidden="true">${SPORT_ICO(a.type)}</span><span class="n"><b>${esc(a.name || sportName(a.type))}</b><small>${dayLabel(a.day)} · ${actLine(a)}</small></span><span class="st-v">Ver en Strava ›</span></a>`).join("") || `<div class="li note">Sin actividades en los últimos 3 meses.</div>`}</div></div>`;
 }
 /* ---------- plan semanal ---------- */
 const WDAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
@@ -825,6 +878,7 @@ function viewProgress(){
     ${lineChart(pts,{color:"var(--accent)",label:"Progreso de "+progEx,empty:""})}${rec}`:`<p class="note">Cuando guardes entrenos verás aquí tu progreso por ejercicio.</p>`}</div>
   <div class="card"><h2>Series por músculo · esta semana</h2>${mus || `<p class="note">Sin series esta semana todavía.</p>`}</div>
 ` : ""}
+  ${stravaCard()}
   <div class="card"><div class="top"><h2>Peso corporal</h2>${bwDiff!=null?`<span class="note tnum">${bwDiff>0?"+":""}${bwDiff.toLocaleString("es-ES")} kg desde ${shortDay(bw[0][0])}</span>`:""}</div>
     <form id="fWeight" style="display:flex;gap:8px"><input id="bwIn" inputmode="decimal" placeholder="Peso de hoy (kg)" value="${S.body[today()]?.kg??""}" aria-label="Peso de hoy en kg"><button class="btn" type="submit">Guardar</button></form>
     ${lineChart(bwPts,{color:"var(--ok)",label:"Peso corporal",empty:"Apunta tu peso para ver la tendencia."})}</div>
@@ -842,6 +896,7 @@ function viewProfile(){
   const S2 = {
     plan: ["Mi plan de comidas", planSection()],
     admin: ["Administración", adminSection()],
+    conn: ["Conexiones", connSection()],
     premium: ["Premium", `<div class="card"><h2>Premium</h2>${isPremium() ? `<div class="prem"><span class="prem-badge">⭐ ${esc(premiumStatus())}</span>${premFeats(true)}<p class="note">También las tienes en Diario › Añadir alimento › Foto.</p></div>` : premiumPitch()}
     ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>`],
     goals: ["Objetivos", `<form class="card" id="fGoals"><div class="top"><h2>Objetivos diarios</h2><button type="button" class="link" data-act="wizard">Calcular mis objetivos</button></div>
@@ -876,6 +931,7 @@ function viewProfile(){
     ${row("goals","🎯","Objetivos", `${fmt(g.kcal)} kcal · ${g.p} g proteína`)}
   </div>
   <div class="prof-group">
+    ${row("conn","🔗","Conexiones", S.strava ? "Strava conectado" : "Conecta Strava")}
     ${row("account","👤","Cuenta", "Email y contraseña")}
     ${row("io","📥","Importar y exportar", "Tu plan, copias de seguridad, MyFitnessPal")}
     ${row("privacy","🔒","Privacidad y datos", "Borrar datos, eliminar cuenta, términos")}
@@ -1605,7 +1661,11 @@ document.addEventListener("click", e => {
   const act = el.dataset.act, row = el.closest("[data-ei]"), ei = row ? +row.dataset.ei : -1, si = row?.dataset.si!=null ? +row.dataset.si : -1;
   const a = S.active, c = sheetCtx;
   switch (act){
-    case "prof-sec": profSec = el.dataset.k || null; render(); scrollTo(0,0); break;
+    case "strava-on": { el.disabled = true; el.textContent = "Abriendo Strava…"; stravaCall("start").then(r => { location.href = r.url; }).catch(e => { stravaMsg = stravaErr(e); render(); }); break; }
+    case "strava-sync": stravaSync(true); break;
+    case "strava-off": el.outerHTML = `<div class="stack"><p class="note">¿Desconectar Strava? Se borran de la app las actividades traídas (en Strava no se toca nada).</p><button class="btn danger" data-act="strava-off-yes">Sí, desconectar</button></div>`; break;
+    case "strava-off-yes": el.disabled = true; stravaCall("disconnect").then(() => { S.strava = null; stravaMsg = "Strava desconectado."; render(); }).catch(e => { stravaMsg = stravaErr(e); render(); }); break;
+    case "prof-sec": stravaMsg = ""; tab = "profile"; profSec = el.dataset.k || null; render(); scrollTo(0,0); break;
     case "tab": if (el.dataset.tab === "profile") profSec = null; tab = el.dataset.tab; closeSheet(); render(); scrollTo(0,0); break;
     case "close": closeSheet(); break;
     /* entreno */
@@ -1804,6 +1864,7 @@ document.addEventListener("change", async e => {
   else if (t.id==="platePhoto" && t.files?.[0]){ platePhoto(t.files[0]); t.value = ""; }
   else if (t.id==="scanPhoto" && t.files?.[0]){ stopScan(); scanPhoto(t.files[0]); t.value = ""; }
   else if (t.id==="impH" && t.files?.[0]){ parseHealthFile(t.files[0]); }
+  else if (t.id==="stAddEx"){ await put("settings", {...S.settings, addEx:t.checked}); }
   else if (t.id==="gAddEx" || t.id==="gSteps"){ await put("settings", {...S.settings, addEx:$("gAddEx").checked, stepGoal:Math.max(0,parseNum($("gSteps").value))||10000}); }
   else if (t.type==="file" && t.id!=="exVid" && t.files?.[0]){ const f = t.files[0]; const text = await f.text();
     importState = t.id==="impW" ? importWorkoutsCSV(text, f.name) : t.id==="impF" ? importFoodCSV(text, f.name) : importJSON(text, f.name);
@@ -1824,7 +1885,11 @@ document.addEventListener("submit", async e => {
 });
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("sheet").hidden) closeSheet(); });
 
-function checkHash(){ if (location.hash==="#watch") clearHash(); }
+function checkHash(){
+  const h = location.hash; if (h==="#watch") clearHash();
+  const m = h.match(/^#strava=(\w+)/); if (!m || !user) return; clearHash();
+  tab = "profile"; profSec = "conn"; stravaMsg = {ok:"✓ Strava conectado. Tus actividades ya están en la app.", cancel:"Has cancelado la conexión con Strava.", scope:"Para conectar, deja marcada la casilla de ver tus actividades.", error:"No se pudo conectar con Strava. Inténtalo otra vez."}[m[1]] || "";
+  if (m[1]==="ok") confetti(); render(); }
 window.addEventListener("hashchange", checkHash);
 init();
 })();
