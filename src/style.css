@@ -827,3 +827,25 @@ section[id^="sec-"]{scroll-margin-top:80px}
 .trk-pill{display:flex;align-items:center;gap:8px;width:100%;margin:0 0 12px;padding:11px 14px;border-radius:14px;border:0;background:rgba(232,54,79,.14);color:inherit;font:inherit;font-weight:700;cursor:pointer;text-align:left}
 .trk-pill i{width:10px;height:10px;border-radius:50%;background:#E8364F;animation:trkp 1.2s infinite}.trk-pill .prof-ch{margin-left:auto}
 @keyframes trkp{50%{opacity:.3}}
+
+/* ---------- Ejercicios: deportes y coach ---------- */
+.ex-back{align-self:flex-start;margin:0 0 8px;font-weight:700}
+.ex-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ex-sp{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:14px;border-radius:var(--radius,18px);border:0;background:var(--surface);box-shadow:var(--shadow);color:inherit;font:inherit;text-align:left;cursor:pointer;min-height:112px}
+.ex-sp .ex-e{font-size:32px;line-height:1;margin-bottom:6px}.ex-sp b{font-size:16px}
+.ex-sp small{color:var(--muted);font-size:12.5px;display:flex;align-items:center;gap:5px}.ex-sp.on small{color:var(--accent);font-weight:600}
+.ex-sp:first-child{grid-column:1/-1;display:grid;grid-template-columns:auto 1fr;column-gap:14px;row-gap:2px;align-items:center;min-height:0}.ex-sp:first-child .ex-e{grid-row:1/3}.ex-sp:first-child .ex-e{margin:0;font-size:40px}
+.ex-sp:first-child b{display:block}
+.ex-sp:active{transform:scale(.98)}
+.sc-today{display:flex;gap:12px;align-items:center;width:100%;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}.sc-today>span:first-child{font-size:26px}
+.sc-today .n{flex:1;display:flex;flex-direction:column}.sc-today small{color:var(--muted)}.sc-ok{color:#2BB673;font-weight:800}
+.sc-hero{display:flex!important;flex-direction:row!important;gap:14px;align-items:center}.sc-e{font-size:44px;line-height:1}.sc-hero>div{display:flex;flex-direction:column;gap:2px}.sc-hero b{font-size:18px}
+.sc-wk{display:flex;align-items:center;gap:10px}.sc-wk>div{flex:1;text-align:center;display:flex;flex-direction:column}.sc-wk small{color:var(--muted);font-size:12.5px}
+.sc-s{gap:8px}.sc-s.today{outline:2px solid var(--accent);outline-offset:-2px}.sc-s.done{opacity:.6}
+.sc-h{display:flex;gap:12px;align-items:center}
+.sc-d{display:flex;flex-direction:column;align-items:center;width:42px;padding:6px 0;border-radius:12px;background:var(--surface2)}.sc-d b{font-size:12px;text-transform:uppercase;color:var(--muted)}.sc-d small{font-size:17px;font-weight:800}
+.sc-t{flex:1;display:flex;flex-direction:column}.sc-t b{font-size:16px}.sc-t small{color:var(--muted)}
+.sc-chk{width:38px;height:38px;border-radius:50%;border:2px solid var(--line);background:none;color:transparent;font-weight:900;font-size:17px;cursor:pointer}
+.sc-chk[aria-pressed="true"]{background:#2BB673;border-color:#2BB673;color:#fff}
+.sc-desc{margin:0;font-size:14px;line-height:1.5;color:var(--text,inherit)}
+.sc-gps{align-self:flex-start}
