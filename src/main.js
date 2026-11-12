@@ -3,6 +3,7 @@ import "./style.css";
 import { microFor, microFromOFF, MICRO_KEYS } from "./micros.js";
 import { makePlan, swapMeal, PLANNER_FOODS } from "./planner.js";
 import { fileText, parsePlan, parseStudy, EXTRA_FOODS } from "./planparse.js";
+import { TIERS, STD, tierOf, kgFor, repsFor, isBW, exerciseRanks, muscleRanks, GYM_MUSCLES, bodyMap, badge, suggest, makeGymPlan, NEW_LIB } from "./gym.js";
 
 let sb = null;
 
@@ -38,7 +39,7 @@ const LIB = [["Press banca","Pecho"],["Press inclinado con mancuernas","Pecho"],
 ["Extensión de tríceps en polea","Tríceps"],["Press francés","Tríceps"],["Fondos","Tríceps"],
 ["Sentadilla","Piernas"],["Sentadilla búlgara","Piernas"],["Prensa","Piernas"],["Extensión de cuádriceps","Piernas"],["Curl femoral","Piernas"],["Peso muerto rumano","Piernas"],["Zancadas","Piernas"],["Elevación de gemelos","Piernas"],
 ["Hip thrust","Glúteos"],["Patada de glúteo en polea","Glúteos"],
-["Crunch abdominal","Core"],["Plancha","Core"],["Elevación de piernas colgado","Core"],["Rueda abdominal","Core"]];
+["Crunch abdominal","Core"],["Plancha","Core"],["Elevación de piernas colgado","Core"],["Rueda abdominal","Core"], ...NEW_LIB];
 const TR = [[/^incline/,"Press inclinado con mancuernas"],[/^bench press|^bench$/,"Press banca"],[/romanian deadlift|^rdl/,"Peso muerto rumano"],[/^deadlift/,"Peso muerto"],
   [/bulgarian/,"Sentadilla búlgara"],[/^(back )?squat|^front squat/,"Sentadilla"],[/^(overhead|military|standing) press|^ohp/,"Press militar"],[/^(seated )?(dumbbell )?shoulder press|^arnold/,"Press con mancuernas sentado"],
   [/^pull ?up|^chin ?up/,"Dominadas"],[/lat pulldown|pulldown/,"Jalón al pecho"],[/seated (cable )?row|cable row/,"Remo en polea baja"],[/(single arm|one arm|dumbbell) row|row.*dumbbell/,"Remo con mancuerna"],[/bent over row|barbell row|^row/,"Remo con barra"],
@@ -91,7 +92,7 @@ let tab = "home", day = today(), metric = "kg", progEx = "";
 let memMode = false, activeLoaded = false, user = null;
 const AI_ON = false;   // IA de pago desactivada (no cuesta nada)
 const SIGNUP_OPEN = import.meta.env.VITE_ALLOW_SIGNUP === "true";
-const TRAIN_ON = false;
+const TRAIN_ON = true;   // pestaña Gym
 const STRAVA_SOON = true;   // Strava oculto por ahora (poner false para volver a mostrarlo)
 const INVITE_REQUIRED = import.meta.env.VITE_INVITE_REQUIRED === "true";
 const smp = AI_ON ? {} : null;
@@ -288,6 +289,7 @@ function landingHTML(card, mode){
     <section class="lf" id="sec-free"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
         ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida, cena y snacks. Solo escribes los gramos y marcas ✓.")}
+        ${feat("fire","Gym con rangos","Apunta tus series y descubre tu rango en cada ejercicio y músculo (de Hierro a Élite) en un mapa de tu cuerpo. Te crea tu plan de rutinas y te dice cuánto peso subir cada día.")}
         ${feat("ring","Calorías y macros del día","Tarjetas claras con lo que llevas y lo que te queda: calorías, proteínas, hidratos y grasas, y tu semana de un vistazo.")}
         ${feat("pie","Nutrientes como un profesional","Fibra, azúcar, grasas saturadas, sal, potasio, calcio, hierro y vitaminas de cada día o de la semana, con tu objetivo y lo que te falta.")}
         ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Si tu plan trae objetivo por día, se usa ese.")}
@@ -394,7 +396,7 @@ function render(){
   const tb = $("tabbar"); tb.classList.toggle("six", TRAIN_ON); tb.querySelector('[data-tab="train"]').hidden = !TRAIN_ON; tb.querySelector('[data-tab="profile"]').hidden = true;
   document.querySelectorAll("#tabbar button").forEach(b => { b.toggleAttribute("aria-current", b.dataset.tab===tab); if (b.dataset.tab===tab) b.setAttribute("aria-current","page");
     b.classList.toggle("live", b.dataset.tab==="train" && !!S.active); });
-  const TT = {home:"Hoy", food:"Diario", nutri:"Nutrición", progress:"Progreso"};
+  const TT = {home:"Hoy", train:"Gym", food:"Diario", nutri:"Nutrición", progress:"Progreso"};
   const ini = ((user?.email || "?")[0] || "?").toUpperCase();
   const appbar = TT[tab] ? `<div class="appbar"><b class="ab-t">${TT[tab]}</b>${isPremium() ? "" : `<button class="prem-pill" data-act="prof-sec" data-k="premium">Pásate a Premium</button>`}<button class="ab-av" data-act="tab" data-tab="profile" aria-label="Perfil y ajustes">${esc(ini)}</button></div>` : "";
   const top = appbar + `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
@@ -444,7 +446,7 @@ function viewHome(){
   const strip = ["L","M","X","J","V","S","D"].map((l,i) => { const d = addDays(ws,i), has = (S.diary[d]||[]).length, isT = d===t;
     return `<button class="wk-d ${has?"on":""} ${isT?"today":""} ${d>t?"fut":""}" data-act="wk-day" data-d="${d}" aria-label="${dayLabel(d)}${has?", con comidas apuntadas":""}"><span>${l}</span><i>${has?"✓":""}</i></button>`; }).join("");
   return `<div class="wk"><div class="wk-days">${strip}</div><div class="wk-fire ${st?"on":""}" title="${st} ${st===1?"día":"días"} seguidos apuntando"><span aria-hidden="true">🔥</span><b>${st}</b></div></div>
-  ${!TRAIN_ON ? homeFood(t, tot, remaining) : `<div class="top">${S.active?`<button class="btn" data-act="tab" data-tab="train">Seguir entreno · <span data-elapsed></span></button>`:""}</div>
+  ${true ? homeFood(t, tot, remaining) : `<div class="top">${S.active?`<button class="btn" data-act="tab" data-tab="train">Seguir entreno · <span data-elapsed></span></button>`:""}</div>
   <div class="grid2">
     <div class="card"><h2>Esta semana</h2><div><span class="big">${count}</span> <span class="note">/ ${S.settings.days} entrenos</span></div><div class="dots">${dots}</div></div>
     <div class="card today"><h2>Hoy</h2><div><span class="big" style="color:${remaining<0?"var(--danger)":"var(--accent)"}">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"}</span></div>
@@ -509,18 +511,77 @@ function workoutCard(w){
 }
 
 /* ---------- Entrenar ---------- */
+function gymBW(){ const lastW = Object.entries(S.body||{}).sort(([x],[y]) => x<y?1:-1)[0]?.[1]?.kg; return +lastW || +S.settings.profile?.w || 0; }
+function gymSex(){ return S.settings.profile?.sex || S.aiplan?.req?.sex || "m"; }
+function gymData(before){ const bw = gymBW() || 75, sex = gymSex(); const ex = exerciseRanks(S.workouts, bw, sex, before); const mr = muscleRanks(ex, muscleOf);
+  const vals = Object.values(mr).map(m=>m.score); const overall = vals.length ? vals.reduce((a,x)=>a+x,0)/vals.length * (0.7 + 0.3*vals.length/GYM_MUSCLES.length) : 0;
+  return {bw, sex, ex, mr, overall, measured: vals.length}; }
+function gymTarget(name, score, D){ const t = tierOf(score); if (t.nextAt==null) return "Rango máximo";
+  if (isBW(name)){ const r = repsFor(name, t.nextAt, D.bw, D.sex); return `${t.nextName}: ${r} reps`; }
+  return `${t.nextName}: ${String(kgFor(name, t.nextAt, D.bw, D.sex)).replace(".",",")} kg × 5`; }
+function gymNext(){ const G = S.settings.gym; if (!G?.ids?.length) return null;
+  const rs = G.ids.map(id=>S.routines.find(r=>r.id===id)).filter(Boolean); if (!rs.length) return null;
+  const last = S.workouts.find(w=>rs.some(r=>r.name===w.title)); if (!last) return rs[0];
+  const i = rs.findIndex(r=>r.name===last.title); return rs[(i+1)%rs.length]; }
 function viewTrain(){
   if (S.active) return viewActive();
+  const D = gymData(), T = tierOf(D.overall), next = gymNext();
+  const exs = Object.values(D.ex).sort((a,b)=>b.score-a.score);
+  const hero = `<div class="card gym-hero" style="--tc:${D.measured?T.color:"var(--muted)"}">
+    <div class="gh-top">${badge(D.measured?T:{color:"var(--muted)",sub:"?"}, 64)}<div><span class="note">Tu rango general</span><b class="gh-t">${D.measured?T.label:"Sin rango"}</b>
+      <span class="note">${D.measured?`${fmt(T.points)} puntos · ${D.measured} de ${GYM_MUSCLES.length} grupos medidos`:"Apunta entrenos con peso para descubrir tu rango"}</span></div></div>
+    ${D.measured && T.nextAt!=null?`<div class="gh-bar"><i style="width:${Math.round(T.pct*100)}%"></i></div><span class="note">Siguiente: ${T.nextName}</span>`:""}
+    ${gymBW()?"":`<p class="note" style="margin:0">Los rangos se calculan con tu peso corporal. <button class="link" data-act="fab-weight">Apunta tu peso</button> para que sean exactos (ahora uso 75 kg).</p>`}</div>`;
+  const map = `<div class="card"><div class="top"><h2>Tus músculos</h2><button class="link" data-act="gym-tiers">Rangos ›</button></div>
+    ${bodyMap(D.mr)}
+    <div class="gym-mus">${GYM_MUSCLES.map(m=>{ const r = D.mr[m], t = r?tierOf(r.score):null;
+      return `<div class="gm-row">${t?badge(t,26):`<span class="tier-b off" style="width:26px;height:26px" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/></svg></span>`}
+        <span class="gm-n"><b>${m}</b><small>${t?t.label:"Sin datos"}</small></span><span class="gm-bar"><i style="width:${t?Math.max(4,Math.min(100,r.score/1.8*100)):0}%;background:${t?t.color:"transparent"}"></i></span></div>`; }).join("")}</div>
+    ${(()=>{ const weak = GYM_MUSCLES.filter(m=>D.mr[m]).sort((a,b)=>D.mr[a].score-D.mr[b].score)[0], none = GYM_MUSCLES.filter(m=>!D.mr[m]);
+      return none.length && D.measured ? `<p class="note" style="margin:0">Sin medir: ${none.join(", ")}. Haz algún ejercicio de esos grupos para completar tu mapa.</p>` : weak && D.measured>2 ? `<p class="note" style="margin:0">Tu punto débil: <b>${weak}</b>. Dale prioridad en tus próximos entrenos.</p>` : ""; })()}</div>`;
+  const nextCard = next ? `<div class="card gym-next"><span class="note">Siguiente entreno de tu plan</span><h2>${esc(next.name)}</h2>
+      <div class="rx">${next.exercises.map(e=>`${esc(e.name)} <span class="note">${e.sets}×${esc(e.reps||"")}</span>`).join("<br>")}</div>
+      <button class="btn" data-act="start-routine" data-id="${esc(next.id)}">Empezar ${esc(next.name)}</button>
+      <button class="link" data-act="gym-plan">Cambiar mi plan</button></div>`
+    : `<button class="card nutri-cta" data-act="gym-plan"><span class="chat-av" aria-hidden="true">🏋️</span><span><b>Crea tu plan de gym</b><small>Rutinas a tu medida según tus días, objetivo y material</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
+  const ranks = exs.length ? `<div class="card"><div class="top"><h2>Rangos por ejercicio</h2><span class="note">${exs.length}</span></div><div class="list">
+    ${exs.slice(0,10).map(r=>{ const t = tierOf(r.score); return `<button class="li gx-row" data-act="ex-info" data-name="${esc(r.name)}">${badge(t,30)}<span class="n"><b>${esc(r.name)}</b><small>${t.label} · mejor: ${r.kg?`${String(r1(r.kg)).replace(".",",")} kg × `:""}${r.reps}</small><small class="gx-next">${esc(gymTarget(r.name, r.score, D))}</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`; }).join("")}</div></div>` : "";
   const routines = S.routines.map(r=>`<div class="card rcard"><div class="top"><h3>${esc(r.name)}${r.example?'<span class="ex-tag">ejemplo</span>':""}</h3>
       <button class="iconb" data-act="edit-routine" data-id="${esc(r.id)}" aria-label="Editar rutina">✎</button></div>
       <div class="rx">${r.exercises.map(e=>esc(e.name)).join(", ")||"Sin ejercicios"}</div>
-      <button class="btn" data-act="start-routine" data-id="${esc(r.id)}">Empezar rutina</button></div>`).join("");
-  return `<h1>Entrenar</h1>
-  <button class="btn block" data-act="start-empty" style="padding:14px">+ Empezar entreno vacío</button>
-  ${(()=>{ const n = unreviewed().length; return n ? `<div class="card"><h3>${n} ejercicio${n>1?"s":""} importado${n>1?"s":""} por revisar</h3><p class="note">Ponles nombre en español, su grupo muscular y tu vídeo.</p><button class="btn soft" data-act="open-review">Revisar ejercicios</button></div>` : ""; })()}
-  <button class="btn ghost block" data-act="open-lib">Mis ejercicios y vídeos</button>
+      <button class="btn soft" data-act="start-routine" data-id="${esc(r.id)}">Empezar rutina</button></div>`).join("");
+  return `${hero}${nextCard}${map}
+  <div class="grid2"><button class="btn block" data-act="start-empty">+ Entreno vacío</button><button class="btn ghost block" data-act="open-lib">Mis ejercicios</button></div>
+  ${(()=>{ const n = unreviewed().length; return n ? `<div class="card"><h3>${n} ejercicio${n>1?"s":""} importado${n>1?"s":""} por revisar</h3><p class="note">Ponles nombre en español, su grupo muscular y tu vídeo.</p><button class="btn soft" data-act="open-lib">Revisar</button></div>` : ""; })()}
+  ${ranks}
   <div class="top"><h2>Rutinas</h2><button class="link" data-act="new-routine">+ Nueva rutina</button></div>
-  ${routines || `<div class="empty">Crea rutinas para empezar tus entrenos habituales con un toque.</div>`}`;
+  ${routines || `<div class="empty">Crea tu plan arriba o tus propias rutinas para empezar tus entrenos con un toque.</div>`}
+  ${S.workouts.length?`<div class="top"><h2>Historial</h2><span class="note">${S.workouts.length} entrenos</span></div>${S.workouts.slice(0,10).map(workoutCard).join("")}`:""}`;
+}
+function openGymPlan(){
+  const G = S.settings.gym || {}, o = (id, v, l, cur) => `<label class="seg-o"><input type="radio" name="${id}" value="${v}" ${String(cur)===String(v)?"checked":""}><span>${l}</span></label>`;
+  openSheet("Tu plan de gym", `<p class="note">Te preparo las rutinas de la semana. Cada día te propongo el peso para seguir progresando.</p>
+    <div class="f"><span>¿Cuántos días a la semana?</span><div class="seg-g">${[2,3,4,5,6].map(d=>o("gpDays",d,d,G.days||S.settings.days||3)).join("")}</div></div>
+    <div class="f"><span>Objetivo</span><div class="seg-g">${o("gpGoal","mus","Ganar músculo",G.goal||"mus")}${o("gpGoal","str","Fuerza",G.goal)}${o("gpGoal","fat","Perder grasa",G.goal)}</div></div>
+    <div class="f"><span>¿Dónde entrenas?</span><div class="seg-g">${o("gpEq","gym","Gimnasio",G.equip||"gym")}${o("gpEq","db","Mancuernas",G.equip)}${o("gpEq","home","Casa sin material",G.equip)}</div></div>
+    <div class="f"><span>Experiencia</span><div class="seg-g">${o("gpLv","beg","Empiezo",G.level)}${o("gpLv","mid","Algo de experiencia",G.level||"mid")}${o("gpLv","adv","Avanzado",G.level)}</div></div>
+    <button class="btn" data-act="gym-plan-make">${G.ids?.length?"Rehacer mi plan":"Crear mi plan"}</button>
+    ${G.ids?.length?`<p class="note" style="margin:0">Se cambian las rutinas de tu plan actual. Tus otras rutinas y tu historial no se tocan.</p>`:""}`);
+}
+async function makeGymRoutines(){
+  const v = n => document.querySelector(`input[name=${n}]:checked`)?.value;
+  const opts = {days:+v("gpDays")||3, goal:v("gpGoal")||"mus", equip:v("gpEq")||"gym", level:v("gpLv")||"mid"};
+  const old = S.settings.gym?.ids || [];
+  const R = makeGymPlan(opts).map(r=>({id:rid(), name:r.name, exercises:r.exercises, gym:true}));
+  await put("routines", {list:[...R, ...S.routines.filter(r=>!old.includes(r.id) && !r.example)]});
+  await put("settings", {...S.settings, days:opts.days, gym:{...opts, ids:R.map(r=>r.id), at:Date.now()}});
+  closeSheet(); tab = "train"; render(); scrollTo(0,0);
+}
+function openTiers(){
+  const D = gymData();
+  openSheet("Rangos", `<p class="note">Tu rango en cada ejercicio sale de tu mejor serie (1RM estimado) comparada con tu peso corporal${D.sex==="f"?" (con estándares para mujer)":""}. El de cada músculo combina sus ejercicios, y el general, todos tus músculos.</p>
+    <div class="list">${TIERS.map((t,i)=>`<div class="li" style="cursor:default">${badge({...t, sub:i===TIERS.length-1?"★":"I"},30)}<span class="n"><b>${t.n}</b><small>${["Empezando","Primeros meses","Base sólida","Nivel intermedio","Intermedio avanzado","Avanzado","Élite"][i]}</small></span></div>`).join("")}</div>
+    <p class="note">Cada rango tiene tres niveles: III, II y I. Si cambias tu peso corporal, los rangos se recalculan.</p>`);
 }
 function viewActive(){
   const a = S.active;
@@ -538,6 +599,7 @@ function viewActive(){
         <button class="x" data-act="delset" aria-label="Quitar serie">×</button></div>${restLine(e, ei, s, si)}`; }).join("");
     return `<div class="ex-card" data-ei="${ei}"><div class="ex-head"><button class="exname" data-act="ex-info" data-name="${esc(e.name)}"><span class="play ${S.media[e.name]?"has":""}" aria-hidden="true">▶</span><h3>${esc(e.name)}</h3></button><div class="tools">
       ${ei>0?`<button class="iconb" data-act="ex-up" aria-label="Subir ejercicio">↑</button>`:""}<button class="iconb" data-act="ex-remove" aria-label="Quitar ejercicio">🗑</button></div></div>
+      ${(()=>{ const g = suggest(e.name, prevFor(e.name), e.reps); return g ? `<button class="sugchip ${g.up?"up":""}" data-act="gym-sug" data-ei="${ei}" title="${esc(g.why)}">🎯 Hoy: ${g.kg?`${String(g.kg).replace(".",",")} kg × `:""}${g.reps} reps${g.up?" · ¡sube!":""}<small>${esc(g.why)}</small></button>` : e.reps ? `<span class="note">Objetivo: ${esc(e.reps)} reps</span>` : ""; })()}
       <button class="restchip" data-act="ex-rest" data-ei="${ei}" data-si="-1">⏱ Descanso: ${fmtRest(e.rest ?? restFor(e.name))}</button>
       <div class="set-h"><span>Serie</span><span>Anterior</span><span>Kg</span><span>Reps</span><span>✓</span><span></span></div>${rows}
       <button class="addset" data-act="addset">+ Añadir serie</button></div>`; }).join("");
@@ -572,12 +634,17 @@ async function finishWorkout(){
   for (const e of exs){ const b = bestsBefore(e.name, a.start); if (!b.has) continue;
     const kg = Math.max(...e.sets.map(s=>s.kg)), rm = Math.max(...e.sets.map(s=>e1rm(s.kg,s.reps)));
     if (kg>b.kg) prList.push(`${e.name}: ${r1(kg)} kg de peso máximo`); else if (rm>b.rm+0.01) prList.push(`${e.name}: ${r0(rm)} kg de 1RM estimado`); }
+  const D0 = gymData();
   const w = {id:String(a.start), title:a.title.trim()||"Entreno", start:a.start, end:Date.now(), exercises:exs, prs:prList.length, prList};
   clearTimeout(saveT); stopRest();
   S.active = null; await put("w-"+w.id, w); await del("active");
-  tab = "home"; render();
+  const D1 = gymData(), ups = [];
+  for (const e of exs){ const b = D0.ex[e.name], n = D1.ex[e.name]; if (!n) continue; const t1 = tierOf(n.score), t0 = b ? tierOf(b.score) : null;
+    if (!t0 || t1.label !== t0.label && n.score > b.score) ups.push({name:e.name, t:t1, first:!t0}); }
+  tab = "train"; render();
   confetti();
   openSheet("Entreno guardado", `<div class="done-hero"><span class="note">${esc(w.title)}</span><span class="big">${fmt(volume(w))} kg</span><span class="note">${fmtDur(w.end-w.start)} · ${doneSets(w)} series · ${exs.length} ejercicios</span></div>
+    ${ups.length?`<div class="card"><h2>⬆️ Rangos</h2>${ups.map(u=>`<div class="gx-up">${badge(u.t,28)}<span>${esc(u.name)}: ${u.first?"empiezas en":"subes a"} <b>${u.t.label}</b></span></div>`).join("")}</div>`:""}
     ${prList.length?`<div class="card"><h2>🏆 Nuevos récords</h2>${prList.map(p=>`<div>${esc(p)}</div>`).join("")}</div>`:""}
     <button class="btn soft" data-act="routine-from" data-id="${esc(w.id)}">Guardar como rutina</button><button class="btn" data-act="close">Listo</button>`);
 }
@@ -941,7 +1008,7 @@ function openFab(){
   const T = (act, ico, l, sub, prem) => `<button class="fab-t" data-act="${act}"><span class="fab-i" aria-hidden="true">${ico}</span><b>${l}${prem && !isPremium() ? " ⭐" : ""}</b>${sub?`<small>${sub}</small>`:""}</button>`;
   const R = (act, ico, l) => `<button class="fab-r" data-act="${act}"><span aria-hidden="true">${ico}</span>${l}<span class="prof-ch" aria-hidden="true">›</span></button>`;
   openSheet("Registrar", `<div class="fab-grid">${T("fab-food","🔍","Registrar alimento",mealNow())}${T("fab-photo","▥","Foto al código de barras","",true)}</div>
-    <div class="fab-list">${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
+    <div class="fab-list">${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-gym","🏋️", S.active ? "Seguir entreno" : "Empezar entreno")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
 }
 /* ---------- Strava ---------- */
 let stravaMsg = "", stravaBusy = false, stravaSetup = false;
@@ -1325,6 +1392,8 @@ function openExInfo(name, from){
   openSheet(name, `${from==="picker"||from==="lib"?`<button class="link" data-act="ex-info-back" style="align-self:flex-start">‹ Volver a ${from==="lib"?"mis ejercicios":"la lista"}</button>`:""}
     ${media}
     <span class="note">${muscleOf(name)}</span>
+    ${(()=>{ if (!STD[name]) return ""; const D = gymData(), r = D.ex[name]; if (!r) return `<div class="card gx-rank"><span class="note">Haz una serie con peso de este ejercicio para ver tu rango.</span></div>`; const t = tierOf(r.score);
+      return `<div class="card gx-rank">${badge(t,44)}<div><b>${t.label}</b><small class="note">${fmt(t.points)} puntos · ${esc(gymTarget(name, r.score, D))}</small><div class="gh-bar" style="--tc:${t.color}"><i style="width:${Math.round(t.pct*100)}%"></i></div></div></div>`; })()}
     <a class="btn ${m?"ghost":""} yt" href="${yt}" target="_blank" rel="noopener">Ver técnica en YouTube ↗</a>
     ${assets?`<label class="btn soft" style="cursor:pointer">${m?"Cambiar vídeo":"Subir vídeo o GIF"}<input type="file" id="exVid" accept="video/*,image/gif,image/webp,image/png,image/jpeg" hidden></label>
       <span class="note" id="vidMsg">${m?"":`Vídeos de hasta ${MAX_VIDEO_MB} MB. Graba tu serie con el móvil o guarda un GIF de la técnica.`}</span>
@@ -2020,7 +2089,7 @@ document.addEventListener("click", e => {
     case "close": closeSheet(); break;
     /* entreno */
     case "start-empty": startWorkout("Entreno "+(["de domingo","de lunes","de martes","de miércoles","de jueves","de viernes","de sábado"][new Date().getDay()]), []); break;
-    case "start-routine": { const r = S.routines.find(x=>x.id===el.dataset.id); if (r) startWorkout(r.name, r.exercises.map(x=>{ const p = prevFor(x.name); return {name:x.name, sets:blankSets(x.sets, p?.map(s=>s.t))}; })); break; }
+    case "start-routine": { const r = S.routines.find(x=>x.id===el.dataset.id); if (r) startWorkout(r.name, r.exercises.map(x=>{ const p = prevFor(x.name); return {name:x.name, reps:x.reps, sets:blankSets(x.sets, p?.map(s=>s.t))}; })); break; }
     case "repeat-workout": { const w = S.workouts.find(x=>x.id===el.dataset.id); closeSheet(); if (w) startWorkout(w.title, w.exercises.map(x=>({name:x.name, sets:blankSets(x.sets.length, x.sets.map(s=>s.t))}))); break; }
     case "add-ex": openPicker("active"); break;
     case "settype": { const s = a.exercises[ei].sets[si]; s.t = {n:"w",w:"f",f:"d",d:"n"}[s.t]; saveActive(); render(); break; }
@@ -2135,6 +2204,12 @@ document.addEventListener("click", e => {
     case "fab-photo": closeSheet(); if (!isPremium()){ profSec = "premium"; tab = "profile"; render(); break; } day = today(); tab = "food"; render(); openAddFood(mealNow()); sheetCtx.t = "scan"; drawFood(); document.querySelectorAll("#ftabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t==="scan")); break;
     case "fab-weight": { closeSheet(); tab = "progress"; render(); setTimeout(() => { const i = $("bwIn"); if (i){ i.scrollIntoView({block:"center"}); i.focus(); } }, 80); break; }
     case "fab-ex": closeSheet(); profSec = "conn"; tab = "profile"; render(); scrollTo(0,0); break;
+    case "gym-plan": openGymPlan(); break;
+    case "gym-plan-make": el.disabled = true; makeGymRoutines(); break;
+    case "gym-tiers": openTiers(); break;
+    case "fab-gym": closeSheet(); tab = "train"; render(); scrollTo(0,0); break;
+    case "gym-sug": { const e = S.active?.exercises[+el.dataset.ei]; if (!e) break; const g = suggest(e.name, prevFor(e.name), e.reps); if (!g) break;
+      e.sets.forEach(st => { if (st.done) return; if (st.t!=="w"){ if (st.kg==="" && g.kg) st.kg = String(g.kg); if (st.reps==="") st.reps = String(g.reps); } }); saveActive(); render(); break; }
     case "fab-plan": closeSheet(); tab = "nutri"; nutriSub = "ia"; render(); scrollTo(0,0); break;
     case "coach-go": coachRun(); break;
     case "coach-again": coachRun(true); break;
