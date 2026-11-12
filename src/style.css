@@ -703,3 +703,7 @@ nav.tabbar{background:var(--surface)}
 .rep-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .rep-grid div{background:var(--surface2);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:2px}
 .rep-grid b{font-size:22px;font-variant-numeric:tabular-nums}.rep-grid span{font-size:12px;color:var(--muted)}
+.sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sv{background:var(--surface2);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.sv span{font-size:12px;color:var(--muted)}.sv b{font-size:17px;font-variant-numeric:tabular-nums}.sv small{font-size:12px;color:var(--muted)}
+.sv.ok small{color:var(--ok)}.sv.warn small{color:var(--warn)}

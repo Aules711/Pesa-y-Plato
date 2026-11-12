@@ -295,7 +295,7 @@ document.addEventListener("click", async e => { const rs = e.target.closest("[da
     authView("login", error ? {t: /rate|seconds|limit/i.test(error.message) ? "Espera un minuto antes de pedir otro email." : "No se pudo reenviar. Inténtalo en un rato."} : {ok:true, t:"Te hemos enviado otro email de confirmación. Revisa también el spam."}); return; }
   const b = e.target.closest("[data-auth]"); if (!b) return; authView(b.dataset.auth);
   if (b.hasAttribute("data-go")) setTimeout(() => { $("lauth")?.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth", block:"start"}); $("aEmail")?.focus({preventScroll:true}); }, 30); });
-document.addEventListener("input", e => { if (/^c(Sex|Age|H|W|Act|Goal)$/.test(e.target.id)){ const t = coachTarget(coachVals()), el = $("cTarget"); if (el) el.innerHTML = t ? `${t.fromStudy ? "Objetivo del estudio" : "Tu objetivo"}: <b>${fmt(t.kcal)} kcal</b> · <b>${t.p} g</b> proteína · ${t.c} g hidratos · ${t.f} g grasa` : "Rellena edad, altura y peso para calcular tu objetivo."; if ($("cGo")) $("cGo").disabled = !t; } });
+document.addEventListener("input", e => { if (/^c(Sex|Age|H|W|Act|Goal)$/.test(e.target.id)){ const t = coachTarget(coachVals()), el = $("cTarget"); if (el) el.innerHTML = t ? `${t.fromStudy ? "Objetivo según tu estudio" : "Tu objetivo"}: <b>${fmt(t.kcal)} kcal</b> · <b>${t.p} g</b> proteína · ${t.c} g hidratos · ${t.f} g grasa` : "Rellena edad, altura y peso para calcular tu objetivo."; if ($("cGo")) $("cGo").disabled = !t; } });
 document.addEventListener("change", e => { if (/^c(Sex|Act|Goal)$/.test(e.target.id)) e.target.dispatchEvent(new Event("input", {bubbles:true})); });
 document.addEventListener("submit", async e => {
   if (e.target.id==="fAuth"){ e.preventDefault(); const mode = e.target.dataset.mode, email = $("aEmail").value.trim(), pass = $("aPass")?.value, btn = e.target.querySelector("button[type=submit]");
@@ -696,10 +696,53 @@ function openNutriDetail(k){
 const coach = {step:null, day:1, err:"", pre:null, found:null, menu:null, reading:""};
 const foodDB = () => [...EXTRA_FOODS, ...FOODS.map(({name,kcal,p,c,f}) => ({name,kcal,p,c,f})), ...PLANNER_FOODS];
 // objetivo: el del estudio si lo trae (completando lo que falte), si no el calculado
+const AF = {sed:1.2, lig:1.375, mod:1.55, alt:1.725};
+// objetivo del plan teniendo en cuenta el estudio: kcal y macros si las trae; si no, su metabolismo medido, su rango de proteína y su % de grasa
 function coachTarget(v){
-  const S = v.study; if (!S?.kcal) return calcGoals(v);
-  const p = S.p || Math.round((+v.w||70) * (v.goal==="gain"?1.8:v.goal==="lose"?2:1.6)), f = S.f || Math.round(S.kcal*.27/9), c = S.c || Math.max(50, Math.round((S.kcal - p*4 - f*9)/4));
-  return {kcal:S.kcal, p, c, f, fromStudy:true};
+  const S = v.study || {}, w = +v.w || 70;
+  if (!S.kcal && !S.bmr) return calcGoals(v);
+  let kcal, note = [];
+  if (S.kcal) kcal = S.kcal;
+  else {
+    const lowFat = S.bf != null && S.bf < (v.sex === "f" ? 18 : 10);
+    const gf = v.goal === "lose" ? (lowFat ? .92 : .85) : v.goal === "gain" ? 1.1 : 1;
+    kcal = Math.round(S.bmr * (AF[v.act] || 1.55) * gf / 10) * 10;
+    note.push(`metabolismo en reposo ${fmt(S.bmr)} kcal × actividad`);
+    if (lowFat && v.goal === "lose") note.push("déficit suave porque tu grasa ya es baja");
+  }
+  const ffm = S.fatKg != null ? w - S.fatKg : null;
+  let p = S.p;
+  if (!p && S.pmax) p = v.goal === "keep" ? Math.round((S.pmin + S.pmax) / 2) : S.pmax;
+  if (!p) p = Math.round((ffm || w * .85) * (v.goal === "keep" ? 1.9 : 2.3));
+  if (+v.train >= 3 && v.goal !== "keep") p = Math.max(p, Math.round(w * 1.6));            // si entrena fuerza, mínimo 1,6 g/kg
+  const f = S.f || Math.max(Math.round(w * .8), Math.round(kcal * .27 / 9)), c = S.c || Math.max(80, Math.round((kcal - p * 4 - f * 9) / 4));
+  return {kcal, p, c, f, fromStudy:true, note:note.join(" · ")};
+}
+// tarjeta con los datos del estudio y qué significan
+function studySummary(v){
+  const S = v.study; if (!S || !(S.bmr || S.bf != null || S.muscleKg || S.imc)) return "";
+  const m = v.sex === "f", tiles = [];
+  const add = (l, val, st, cls = "") => tiles.push(`<div class="sv ${cls}"><span>${l}</span><b>${val}</b>${st?`<small>${st}</small>`:""}</div>`);
+  if (S.bmr) add("Metabolismo en reposo", `${fmt(S.bmr)} kcal`, "lo que gastas sin moverte");
+  if (S.pmin) add("Proteína recomendada", `${S.pmin}-${S.pmax} g/día`, "según tu nutricionista");
+  if (S.imc) add("IMC", String(S.imc).replace(".", ","), S.imc < 18.5 ? "bajo" : S.imc < 25 ? "normal" : S.imc < 30 ? "sobrepeso" : "obesidad", S.imc >= 18.5 && S.imc < 25 ? "ok" : "warn");
+  if (S.bf != null){ const lo = m ? 21 : 8, hi = m ? 32 : 20; add("Grasa corporal", `${String(S.bf).replace(".", ",")} %${S.fatKg?` · ${String(S.fatKg).replace(".", ",")} kg`:""}`, S.bf < lo ? "muy baja" : S.bf < (m ? 25 : 14) ? "baja / atlética" : S.bf <= hi ? "saludable" : "alta", S.bf <= hi && S.bf >= lo ? "ok" : "warn"); }
+  if (S.muscleKg) add("Masa muscular", `${String(S.muscleKg).replace(".", ",")} kg${S.musclePct?` · ${S.musclePct} %`:""}`, "");
+  if (S.visceral != null) add("Grasa visceral", String(S.visceral).replace(".", ","), S.visceral <= 12 ? "saludable (1-12)" : "alta (más de 12)", S.visceral <= 12 ? "ok" : "warn");
+  if (S.waterPct) add("Agua corporal", `${S.waterPct} %`, S.waterPct >= (m ? 45 : 50) ? "bien hidratado" : "algo baja", S.waterPct >= (m ? 45 : 50) ? "ok" : "warn");
+  if (S.metaAge) add("Edad metabólica", `${S.metaAge} años`, v.age ? (S.metaAge <= v.age ? "igual o menor que tu edad 👍" : "mayor que tu edad") : "");
+  const warn = S.bf != null && v.goal === "lose" && S.bf < (m ? 18 : 10) ? `<div class="conn-msg">Tu grasa corporal ya es baja (${S.bf} %). Perder más no suele ser lo ideal: plantéate «mantenerme» o «ganar músculo». Si eliges perder grasa, el plan usará un déficit muy suave.</div>` : "";
+  return `<div class="card"><div class="top"><h2>Tu estudio${S.date?` · ${S.date}`:""}</h2></div><div class="sv-grid">${tiles.join("")}</div>${warn}
+    <p class="note" style="margin:0">Ahora responde las preguntas de abajo (lo que falte o quieras cambiar) y crearé tu plan teniendo en cuenta todo esto.</p></div>`;
+}
+function studyTips(v){
+  const S = v.study || {}, T = [];
+  if (S.bmr) T.push(`Tu metabolismo en reposo medido es de ${fmt(S.bmr)} kcal: el plan parte de ese dato y le suma tu actividad.`);
+  if (S.pmin) T.push(`Tu nutricionista te recomienda ${S.pmin}-${S.pmax} g de proteína al día: repártela entre todas las comidas.`);
+  if (S.bf != null && S.bf < (v.sex === "f" ? 18 : 10)) T.push("Con tu % de grasa tan bajo, prioriza ganar o mantener músculo: no recortes mucho las calorías.");
+  if (S.visceral > 12) T.push("Tu grasa visceral está alta: reduce ultraprocesados, alcohol y azúcar, y camina a diario.");
+  if (S.waterPct && S.waterPct < (v.sex === "f" ? 45 : 50)) T.push("Tu agua corporal es algo baja: bebe más a lo largo del día.");
+  return T;
 }
 async function readStudy(file){
   coach.reading = "Abriendo el archivo…"; coach.err = ""; coach.step = "form"; render();
@@ -730,7 +773,7 @@ function coachReq(){ const pr = S.settings.profile || {}, lastW = Object.entries
   return {sex:pr.sex||"m", age:pr.age||"", h:pr.h||"", w:lastW||pr.w||"", act:pr.act||"mod", goal:pr.goal||"lose", train:3, sport:"", diet:"omni", avoid:"", like:"", cook:"normal", budget:"normal", extra:"", ...(S.aiplan?.req||{}), ...(coach.pre||{})}; }
 function coachVals(){ const g = id => $(id)?.value ?? "";
   return {sex:g("cSex"), age:parseNum(g("cAge")), h:parseNum(g("cH")), w:parseNum(g("cW")), act:g("cAct"), goal:g("cGoal"), train:+g("cTrain"), sport:g("cSport").trim(),
-    diet:g("cDiet"), avoid:g("cAvoid").trim(), like:g("cLike").trim(), cook:g("cCook"), budget:g("cBudget"), extra:g("cExtra").trim(), ...(coach.pre?.study && $("cUseStudy")?.checked !== false ? {study:coach.pre.study} : {})}; }
+    diet:g("cDiet"), avoid:g("cAvoid").trim(), like:g("cLike").trim(), cook:g("cCook"), budget:g("cBudget"), extra:g("cExtra").trim(), ...(coach.pre?.study && $("cUseStudy")?.checked !== false ? {study:coach.pre.study} : {study:null})}; }
 const coachDayTot = day => { const o = {kcal:0,p:0,c:0,f:0}; for (const m in day.meals) day.meals[m].items.forEach(i => { for (const k in o) o[k] += i.per[k]*i.g/100; }); return o; };
 function viewCoach(){
   if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Tu plan de nutrición a medida</h3>
@@ -746,7 +789,7 @@ function viewCoach(){
     ${coach.found?.length ? `<div class="conn-msg ok">✓ Del estudio he sacado: ${esc(coach.found.join(", "))}. Revísalo abajo.</div>` : ""}
     ${coach.menu ? `<div class="conn-msg ok">📋 Tu estudio trae un menú (${coach.menu.days.length} ${coach.menu.days.length===1?"día":"días"}, ${coach.menu.count} alimentos${coach.menu.nodata?`, ${coach.menu.nodata} sin reconocer`:""}).</div>
       <button class="btn" data-act="study-menu">Usar el menú del estudio tal cual</button>` : ""}</div>`;
-  return studyCard + `<div class="card"><h2>Tu plan a medida</h2><p class="note">Responde y tu entrenador te creará al momento un menú semanal a tu medida, con gramos y calorías de cada día.</p>
+  return studyCard + studySummary(v) + `<div class="card"><h2>Tu plan a medida</h2><p class="note">Responde y tu entrenador te creará al momento un menú semanal a tu medida, con gramos y calorías de cada día.</p>
     <div class="grid2"><label class="f">Sexo${sel("cSex",[["m","Hombre"],["f","Mujer"]],v.sex)}</label><label class="f">Edad<input id="cAge" inputmode="numeric" value="${v.age}"></label>
     <label class="f">Altura (cm)<input id="cH" inputmode="numeric" value="${v.h}"></label><label class="f">Peso (kg)<input id="cW" inputmode="decimal" value="${v.w}"></label></div>
     <label class="f">¿Qué quieres conseguir?${sel("cGoal",[["lose","Perder grasa"],["keep","Mantenerme y comer mejor"],["gain","Ganar músculo"]],v.goal)}</label>
@@ -757,8 +800,8 @@ function viewCoach(){
     <label class="f">Comidas que te gustan<input id="cLike" value="${esc(v.like)}" placeholder="Ej.: pasta, tortilla, pollo al curry"></label>
     <div class="grid2"><label class="f">Tiempo para cocinar${sel("cCook",[["poco","Poco"],["normal","Normal"],["mucho","Me gusta cocinar"]],v.cook)}</label><label class="f">Presupuesto${sel("cBudget",[["low","Ajustado"],["normal","Normal"]],v.budget)}</label></div>
     <label class="f">Algo más<input id="cExtra" value="${esc(v.extra)}" placeholder="Ej.: como en el trabajo, ceno tarde…"></label>
-    ${v.study?.kcal ? `<label class="tgl"><input type="checkbox" id="cUseStudy" checked><span>Usar las calorías y macros del estudio de mi nutricionista</span></label>` : ""}
-    <div class="coach-t" id="cTarget">${t ? `${t.fromStudy ? "Objetivo del estudio" : "Tu objetivo"}: <b>${fmt(t.kcal)} kcal</b> · <b>${t.p} g</b> proteína · ${t.c} g hidratos · ${t.f} g grasa` : "Rellena edad, altura y peso para calcular tu objetivo."}</div>
+    ${v.study?.kcal || v.study?.bmr ? `<label class="tgl"><input type="checkbox" id="cUseStudy" checked><span>Usar los datos del estudio de mi nutricionista para el objetivo</span></label>` : ""}
+    <div class="coach-t" id="cTarget">${t ? `${t.fromStudy ? "Objetivo según tu estudio" : "Tu objetivo"}: <b>${fmt(t.kcal)} kcal</b> · <b>${t.p} g</b> proteína · ${t.c} g hidratos · ${t.f} g grasa` : "Rellena edad, altura y peso para calcular tu objetivo."}</div>
     ${coach.err ? `<div class="conn-msg">${esc(coach.err)}</div>` : ""}
     <button class="btn" data-act="coach-go" ${t?"":"disabled"} id="cGo">✨ Crear mi plan</button>
     ${A?.plan ? `<button class="btn ghost" data-act="coach-back">Volver a mi plan</button>` : ""}
@@ -785,6 +828,7 @@ function coachRun(reuse){
   const req = reuse ? S.aiplan.req : coachVals(), t = coachTarget(req);
   if (!t){ coach.err = "Revisa edad, altura y peso."; render(); return; }
   const plan = makePlan(req, t, Date.now());
+  if (plan && t.fromStudy){ const S = req.study || {}; plan.summary = `Basado en tu estudio nutricional${S.date?` del ${S.date}`:""}${t.note?` (${t.note})`:""}. ` + plan.summary; plan.tips = [...studyTips(req), ...plan.tips].slice(0, 6); plan.study = true; }
   if (!plan){ coach.err = "Con esas restricciones no encuentro platos suficientes. Quita alguna de «cosas que no comes»."; render(); return; }
   S.aiplan = {req, plan, created:Date.now(), applied:false}; put("aiplan", S.aiplan);
   coach.step = null; coach.day = 1; coach.err = ""; render(); scrollTo({top:0}); confetti();
@@ -2126,7 +2170,7 @@ document.addEventListener("change", async e => {
   else if (t.id==="exVid" && t.files?.[0]){ const prev = sheetCtx.prev; await uploadVideo(t.files[0]); if (sheetCtx) sheetCtx.prev ||= prev; }
   else if (t.dataset.aion != null && sheetCtx?.ai){ sheetCtx.ai[+t.dataset.aion].on = t.checked; t.closest(".ai-it")?.classList.toggle("off", !t.checked); updateAI(); }
   else if (t.id==="studyFile" && t.files?.[0]){ readStudy(t.files[0]); t.value = ""; }
-  else if (t.id==="cUseStudy"){ const el = $("cTarget"), tt = coachTarget(coachVals()); if (el && tt) el.innerHTML = `${tt.fromStudy ? "Objetivo del estudio" : "Tu objetivo"}: <b>${fmt(tt.kcal)} kcal</b> · <b>${tt.p} g</b> proteína · ${tt.c} g hidratos · ${tt.f} g grasa`; }
+  else if (t.id==="cUseStudy"){ const el = $("cTarget"), tt = coachTarget(coachVals()); if (el && tt) el.innerHTML = `${tt.fromStudy ? "Objetivo según tu estudio" : "Tu objetivo"}: <b>${fmt(tt.kcal)} kcal</b> · <b>${tt.p} g</b> proteína · ${tt.c} g hidratos · ${tt.f} g grasa`; }
   else if (t.id==="platePhoto" && t.files?.[0]){ platePhoto(t.files[0]); t.value = ""; }
   else if (t.id==="scanPhoto" && t.files?.[0]){ stopScan(); scanPhoto(t.files[0]); t.value = ""; }
   else if (t.id==="impH" && t.files?.[0]){ parseHealthFile(t.files[0]); }

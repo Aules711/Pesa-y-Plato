@@ -22,19 +22,40 @@ export async function fileText(file, onStep = () => {}){
     // PDF escaneado: pasar cada página a imagen y reconocer el texto
     const imgs = [];
     for (let i = 1; i <= Math.min(doc.numPages, 6); i++){
-      const page = await doc.getPage(i), vp = page.getViewport({ scale: 2 }), c = document.createElement("canvas");
-      c.width = vp.width; c.height = vp.height; await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise; imgs.push(c);
+      const page = await doc.getPage(i), v1 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: Math.min(4, 2400 / v1.width) }), c = document.createElement("canvas");
+      c.width = vp.width; c.height = vp.height; const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: x, viewport: vp }).promise; imgs.push(c);
     }
     return ocr(imgs, onStep);
   }
-  return ocr([file], onStep);
+  const bmp = await createImageBitmap(file), k = Math.min(2, 2400 / Math.max(bmp.width, bmp.height) > 1 ? 2400 / Math.max(bmp.width, bmp.height) : 1), c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return ocr([c], onStep);
+}
+// dos versiones de la imagen: gris con contraste (texto oscuro) y «solo lo blanco» (texto claro sobre fondos de color)
+function prep(src){
+  const W = src.width, H = src.height, mk = () => { const c = document.createElement("canvas"); c.width = W; c.height = H; return c; };
+  const a = mk(), b = mk(), xa = a.getContext("2d"), xb = b.getContext("2d");
+  xa.drawImage(src, 0, 0); const d = xa.getImageData(0, 0, W, H), e = xb.createImageData(W, H), px = d.data, pe = e.data;
+  let lo = 255, hi = 0; const g = new Uint8ClampedArray(W * H);
+  for (let i = 0, j = 0; i < px.length; i += 4, j++){ const v = .299*px[i] + .587*px[i+1] + .114*px[i+2]; g[j] = v; }
+  const hist = new Uint32Array(256); g.forEach(v => hist[v]++); let acc = 0; for (let v = 0; v < 256; v++){ acc += hist[v]; if (acc > g.length*.02){ lo = v; break; } }
+  acc = 0; for (let v = 255; v >= 0; v--){ acc += hist[v]; if (acc > g.length*.02){ hi = v; break; } }
+  const sc = 255 / Math.max(1, hi - lo);
+  for (let i = 0, j = 0; i < px.length; i += 4, j++){ const v = Math.max(0, Math.min(255, (g[j] - lo) * sc)); px[i] = px[i+1] = px[i+2] = v; const w = g[j] > 200 ? 0 : 255; pe[i] = pe[i+1] = pe[i+2] = w; pe[i+3] = 255; }
+  xa.putImageData(d, 0, 0); xb.putImageData(e, 0, 0); return [a, b];
 }
 async function ocr(images, onStep){
   onStep("Reconociendo el texto de la imagen… (la primera vez tarda un poco)");
   const { createWorker } = await import("tesseract.js");
   const w = await createWorker("spa");
   let text = "";
-  for (let i = 0; i < images.length; i++){ onStep(images.length > 1 ? `Reconociendo la página ${i + 1} de ${images.length}…` : "Reconociendo el texto…"); text += (await w.recognize(images[i])).data.text + "\n"; }
+  await w.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
+  for (let i = 0; i < images.length; i++){
+    onStep(images.length > 1 ? `Reconociendo la página ${i + 1} de ${images.length}…` : "Reconociendo el texto…");
+    let parts; try { parts = prep(images[i]); } catch { parts = [images[i]]; }
+    for (const im of parts) text += (await w.recognize(im)).data.text + "\n";
+  }
   await w.terminate();
   return text;
 }
@@ -173,6 +194,24 @@ export function parseStudy(text){
   if ((m = t.match(/prote[ií]?nas?\D{0,25}?(\d{2,3})\s*g\b/))) S.p = +m[1];
   if ((m = t.match(/(hidratos de carbono|hidratos|carbohidratos|hc)\D{0,25}?(\d{2,3})\s*g\b/))) S.c = +m[2];
   if ((m = t.match(/(grasas|lipidos)\D{0,25}?(\d{2,3})\s*g\b/))) S.f = +m[2];
-  if (S.kcal) { o.study = S; found.push("calorías" + (S.p ? " y macros" : "")); }
+  if (S.kcal) found.push("calorías" + (S.p ? " y macros" : ""));
+  // estudio de composición corporal (báscula de bioimpedancia)
+  const n1 = x => +String(x).replace(",", ".");
+  if ((m = t.match(/(metabolismo (en reposo|basal)|tasa metabolica basal|\btmb\b|\bbmr\b|gasto (energetico )?(en reposo|basal))\D{0,40}?(\d{3,5}(?:[.,]\d)?)/))) { let v = n1(m[m.length - 1]); if (v > 5000 && v < 50000) v /= 10; if (v >= 800 && v <= 4000){ S.bmr = Math.round(v); found.push("metabolismo en reposo"); } }
+  if ((m = t.match(/(factor prote\w*|prote\w* (diaria|recomendada|necesaria))\D{0,30}?(\d{2,3})\s*(?:-|–|a)\s*(\d{2,3})/))) { S.pmin = +m[3]; S.pmax = +m[4]; found.push("proteína recomendada"); }
+  if ((m = t.match(/\bimc\b\D{0,40}?(\d{2}[.,]\d{1,2})/))) { const v = n1(m[1]); if (v > 12 && v < 60) S.imc = v; }
+  if ((m = t.match(/masa grasa\D{0,6}(\d{1,3}(?:[.,]\d{1,2})?)\s*kg\s*\/?\s*(\d{1,2}(?:[.,]\d)?)\s*%/))) { S.fatKg = n1(m[1]); S.bf = n1(m[2]); }
+  else if (o.bf) S.bf = o.bf;
+  if (S.bf != null && !found.includes("% de grasa")) found.push("% de grasa");
+  if ((m = t.match(/masa (muscular|magra)\D{0,6}(\d{1,3}(?:[.,]\d{1,2})?)\s*kg(?:\s*\/?\s*(\d{1,2}(?:[.,]\d)?)\s*%)?/))) { S.muscleKg = n1(m[2]); if (m[3]) S.musclePct = n1(m[3]); found.push("masa muscular"); }
+  if ((m = t.match(/grasa visceral\D{0,6}(\d{1,2}(?:[.,]\d)?)/))) { S.visceral = n1(m[1]); found.push("grasa visceral"); }
+  if ((m = t.match(/\bagua\D{0,6}(\d{1,3}(?:[.,]\d{1,2})?)\s*kg\s*\/?\s*(\d{1,2}(?:[.,]\d)?)\s*%/))) { S.waterPct = n1(m[2]); found.push("agua corporal"); }
+  if ((m = t.match(/edad metab\w*\D{0,6}(\d{2})/))) { S.metaAge = +m[1]; found.push("edad metabólica"); }
+  if ((m = t.match(/cintura\D{0,60}/))) { const k = (m[0].match(/\b(\d{2,3})\b(?![.,]\d)/g) || []).map(Number).find(v => v >= 55 && v <= 150); if (k) S.waist = k; }
+  if ((m = t.match(/(realizado el|fecha)\D{0,6}(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/))) S.date = `${m[2].padStart(2,"0")}/${m[3].padStart(2,"0")}/${m[4]}`;
+  // altura sin etiqueta («180.00 cm») o calculada con el IMC y el peso
+  if (!o.h && (m = t.match(/\b(1\d{2}|2[0-2]\d)(?:[.,]\d{1,2})?\s*cm\b/))) { o.h = +m[1]; found.push("altura"); }
+  if (!o.h && S.imc && o.w) { o.h = Math.round(Math.sqrt(o.w / S.imc) * 100); found.push("altura (por tu IMC)"); }
+  if (Object.keys(S).length) o.study = S;
   return { vals:o, found };
 }
