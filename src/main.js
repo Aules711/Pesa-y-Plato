@@ -5,7 +5,7 @@ import { makePlan, swapMeal, PLANNER_FOODS, planConflicts, avoidLabels } from ".
 import { fileText, parsePlan, parseStudy, EXTRA_FOODS } from "./planparse.js";
 import { SPORT_LIST, SPORT, kcalFor, pace, speed, newTrack, elapsed, addPoint, markGap, packRoute, makeMap, drawRoute, hereMarker, fitRoute } from "./sport.js";
 import { COACH as SPC } from "./coach.js";
-import { spInit, spView, spAction, spEnter, spSubtitle, todayFor, isDone as spIsDone, setDone as spSetDone, SP_COLOR } from "./sportapp.js";
+import { spInit, spView, spAction, spEnter, spSubtitle, todayFor, kmTxt, isDone as spIsDone, setDone as spSetDone, SP_COLOR } from "./sportapp.js";
 import { TIERS, STD, tierOf, kgFor, repsFor, isBW, exerciseRanks, muscleRanks, GYM_MUSCLES, bodyMap, badge, suggest, makeGymPlan, NEW_LIB } from "./gym.js";
 
 let sb = null;
@@ -529,7 +529,7 @@ function viewTrain(){
   const card = (k, e, n, sub, on) => `<button class="ex-sp ${on?"on":""}" data-act="ex-sport" data-k="${k}" style="--sp:${SP_COLOR[k]||"var(--accent)"}"><span class="ex-e" aria-hidden="true">${e}</span><b>${esc(n)}</b><small>${sub}</small></button>`;
   const todayS = Object.keys(S.scoach||{}).filter(k=>SPC[k]).flatMap(k => todayFor(k).map(o=>({...o, k})));
   return `<p class="note" style="margin-top:0">Elige tu deporte. Cada uno es como una app propia: tu plan, calendario, carreras, resumen, estadísticas y zonas.</p>
-  ${todayS.length ? `<div class="card"><h2>Hoy te toca</h2>${todayS.map(o=>`<button class="li sc-today" data-act="ex-sport" data-k="${o.k}"><span aria-hidden="true">${SPC[o.k].e}</span><span class="n"><b>${esc(o.x.title)}</b><small>${esc(SPC[o.k].n)}${o.x.dur?" · "+fmtMin(o.x.dur*60):""}</small></span>${spIsDone(o.k,o.w,o.i)?`<span class="sc-ok">✓</span>`:`<span class="prof-ch" aria-hidden="true">›</span>`}</button>`).join("")}</div>` : ""}
+  ${todayS.length ? `<div class="card"><h2>Hoy te toca</h2>${todayS.map(o=>`<button class="li sc-today" data-act="ex-sport" data-k="${o.k}"><span aria-hidden="true">${SPC[o.k].e}</span><span class="n"><b>${esc(o.x.title)}</b><small>${esc(SPC[o.k].n)}${o.x.km?" · "+kmTxt(o.k,o.x.km):o.x.dur?" · "+fmtMin(o.x.dur*60):""}</small></span>${spIsDone(o.k,o.w,o.i)?`<span class="sc-ok">✓</span>`:`<span class="prof-ch" aria-hidden="true">›</span>`}</button>`).join("")}</div>` : ""}
   <div class="ex-grid">
     ${card("gym", "🏋️", "Gym", S.active ? "Entreno en curso" : D.measured ? `${badge(T,16)} ${T.label}` : "Rangos, rutinas y plan", true)}
     ${Object.entries(SPC).map(([k,c]) => card(k, c.e, c.n, spSubtitle(k), !!S.scoach?.[k] || (S.races||[]).some(r=>r.sport===k))).join("")}

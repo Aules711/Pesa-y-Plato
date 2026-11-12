@@ -1,5 +1,5 @@
 // BEINGHEALTHY · Cada deporte como una app propia: Hoy, Plan, Calendario, Carreras y Datos (resumen, estadísticas y zonas).
-import { COACH, DAY_N, TIPS, makeCoachPlan, adaptWeek, goalFromRace, goalName } from "./coach.js";
+import { COACH, DAY_N, TIPS, makeCoachPlan, adaptWeek, goalFromRace, goalName, describeEnd } from "./coach.js";
 
 let C = null;                                   // utilidades de main.js
 export function spInit(ctx) { C = ctx; }
@@ -74,11 +74,48 @@ export function adjFor(k) {
 const curWeek = (P) => Math.floor((C.parseDay(C.today()) - C.parseDay(P.start)) / (7 * 864e5));
 export function weekSessions(k, w) {
   const P = C.S.scoach?.[k]; if (!P?.weeks[w]) return [];
+  return withKm(k, P, w, rawWeek(k, P, w));
+}
+function rawWeek(k, P, w) {
   const cw = curWeek(P); if (w !== cw && w !== cw + 1) return P.weeks[w].sessions;
   const a = adjFor(k); if (a.f === 1 && !a.easy) return P.weeks[w].sessions;
   const ad = adaptWeek(P, w, a), t = C.today();
   return P.weeks[w].sessions.map((x, i) => { const day = C.addDays(P.start, w * 7 + x.d); return day < t || isDone(k, w, i) ? x : ad[i]; });
 }
+/* ---------- kilómetros de cada sesión ---------- */
+const DEF_PACE = { run: { beg: 420, mid: 360, adv: 315 }, trail: { beg: 540, mid: 450, adv: 390 }, hike: { beg: 900, mid: 780, adv: 690 },
+  bike: { beg: 180, mid: 144, adv: 124 }, swim: { beg: 1650, mid: 1300, adv: 1050 } };   // s/km (bici: 20/25/29 km/h; natación: 2:45/2:10/1:45 por 100 m)
+// ritmo suave (segundos por km): tus últimos entrenos > tus zonas > tu nivel
+export function paceFor(k) {
+  const since = C.addDays(C.today(), -60), L = actsOf(k).filter((a) => a.day >= since && a.km > 0.3 && a.dur > 0).map((a) => a.dur / a.km).sort((a, b) => a - b);
+  if (L.length >= 3) return { s: L[Math.floor(L.length / 2)], src: "tus últimos entrenos" };
+  const Z = zonesOf(k);
+  if ((k === "run" || k === "trail") && Z.thr) return { s: Z.thr * 1.2 * (k === "trail" ? 1.3 : 1), src: "tu ritmo umbral" };
+  if (k === "swim" && Z.css) return { s: Z.css * 10 * 1.12, src: "tu CSS" };
+  if (k === "bike" && Z.ftp && C.sportKg()) { const wkg = Z.ftp / C.sportKg(); return { s: 3600 / Math.max(18, Math.min(34, 16 + wkg * 3)), src: "tu FTP" }; }
+  const lv = C.S.scoach?.[k]?.req?.level || "mid"; return { s: DEF_PACE[k]?.[lv] || 360, src: "tu nivel" };
+}
+const FACT = { E: 1, R: 1.08, L: 1.03, Q: 0.93 };
+function kmFrom(k, mins, t, base) { const f = FACT[t] || 1, km = mins * 60 / (base * f * (k === "trail" && t === "L" ? 1.1 : 1)); return k === "swim" ? Math.max(0.1, Math.round(km * 20) / 20) : k === "bike" ? Math.round(km) : Math.max(0.5, Math.round(km * 2) / 2); }
+export const kmTxt = (k, km) => k === "swim" ? `${Math.round(km * 1000).toLocaleString("es-ES")} m` : `${String(km).replace(".", ",")} km`;
+function withKm(k, P, w, list) {
+  if (!isEnd(k)) return list;
+  const base = paceFor(k).s, phase = P.weeks[w].phase.replace(" · descarga", ""), { goal, level } = P.req;
+  return list.map((x) => {
+    if (x.t === "S") return x;
+    if (x.t === "RACE") { const r = racesOf(k).find((r) => r.date === C.addDays(P.start, w * 7 + x.d)); return r?.km ? { ...x, km: r.km } : x; }
+    const amt = (m) => kmTxt(k, kmFrom(k, m, "E", base));
+    let km = kmFrom(k, x.dur, x.t, base);
+    if (k === "swim" && (x.t === "E" || x.t === "Q")) {          // natación: la distancia es la suma de las series de la sesión
+      const [, d0] = describeEnd(k, x.t, phase, x.dur, goal, w, level, () => "");
+      let tot = 0; const rest = d0.replace(/(\d+)×(\d+) m/g, (_, a, b) => { tot += a * b; return ""; }); rest.replace(/(\d[\d.]*) m\b/g, (_, a) => { tot += +a.replace(".", ""); return ""; });
+      if (tot) km = tot / 1000;
+    }
+    const [title, desc] = describeEnd(k, x.t, phase, x.dur, goal, w, level, (m) => m === x.dur ? kmTxt(k, km) : amt(m));
+    return { ...x, title, desc: desc.replace(/^: /, ""), km };
+  });
+}
+const amountOf = (k, x) => x.km ? kmTxt(k, x.km) : x.dur ? C.fmtMin(x.dur * 60) : "";
 
 /* ---------- sesiones hechas ---------- */
 const key = (k, w, i) => `${k}|${w}|${i}`;
@@ -129,8 +166,8 @@ export function spView(k) {
 /* ---------- Hoy ---------- */
 function sesCard(k, o, opts = {}) {
   const { esc, fmtMin, today, addDays } = C, P = C.S.scoach[k], x = o.x, day = addDays(P.start, o.w * 7 + x.d), done = isDone(k, o.w, o.i), isT = day === today();
-  return `<div class="card sc-s ${done ? "done" : ""} ${isT && !opts.noToday ? "today" : ""}"><div class="sc-h"><span class="sc-d"><b>${DAY_N[x.d].slice(0, 3)}</b><small>${C.parseDay(day).getDate()}</small></span>
-    <div class="sc-t"><b>${esc(x.title)}</b><small>${isT ? "Hoy · " : ""}${x.dur ? fmtMin(x.dur * 60) : ""}${x.adj ? " · ajustada a tu carga" : ""}</small></div>
+  return `<div class="card sc-s ${done ? "done" : ""} ${isT && !opts.noToday ? "is-today" : ""}"><div class="sc-h"><span class="sc-d"><b>${DAY_N[x.d].slice(0, 3)}</b><small>${C.parseDay(day).getDate()}</small></span>
+    <div class="sc-t"><b>${esc(x.title)}</b><small>${isT ? "Hoy · " : ""}${amountOf(k, x)}${x.adj ? " · ajustada a tu carga" : ""}</small></div>
     ${x.t === "RACE" ? "" : `<button class="sc-chk" data-act="sp-done" data-w="${o.w}" data-i="${o.i}" aria-pressed="${done}" aria-label="Marcar como hecha">✓</button>`}</div>
     <p class="sc-desc">${esc(x.desc).replace(/ · /g, "<br>· ")}</p>
     ${!done && day <= today() && x.t !== "RACE" ? `<div class="sc-acts">${COACH[k].gps && !["S", "F", "F2", "M"].includes(x.t) ? `<button class="btn soft" data-act="sp-gps" data-w="${o.w}" data-i="${o.i}">▶ Grabar con GPS</button>` : ""}<button class="btn ghost" data-act="sp-reg" data-w="${o.w}" data-i="${o.i}">Registrar</button></div>` : ""}
@@ -197,7 +234,7 @@ function vPlan(k) {
     <div><b>Semana ${W + 1} de ${P.weeks.length}</b><small>${esc(wk.phase)}${W === cur ? " · esta semana" : ""}</small></div>
     <button class="iconb" data-act="sp-week" data-w="${W + 1}" ${W >= P.weeks.length - 1 ? "disabled" : ""} aria-label="Semana siguiente">›</button></div>
     <div class="gh-bar" style="--tc:var(--sp)"><i style="width:${Math.round(wDone / Math.max(1, list.length) * 100)}%"></i></div>
-    <span class="note">${wDone} de ${list.length} hechas · ${fmtMin(mins * 60)} en total · plan: ${dn}/${all}</span></div>
+    <span class="note">${wDone} de ${list.length} hechas · ${isEnd(k) ? kmTxt(k, Math.round(list.reduce((a, x) => a + (x.t === "RACE" ? 0 : x.km || 0), 0) * 10) / 10) : fmtMin(mins * 60)} en total · plan: ${dn}/${all}</span>${isEnd(k) ? `<span class="note">Distancias calculadas con ${paceFor(k).src}${paceFor(k).src === "tu nivel" ? `. Pon tu ritmo en Datos › Zonas para afinarlas` : ""}.</span>` : ""}</div>
   ${cur >= P.weeks.length ? `<div class="card"><b>🎉 ¡Plan terminado!</b><p class="note">Crea uno nuevo para seguir mejorando.</p><button class="btn" data-act="sp-edit" data-v="1">Nuevo plan</button></div>` : ""}
   ${list.map((x, i) => sesCard(k, { x, w: W, i })).join("")}
   <button class="btn ghost" data-act="sp-edit" data-v="1">Cambiar mi plan</button>
@@ -281,7 +318,7 @@ export function openReg(k, w, i) {
   C.openSheet(ses ? ses.title : "Registrar entreno", `${Cc.gps ? `<button class="btn sp-gps-big" data-act="sp-gps" ${w != null ? `data-w="${w}" data-i="${i}"` : ""}>▶ Grabar ahora con GPS</button><div class="sp-or"><span>o apúntalo a mano</span></div>` : ""}
     ${types.length > 1 ? `<label class="f">Tipo<select id="regType">${types.map((t) => `<option value="${t}">${esc(C.sportName(t))}</option>`).join("")}</select></label>` : ""}
     <div class="grid2"><label class="f">Día<input type="date" id="regDay" value="${today()}" max="${today()}"></label><label class="f">Duración<input id="regDur" placeholder="h:mm o minutos" value="${ses?.dur ? ses.dur : ""}"></label></div>
-    ${isEnd(k) ? `<div class="grid2"><label class="f">Distancia (km)<input id="regKm" inputmode="decimal"></label>${hasElev(k) ? `<label class="f">Desnivel + (m)<input id="regElev" inputmode="numeric"></label>` : `<label class="f">FC media<input id="regHr" inputmode="numeric" placeholder="ppm"></label>`}</div>` : ""}
+    ${isEnd(k) ? `<div class="grid2"><label class="f">Distancia (km)<input id="regKm" inputmode="decimal" value="${ses?.km ? String(ses.km).replace(".", ",") : ""}"></label>${hasElev(k) ? `<label class="f">Desnivel + (m)<input id="regElev" inputmode="numeric"></label>` : `<label class="f">FC media<input id="regHr" inputmode="numeric" placeholder="ppm"></label>`}</div>` : ""}
     ${!isEnd(k) || hasElev(k) ? `<label class="f">FC media (opcional)<input id="regHr" inputmode="numeric" placeholder="ppm"></label>` : ""}
     <div class="f"><span>Esfuerzo (1 = muy suave, 10 = máximo): <b id="regRpeL">${rpeL[5]}</b></span><input type="range" id="regRpe" min="1" max="10" value="5" oninput="document.getElementById('regRpeL').textContent=${JSON.stringify(rpeL).replace(/"/g, "&quot;")}[this.value]+' · '+this.value"></div>
     <label class="f">Notas<input id="regNotes" placeholder="Cómo te has sentido, ruta…"></label>

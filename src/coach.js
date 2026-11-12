@@ -19,7 +19,9 @@ const PEAK = { "5k": 60, "10k": 75, "21k": 110, "42k": 180, t21: 150, t50: 270, 
 const FIT_PEAK = { run: 60, trail: 120, bike: 150, swim: 45, hike: 180 };
 const LV = { beg: 0.7, mid: 1, adv: 1.15 };
 const r5 = (x) => Math.max(15, Math.round(x / 5) * 5);
-const hm = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " min" : ""}` : `${m} min`);
+let AMT = null;
+const hm = (m) => AMT ? AMT(m) : hmT(m);
+const hmT = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " min" : ""}` : `${m} min`);
 
 /* ---------- textos de sesiones ---------- */
 const STR = {
@@ -77,7 +79,7 @@ function endSession(sport, t, phase, mins, goal, wk, lvl) {
     if (sport === "trail") return ["Tirada larga por montaña", `${hm(mins)} por montaña con unos ${Math.round(mins * (goal === "ultra" || goal === "t50" ? 9 : 7) / 50) * 50} m de desnivel positivo. Anda en las subidas fuertes.`];
     if (sport === "bike") return ["Salida larga", `${hm(mins)} a ritmo suave-medio${goal === "puertos" ? ", con 1-2 puertos" : ""}. Come cada 30-45 min.`];
     if (sport === "swim") return ["Nado continuo", `${hm(mins)}: nada seguido sin parar a ritmo cómodo (si hace falta, para 20 s cada 200 m).`];
-    if (sport === "hike") return ["Ruta de montaña", `Una ruta de unas ${hm(mins)} con desnivel, con la mochila que llevarás.`];
+    if (sport === "hike") return ["Ruta de montaña", `Una ruta de ${hm(mins)} con desnivel, con la mochila que llevarás.`];
     return ["Tirada larga", `${hm(mins)} a ritmo suave${phase === "Específica" && (goal === "21k" || goal === "42k") ? `, con los últimos ${Math.round(mins * 0.25 / 5) * 5} min a ritmo de carrera` : ""}.`];
   }
   // calidad
@@ -176,4 +178,14 @@ export function goalFromRace(sport, km) {
   if (sport === "swim") return km >= 1.4 && km <= 4 ? "1500" : "tri";
   if (sport === "hike") return "ruta";
   return COACH[sport]?.kind === "team" ? (sport === "boxing" ? "comp" : "rend") : "fit";
+}
+
+// describe una sesión de fondo con la cantidad en km (amt convierte minutos en texto de distancia)
+export function describeEnd(sport, t, phase, mins, goal, w, lvl, amt) {
+  AMT = amt;
+  try {
+    let [title, desc] = endSession(sport, t, phase, mins, goal, w, lvl);
+    desc = desc.replace(/Calienta (\d+) min/g, (_, m) => `Calienta ${amt(+m)}`).replace(/(\d+) min suave\./g, (_, m) => `${amt(+m)} suave.`);
+    return [title, desc];
+  } finally { AMT = null; }
 }

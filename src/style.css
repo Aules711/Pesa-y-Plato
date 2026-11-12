@@ -903,6 +903,6 @@ body.sportapp .appbar{display:none}
 .sp-gps-big{background:var(--sp)!important;color:#fff!important;padding:14px!important}
 .sp-or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12.5px}.sp-or::before,.sp-or::after{content:"";flex:1;height:1px;background:var(--line)}
 .sc-acts{display:flex;gap:8px;flex-wrap:wrap}.sc-acts .btn{flex:1}
-.spapp .sc-s.today{outline-color:var(--sp)}.spapp .sc-chk[aria-pressed="true"]{background:var(--sp);border-color:var(--sp)}
+.spapp .sc-s.is-today{outline:2px solid var(--sp);outline-offset:-2px}.spapp .sc-chk[aria-pressed="true"]{background:var(--sp);border-color:var(--sp)}
 .ex-sp.on small{color:var(--sp)}
 .warn-card{border-left:4px solid #E8364F!important;background:color-mix(in srgb,#E8364F 9%,var(--surface))!important}
