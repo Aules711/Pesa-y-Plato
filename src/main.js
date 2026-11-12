@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import "./style.css";
 import { microFor, microFromOFF, MICRO_KEYS } from "./micros.js";
-import { makePlan, swapMeal, PLANNER_FOODS } from "./planner.js";
+import { makePlan, swapMeal, PLANNER_FOODS, planConflicts, avoidLabels } from "./planner.js";
 import { fileText, parsePlan, parseStudy, EXTRA_FOODS } from "./planparse.js";
 import { SPORT_LIST, SPORT, kcalFor, pace, speed, newTrack, elapsed, addPoint, markGap, packRoute, makeMap, drawRoute, hereMarker, fitRoute } from "./sport.js";
 import { COACH as SPC } from "./coach.js";
@@ -939,7 +939,10 @@ function viewCoach(){
 }
 function coachView(A){
   const P = A.plan, D = P.days.find(x => x.d===coach.day) || P.days[0], T = D ? coachDayTot(D) : null;
-  return `<div class="card coach-head"><span class="prem-badge">✨ Tu plan</span><h2 class="coach-title">${esc(P.title)}</h2><p class="note">${esc(P.summary)}</p>
+  const bad = planConflicts(P, A.req), sin = avoidLabels(A.req);
+  return `${bad.length ? `<div class="card warn-card"><b>⚠️ Este plan tiene cosas que dijiste que no comes</b><p class="note" style="margin:0">${esc(bad.join(", "))}. Pulsa «Otra propuesta» para hacerlo de nuevo sin ellas.</p><button class="btn" data-act="coach-again">🔀 Hacer otro plan sin eso</button></div>` : ""}
+    <div class="card coach-head"><span class="prem-badge">✨ Tu plan</span><h2 class="coach-title">${esc(P.title)}</h2><p class="note">${esc(P.summary)}</p>
+      ${sin.length ? `<p class="note sin-line" style="margin:0">🚫 Sin: <b>${esc(sin.join(", "))}</b></p>` : ""}
       <div class="nu-big"><div><b>${fmt(P.target.kcal)}</b><span>kcal/día</span></div><div><b>${P.target.p} g</b><span>proteína</span></div><div><b>${P.target.c} g</b><span>hidratos</span></div></div>
       ${A.applied ? `<div class="conn-msg ok">✓ Es tu plan actual: ya lo tienes cada día en el Diario.</div>` : `<button class="btn" data-act="coach-apply">✅ Usar este plan en mi Diario</button>`}</div>
     <div class="chips coach-days" role="tablist">${P.days.map(x => `<button class="chip" role="tab" data-act="coach-day" data-d="${x.d}" aria-pressed="${x.d===D?.d}">${WDAYS[x.d-1].slice(0,3)}${x.train?" 🏋️":""}</button>`).join("")}</div>
@@ -959,7 +962,8 @@ function coachRun(reuse){
   if (!t){ coach.err = "Revisa edad, altura y peso."; render(); return; }
   const plan = makePlan(req, t, Date.now());
   if (plan && t.fromStudy){ const S = req.study || {}; plan.summary = `Basado en tu estudio nutricional${S.date?` del ${S.date}`:""}${t.note?` (${t.note})`:""}. ` + plan.summary; plan.tips = [...studyTips(req), ...plan.tips].slice(0, 6); plan.study = true; }
-  if (!plan){ coach.err = "Con esas restricciones no encuentro platos suficientes. Quita alguna de «cosas que no comes»."; render(); return; }
+  if (!plan){ coach.err = `Con esas restricciones no encuentro platos suficientes para todas las comidas${avoidLabels(req).length ? ` (he quitado: ${avoidLabels(req).join(", ")})` : ""}. Quita alguna de «cosas que no comes».`; render(); return; }
+  const bad = planConflicts(plan, req); if (bad.length){ coach.err = "No he podido hacer un plan sin: " + bad.join(", ") + ". Revisa «cosas que no comes»."; render(); return; }
   S.aiplan = {req, plan, created:Date.now(), applied:false}; put("aiplan", S.aiplan);
   coach.step = null; coach.day = 1; coach.err = ""; render(); scrollTo({top:0}); confetti();
 }
@@ -969,6 +973,7 @@ function coachSwap(d, m){
 }
 async function coachApply(){
   const A = S.aiplan, P = A.plan, days = {};
+  if (planConflicts(P, A.req).length){ render(); scrollTo(0,0); return; }
   for (const d of P.days){ const T = coachDayTot(d), o = {target:{kcal:r0(T.kcal), p:r0(T.p), label:`${fmt(T.kcal)} kcal · ${r0(T.p)} g proteína`}, dishes:{}};
     for (const m in d.meals){ o[m] = d.meals[m].items.map(i => ({name:i.name, per:i.per, servings:[], g:i.g})); o.dishes[m] = d.meals[m].t; }
     days[d.d] = o; }

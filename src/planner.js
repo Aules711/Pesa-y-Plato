@@ -87,31 +87,71 @@ const SHARE = { Desayuno:.25, Comida:.35, Cena:.27, Snacks:.13 };
 const MEALS = ["Desayuno", "Comida", "Cena", "Snacks"];
 const nrm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
+// Lo que la persona NO come. Mejor quitar de más que poner algo que no puede comer.
+const GROUPS = [
+  [/lactosa|lacteo|\bleche|queso|yogur|nata\b|mantequilla|caseina|proteina de (la )?leche/, ["dairy"], "lácteos"],
+  [/gluten|celiac|trigo|harina|cebada|centeno/, ["gluten"], "gluten"],
+  [/marisco|gamba|crustace|langostino|molusco/, ["shellfish"], "marisco"],
+  [/pescado|\bpez\b|\bpeces\b/, ["fish", "shellfish"], "pescado y marisco"],
+  [/huevo|\bclaras?\b/, ["egg"], "huevo"],
+  [/frutos? secos?|\bnuez|nueces|almendra|cacahuete|\bmani\b|avellana|anacardo|pistacho/, ["nuts", "cacahuete"], "frutos secos"],
+  [/cerdo|porcino|jamon|\blomo\b|chorizo|embutido|fiambre|bacon|beicon|panceta/, ["cerdo"], "cerdo"],
+  [/embutido|fiambre|lonchas/, ["pavof", "jamon"], "embutidos"],
+  [/carnes? rojas?/, ["ternera", "cerdo", "jamon"], "carne roja"],
+  [/\bcarnes?\b(?! rojas?)/, ["meat"], "carne"],
+  [/\bpollo/, ["pollo"], "pollo"], [/\bpavo/, ["pavo", "pavof"], "pavo"], [/ternera|vacuno|\bvaca\b/, ["ternera"], "ternera"],
+  [/soja|tofu|edamame/, ["#soja"], "soja"],
+  [/legumbre/, ["lentejas", "garbanzos", "hummus", "#soja"], "legumbres"],
+  [/lenteja/, ["lentejas"], "lentejas"], [/garbanzo|hummus/, ["garbanzos", "hummus"], "garbanzos"],
+  [/\bfrutas?\b/, ["platano", "manzana", "frutosr", "kiwi", "naranja"], "fruta"],
+  [/frutos? rojos?|fresa|arandano|frambuesa/, ["frutosr"], "frutos rojos"], [/platano|banana/, ["platano"], "plátano"],
+  [/verdura|vegetal|hortaliza/, ["verduras", "brocoli", "espinacas", "calabacin", "judias", "pimiento", "champi", "ensalada", "cebolla"], "verduras"],
+  [/\bpan\b|panes|tostada|bocadillo/, ["pan"], "pan"], [/\barroz/, ["arroz"], "arroz"], [/pasta|macarron|espagueti|fideo/, ["pasta"], "pasta"],
+  [/avena/, ["avena"], "avena"], [/patata/, ["patata"], "patata"], [/boniato/, ["boniato"], "boniato"],
+  [/\bmaiz/, ["tmaiz"], "maíz"], [/tomate/, ["tomate", "tomatet"], "tomate"], [/cebolla/, ["cebolla"], "cebolla"],
+  [/champi|seta|hongo/, ["champi"], "champiñones"], [/aguacate/, ["aguacate"], "aguacate"], [/brocoli/, ["brocoli"], "brócoli"],
+  [/espinaca/, ["espinacas"], "espinacas"], [/pimiento/, ["pimiento"], "pimiento"], [/calabacin/, ["calabacin"], "calabacín"],
+  [/judia|\bvainas?\b/, ["judias"], "judías verdes"], [/lechuga|ensalada/, ["ensalada"], "ensalada"],
+  [/\batun/, ["atun"], "atún"], [/salmon/, ["salmon"], "salmón"], [/merluza/, ["merluza"], "merluza"],
+  [/chocolate|cacao/, ["choco"], "chocolate"], [/aceite/, ["aceite"], "aceite"], [/kiwi/, ["kiwi"], "kiwi"], [/naranja|citric/, ["naranja"], "naranja"],
+  [/manzana/, ["manzana"], "manzana"], [/quinoa/, ["quinoa"], "quinoa"], [/cuscus/, ["cuscus"], "cuscús"],
+];
+const TITLE_RX = [[/\bajos?\b|ajillo/, /ajillo|salsa verde/, "ajo"], [/picante|curry|especia/, /curry|tacos|fajita/, "picante"]];
+const STOP = /^(frutos?$|secos?$|alergi|alergic|intoleran|celiac|nada|ningun|tengo|gusta|gustan|puedo|comer|como|tambien|pero|sobre|todo|toda|tipo|cualquier|odio|evito|prefiero|mejor|nunca|alimento|comida|producto|derivad|ademas|menos|poco|mucho|nunca|algun|cosas|bien|mal|sienta|sientan|hace|dieta|siempre|veces|crudo|cocido|frito|asado|nada|soy|estoy|para|porque|cuando|esta|este|estos|estas|otro|otra|otros|otras|roja|rojo|blanca|blanco|verde|natural)/;
+const STEM = (w) => w.length > 5 ? w.replace(/(es|s)$/, "") : w.length > 4 ? w.replace(/s$/, "") : w;
 function blocked(v){
-  const a = nrm(v.avoid), tags = new Set();
+  const a = nrm(v.avoid), tags = new Set(), keys = new Set(), title = [], labels = [];
   if (v.diet === "veg" || v.diet === "vegan" || v.diet === "pesc") tags.add("meat");
   if (v.diet === "veg" || v.diet === "vegan") { tags.add("fish"); tags.add("shellfish"); }
   if (v.diet === "vegan") { tags.add("egg"); tags.add("dairy"); }
-  if (/lactosa|lacteo|leche|queso|yogur/.test(a)) tags.add("dairy");
-  if (/gluten|celiac|trigo/.test(a)) tags.add("gluten");
-  if (/marisco|gamba|crustace/.test(a)) tags.add("shellfish");
-  if (/pescado/.test(a)) { tags.add("fish"); tags.add("shellfish"); }
-  if (/huevo/.test(a)) tags.add("egg");
-  if (/frutos secos|nuez|nueces|almendra|cacahuete|mani/.test(a)) tags.add("nuts");
-  if (/cerdo|jamon/.test(a)) tags.add("cerdo");
-  if (/\bcarne\b/.test(a)) tags.add("meat");
-  if (/soja|tofu/.test(a)) tags.add("soja");
+  for (const [rx, list, l] of GROUPS) if (rx.test(a)) { for (const x of list) x[0] === "#" ? tags.add(x.slice(1)) : (F[x] ? keys : tags).add(x); labels.push(l); }
+  for (const [rx, trx, l] of TITLE_RX) if (rx.test(a)) { title.push(trx); labels.push(l); }
   if (v.budget === "low") tags.add("cara");
-  const words = a.split(/[^a-zñ]+/).filter(w => w.length >= 4 && !/^(alergia|intolerancia|lactosa|gluten|nada|ningun|ninguna|como|tengo|gusta|tambien|pero|sobre|todo)/.test(w));
-  return { tags, words };
+  // cualquier otra palabra que nombre un alimento o un plato
+  const words = a.split(/[^a-zñ]+/).filter(w => w.length >= 4 && !STOP.test(w)).map(STEM).filter(w => w.length >= 4);
+  const NAME_STOP = /^(para|crudo|lata|natural|tipo|variada|fresco|virgen|extra|alto|integrales|semidesnatada|cocidos?|cocidas)$/;
+  for (const w of words) for (const [k, f] of Object.entries(F)) if (nrm(f[0]).split(/[^a-zñ]+/).filter(x => x.length >= 4 && !NAME_STOP.test(x)).some(x => x.startsWith(w) || w.startsWith(x))) { if (!keys.has(k)) { keys.add(k); labels.push(f[0].toLowerCase()); } }
+  return { tags, keys, title, words, labels: [...new Set(labels)] };
 }
-const foodOk = (k, B) => { const f = F[k]; if (!f) return false; const tg = f[5].split(" ").filter(Boolean); if (tg.some(t => B.tags.has(t))) return false; const n = nrm(f[0]); return !B.words.some(w => n.includes(w.slice(0, -1))); };
+const foodOk = (k, B) => { const f = F[k]; if (!f || B.keys.has(k)) return false; const tg = f[5].split(" ").filter(Boolean); return !tg.some(t => B.tags.has(t)); };
 function recipeOk(r, B){
   if (![r.P, r.C, r.F].every(k => foodOk(k, B))) return false;
   if ((r.X || []).some(([k]) => !foodOk(k, B))) return false;
-  const t = nrm(r.t); if (B.words.some(w => t.includes(w.slice(0, -1)))) return false;
+  const t = nrm(r.t + " " + r.k);
+  if (B.title.some(rx => rx.test(t))) return false;
+  if (B.words.some(w => t.split(/[^a-zñ]+/).some(x => x.startsWith(w)))) return false;
   return true;
 }
+// alimentos de un plan que la persona ha dicho que no come (para avisar en planes viejos)
+export function planConflicts(plan, v){
+  const B = blocked(v), bad = new Set();
+  for (const d of plan?.days || []) for (const m of Object.values(d.meals || {})) {
+    for (const i of m.items || []) if (i.key && !foodOk(i.key, B)) bad.add(i.name);
+    const r = R[m.tpl]; if (r && !recipeOk(r, B) && ![...(m.items||[])].some(i => i.key && !foodOk(i.key, B))) bad.add(m.t);
+  }
+  return [...bad];
+}
+export const avoidLabels = v => blocked(v).labels;
 const VEG_ALT = ["ensalada", "verduras", "brocoli", "calabacin", "judias", "espinacas", "pimiento", "tomate"];
 
 // gramos de P, C y F para acercarse a [p, c, f] de la toma (sistema 3x3 + límites)
