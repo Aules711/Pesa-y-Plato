@@ -89,7 +89,7 @@ const S = { workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{},
   settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null, media:{}, health:{days:{}, wos:[]} };
 let tab = "home", day = today(), metric = "kg", progEx = "";
 let memMode = false, activeLoaded = false, user = null;
-const AI_ON = import.meta.env.VITE_AI_ENABLED === "true";
+const AI_ON = false;   // IA de pago desactivada (no cuesta nada)
 const SIGNUP_OPEN = import.meta.env.VITE_ALLOW_SIGNUP === "true";
 const TRAIN_ON = false;
 const STRAVA_SOON = true;   // Strava aparece como «Muy pronto» (poner false para activarlo)   // sección de entrenos oculta por ahora: poner true para volver a mostrarla
@@ -268,7 +268,7 @@ function landingHTML(card, mode){
     <section class="lf"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
         ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida y cena. Solo escribes los gramos.")}
-        ${feat("scan","Foto al plato con IA ⭐","Haz una foto a lo que vas a comer y la IA reconoce cada alimento y calcula gramos, calorías y macros. Y foto al código de barras para lo envasado. Premium: 3 € al mes.")}
+        ${feat("scan","Foto al código de barras ⭐","Haz una foto al código del paquete y la app trae sus calorías, proteínas, hidratos y grasas. Premium: 3 € al mes.")}
         ${feat("ring","Calorías y macros del día","Un anillo te dice cuánto te queda, y las barras cuánta proteína, hidratos y grasa llevas.")}
         ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Y si tu plan trae objetivo por día, se usa ese.")}
         ${feat("chart","Tu progreso a la vista","Peso corporal y calorías de las últimas semanas, para ver la tendencia y no fijarte en un solo día.")}
@@ -282,7 +282,7 @@ function landingHTML(card, mode){
         <li><b>Apunta lo que comes</b><span>Gramos y ✓. O haz una foto al código de barras de lo que no esté en tu plan.</span></li></ol></section>
     <section class="lauth" id="lauth"><div class="lauth-txt"><h2 class="lsec">${mode==="signup"?"Crea tu cuenta":mode==="forgot"?"Recupera tu contraseña":"Entra en tu cuenta"}</h2><p class="note">${mode==="signup"?"Es gratis. Solo necesitas un email.":mode==="forgot"?"Te enviamos un enlace para elegir una nueva.":"¿Aún no tienes cuenta? Créala gratis en un minuto."}</p></div>${card}</section>
     <section class="lfaqs"><h2 class="lsec">Preguntas frecuentes</h2>
-      ${faq("¿Cuánto cuesta?","La app es gratis. Las fotos con IA al plato y al código de barras son Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
+      ${faq("¿Cuánto cuesta?","La app es gratis. El plan a medida, la foto al código de barras y el resto de extras son Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
       ${faq("¿Tengo que descargar algo?","No. Es una web que funciona en el navegador. En el iPhone, abre la web en Safari, pulsa Compartir y «Añadir a pantalla de inicio» para tenerla como una app.")}
       ${faq("¿Puedo meter la dieta que ya sigo?","Sí. En Diario › Crear a mano montas cada día de la semana con sus alimentos y gramos habituales. A partir de ahí, cada día te aparece ya puesto y solo cambias los gramos si hace falta.")}
       ${faq("¿Y si un producto no sale al hacerle la foto?","Los datos vienen de Open Food Facts, una base de datos abierta. Si un producto no está, créalo en «Crear» copiando la etiqueta y se queda guardado para la próxima vez.")}
@@ -903,7 +903,7 @@ function openReport(){
 function openFab(){
   const T = (act, ico, l, sub, prem) => `<button class="fab-t" data-act="${act}"><span class="fab-i" aria-hidden="true">${ico}</span><b>${l}${prem && !isPremium() ? " ⭐" : ""}</b>${sub?`<small>${sub}</small>`:""}</button>`;
   const R = (act, ico, l) => `<button class="fab-r" data-act="${act}"><span aria-hidden="true">${ico}</span>${l}<span class="prof-ch" aria-hidden="true">›</span></button>`;
-  openSheet("Registrar", `<div class="fab-grid">${T("fab-food","🔍","Registrar alimento",mealNow())}${T("fab-photo","📸","Foto del plato o código","",true)}</div>
+  openSheet("Registrar", `<div class="fab-grid">${T("fab-food","🔍","Registrar alimento",mealNow())}${T("fab-photo","▥","Foto al código de barras","",true)}</div>
     <div class="fab-list">${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
 }
 /* ---------- Strava ---------- */
@@ -1223,7 +1223,7 @@ function viewProfile(){
   <div class="card prof-head"><span class="prof-av" aria-hidden="true">${esc(ini)}</span><div class="prof-id"><b>${esc(name)}</b><small>${esc(user?.email||"")}</small></div>
     ${isPremium() ? `<span class="prof-badge on">⭐ Premium</span>` : `<button class="prof-badge" data-act="prof-sec" data-k="premium">Hazte Premium</button>`}</div>
   <div class="prof-group">
-    ${row("premium","⭐","Premium", isPremium() ? esc(premiumStatus()) : "Foto al plato con IA y al código de barras")}
+    ${row("premium","⭐","Premium", isPremium() ? esc(premiumStatus()) : "Plan a medida, código de barras, ayuno…")}
     ${row("plan","🍽️","Mi plan de comidas", planStatus())}
     ${row("goals","🎯","Objetivos", `${fmt(g.kcal)} kcal · ${g.p} g proteína`)}
   </div>
@@ -1426,12 +1426,9 @@ function drawFood(){
     <label class="f">Ración (nombre)<input id="cSn" placeholder="unidad"></label><label class="f">Ración (g)<input id="cSg" inputmode="decimal" placeholder="9"></label></div>
     <span class="msg" id="cMsg" hidden></span><button class="btn" data-act="create-food">Crear y elegir cantidad</button>`;
   if (c.t==="scan" && !isPremium()){ P.innerHTML = premiumPitch(); return; }
-  if (c.t==="scan"){ P.innerHTML = `<label class="ai-big"><span class="ai-ico" aria-hidden="true">📸</span><span><b>Foto del plato</b><small>La IA reconoce lo que hay y calcula gramos, calorías y macros</small></span><input type="file" id="platePhoto" accept="image/*" hidden></label>
-    <input id="plateHint" placeholder="Opcional: añade detalles (salsa, aceite…)" aria-label="Detalles del plato">
-    <div id="aiOut" class="stack"></div>
-    <div class="or"><span>o</span></div>
-    <label class="btn ghost" style="cursor:pointer;text-align:center">▥ Foto del código de barras<input type="file" id="scanPhoto" accept="image/*" capture="environment" hidden></label>
-    <p class="note" id="scanMsg">Para productos envasados: foto al código, de cerca y de frente. Los datos vienen de Open Food Facts.</p>`; return; }
+  if (c.t==="scan"){ P.innerHTML = `<div class="scan-photo"><div class="scan-ill" aria-hidden="true">▥</div>
+    <label class="btn" style="cursor:pointer;text-align:center">📷 Foto del código de barras<input type="file" id="scanPhoto" accept="image/*" capture="environment" hidden></label>
+    <p class="note" id="scanMsg" style="text-align:center">Para productos envasados: foto al código, de cerca, de frente y con buena luz. Los datos vienen de Open Food Facts.</p></div>`; return; }
   if (c.t==="ai" && !isPremium()){ P.innerHTML = premiumPitch(); return; }
   if (c.t==="ai") P.innerHTML = `<p class="note">Describe lo que has comido y la IA calcula una estimación. Revísala antes de añadirla.</p>
     <textarea id="aiText" placeholder="Un plato de macarrones con tomate y atún, una manzana y un vaso de leche"></textarea>
@@ -1538,7 +1535,7 @@ function premiumStatus(){
   return premium.until >= today() ? `Tienes Premium hasta el ${longDay(premium.until)}.` : `Tu Premium terminó el ${longDay(premium.until)}.`;
 }
 function premFeats(on){
-  const F = [["plate","📸","Foto al plato con IA","Haz una foto a lo que vas a comer: la IA reconoce cada alimento y calcula gramos, calorías y macros. Tú solo revisas y añades."],
+  const F = [
              ["code","▥","Foto al código de barras","Para lo envasado: foto al código y salen sus calorías, macros, fibra, azúcar y sal de la etiqueta."],
              ["nutri","✨","Plan de nutrición a medida","Como un entrenador personal: respondes unas preguntas y te crea al momento tu menú semanal con platos, gramos y calorías. Se carga en tu Diario y cambias los platos que quieras."],
              ["fast","⏱️","Ayuno intermitente","Cronometra tus ayunos 16:8, 18:6… con anillo de progreso e historial."],
@@ -1551,7 +1548,7 @@ function premFeats(on){
 const mealNow = () => { const h = new Date().getHours() + new Date().getMinutes()/60; return h < 11 ? "Desayuno" : h < 16.5 ? "Comida" : h < 20 ? "Snacks" : "Cena"; };
 function premiumPitch(){
   const ph = adminInfo.phone, concept = `Premium ${user?.email || ""}`;
-  return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Fotos que lo calculan todo</h3>
+  return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Todo lo de Premium</h3>
     ${premFeats(false)}
     <div class="prem-price"><b>${esc(adminInfo.price||"3")} €</b><span>al mes</span></div>
     ${ph ? `<ol class="prem-steps">
@@ -2131,7 +2128,7 @@ document.addEventListener("click", e => {
     case "edit-entry": openEditEntry(el.dataset.id); break;
     case "prem-use": { day = today(); tab = "food"; render(); openAddFood(mealNow()); sheetCtx.t = "scan"; drawFood();
       document.querySelectorAll("#ftabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t==="scan"));
-      $(el.dataset.k==="plate" ? "platePhoto" : "scanPhoto")?.click(); break; }
+      $("scanPhoto")?.click(); break; }
     case "ftab": stopScan(); c.t = el.dataset.t; c.food = null; drawFood(); break;
     case "scan-lookup": { const v = ($("scanCode").value||"").replace(/\D/g,""); if (v.length >= 8) lookupBarcode(v); else $("scanMsg").textContent = "El código tiene que tener al menos 8 números."; break; }
     case "pick-food": c.food = c.list[+el.dataset.i]; c.qty = null; c.unit = null; drawFoodDetail(); break;
