@@ -120,17 +120,17 @@ export function makeCoachPlan(sport, req, todayISO) {
   let N = DEF_WEEKS[goal] || 8, raceDay = null;
   if (req.date && req.date > todayISO) {
     const wk = Math.floor((new Date(req.date + "T12:00:00") - new Date(start + "T12:00:00")) / (7 * 864e5));
-    N = Math.max(3, Math.min(24, wk + 1)); raceDay = (new Date(req.date + "T12:00:00").getDay() + 6) % 7;
+    N = Math.max(1, Math.min(24, wk + 1)); raceDay = (new Date(req.date + "T12:00:00").getDay() + 6) % 7;
   }
   const slots = SLOTS[days], weeks = [];
   const event = S.kind === "end" && goal !== "fit" && goal !== "mont" && goal !== "tec";
-  const taper = event ? (N >= 10 ? 2 : 1) : 0;
+  const taper = event ? Math.min(N, req.taper || (N >= 10 ? 2 : 1)) : 0;
   for (let w = 0; w < N; w++) {
     const tw = w >= N - taper, rec = !tw && w % 4 === 3 && w < N - 1;
     let phase, list;
     if (S.kind === "end") {
       phase = tw ? "Puesta a punto" : w < (N - taper) * 0.4 ? "Base" : w < (N - taper) * 0.75 ? "Construcción" : "Específica";
-      const peak = (PEAK[goal] || FIT_PEAK[sport]) * LV[lvl], st = Math.max(25, Math.min(peak * 0.85, +req.recentLong || peak * 0.45));
+      const peak = (+req.peak || PEAK[goal] || FIT_PEAK[sport]) * LV[lvl], st = Math.max(25, Math.min(peak * 0.85, +req.recentLong || peak * 0.45));
       const prog = st + (peak - st) * Math.min(1, w / Math.max(1, N - taper - 1));
       const L = r5((tw ? peak * (w === N - 1 ? 0.45 : 0.65) : prog) * (rec ? 0.7 : 1));
       const pat = { 2: ["Q", "L"], 3: ["E", "Q", "L"], 4: ["E", "Q", "S", "L"], 5: ["E", "Q", "E", "S", "L"], 6: ["E", "Q", "R", "Q", "S", "L"] }[days].slice();
@@ -142,7 +142,7 @@ export function makeCoachPlan(sport, req, todayISO) {
       });
       if (w === N - 1 && raceDay != null) {
         list = list.filter((s) => s.d < raceDay && s.t !== "S").slice(-2).map((s) => ({ ...s, dur: r5(s.dur * 0.6), desc: s.desc + " Muy suave: la carrera está cerca." }));
-        list.push({ d: raceDay, t: "RACE", title: "🏁 Día del objetivo", desc: endSession(sport, "RACE")[1], dur: 0 });
+        list.push({ d: raceDay, t: "RACE", title: req.raceName ? "🏁 " + req.raceName : "🏁 Día del objetivo", desc: endSession(sport, "RACE")[1], dur: 0, raceId: req.raceId || "" });
       }
     } else {
       phase = w < 2 ? "Adaptación" : w < N - 2 ? "Desarrollo" : "Rendimiento";
@@ -188,4 +188,46 @@ export function describeEnd(sport, t, phase, mins, goal, w, lvl, amt) {
     desc = desc.replace(/Calienta (\d+) min/g, (_, m) => `Calienta ${amt(+m)}`).replace(/(\d+) min suave\./g, (_, m) => `${amt(+m)} suave.`);
     return [title, desc];
   } finally { AMT = null; }
+}
+
+// carga de una carrera: duración estimada (min) según distancia y desnivel
+const PACE_MIN = { run: 6, trail: 8.5, hike: 12, bike: 2.4, swim: 22 };
+export const raceEffortKm = (sport, r) => (+r.km || 0) + (+r.elev || 0) / (sport === "bike" ? 1000 : 100);
+export function raceMinutes(sport, r) { return raceEffortKm(sport, r) * (PACE_MIN[sport] || 6); }
+// parámetros del plan para preparar una carrera
+export function raceReq(sport, r) {
+  const T = raceMinutes(sport, r), clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const peak = { run: clamp(T * 0.75, 60, 180), trail: clamp(T * 0.6, 75, 330), hike: clamp(T * 0.7, 90, 420), bike: clamp(T * 0.75, 90, 330), swim: clamp(T, 30, 75) }[sport];
+  return { date: r.date, goal: goalFromRace(sport, raceEffortKm(sport, r)), peak: peak ? Math.round(peak) : 0, taper: T >= 240 ? 3 : T >= 90 ? 2 : 1, raceId: r.id, raceName: r.name };
+}
+// mete el resto de carreras/partidos dentro del plan: sesión de carrera, días suaves antes y recuperación después según su carga
+export function insertRaces(plan, races) {
+  const S = COACH[plan.sport], st = new Date(plan.start + "T12:00:00"), off = (d) => Math.round((new Date(d + "T12:00:00") - st) / 864e5);
+  const end = S.kind === "end";
+  for (const r of races) {
+    if (r.id === plan.req.raceId) continue;
+    const o = off(r.date); if (o < 0 || o >= plan.weeks.length * 7) continue;
+    const T = end ? raceMinutes(plan.sport, r) : 90, before = end ? (T >= 150 ? 3 : T >= 60 ? 2 : 1) : 1, after = end ? Math.max(1, Math.min(7, Math.round(T / 40))) : 1;
+    for (let w = 0; w < plan.weeks.length; w++) {
+      plan.weeks[w].sessions = plan.weeks[w].sessions.flatMap((x) => {
+        const a = w * 7 + x.d, dd = a - o;
+        if (dd === 0) return [];
+        if (x.t === "RACE") return [x];
+        if (dd < 0 && dd >= -before) {
+          if (["S", "F", "F2", "C", "A"].includes(x.t)) return end || x.t !== "A" ? [] : [x];
+          if (end) return [{ ...x, t: "E", dur: Math.max(20, Math.round(x.dur * 0.5 / 5) * 5), pre: 1 }];
+        }
+        if (dd > 0 && dd <= after) {
+          if (["S", "F", "F2"].includes(x.t) && dd <= 2) return [];
+          if (end && (x.t === "Q" || x.t === "L" || x.t === "E")) return [{ ...x, t: "R", dur: Math.max(20, Math.round(Math.min(x.dur, 45) * 0.7 / 5) * 5), post: 1 }];
+          if (!end && x.t === "C") return [{ ...x, t: "M", title: "Movilidad", desc: "20-25 min: cadera, tobillo, hombro y columna, para recuperar del partido.", dur: 25 }];
+        }
+        return [x];
+      });
+    }
+    const w = Math.floor(o / 7), d = o - w * 7;
+    plan.weeks[w].sessions.push({ d, t: "RACE", title: (end ? "🏁 " : S.e + " ") + r.name, desc: end ? "Día de carrera. Calienta 10-15 min, sal más suave de lo que crees y come y bebe lo practicado." : "Día de partido. Calienta bien 15 min y bebe durante el partido.", dur: 0, raceId: r.id });
+    plan.weeks[w].sessions.sort((a, b) => a.d - b.d);
+  }
+  return plan;
 }

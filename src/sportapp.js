@@ -1,5 +1,5 @@
 // BEINGHEALTHY · Cada deporte como una app propia: Hoy, Plan, Calendario, Carreras y Datos (resumen, estadísticas y zonas).
-import { COACH, DAY_N, TIPS, makeCoachPlan, adaptWeek, goalFromRace, goalName, describeEnd } from "./coach.js";
+import { COACH, DAY_N, TIPS, makeCoachPlan, adaptWeek, goalFromRace, goalName, describeEnd, raceReq, insertRaces, raceMinutes, raceEffortKm } from "./coach.js";
 
 let C = null;                                   // utilidades de main.js
 export function spInit(ctx) { C = ctx; }
@@ -170,7 +170,8 @@ export function spSubtitle(k) {
 export function spView(k) {
   const Cc = COACH[k], tabs = [["hoy", "Hoy", "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"], ["plan", "Plan", "M9 5h11M9 12h11M9 19h11M4 5h.01M4 12h.01M4 19h.01"],
     ["cal", "Calendario", "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4"], ["races", RACE_W(k).many, "M5 21V4h11l-2 4 2 4H5"], ["data", "Datos", "M4 20V10M10 20V4M16 20v-7M22 20H2"]];
-  const body = { hoy: vHoy, plan: vPlan, cal: vCal, races: vRaces, data: vData }[st.tab](k);
+  if (C.S.scoach?.[k] && !st.syncing) { const P = C.S.scoach[k]; if ((P.races ?? "") !== racesSig(k) || (P.req.raceId && P.req.date < C.today())) { st.syncing = true; Promise.resolve(syncPlan(k)).finally(() => { st.syncing = false; C.render(); }); } }
+  const body = (st.msg ? `<div class="sp-adj">🔄 ${C.esc(st.msg)}</div>` : "") + { hoy: vHoy, plan: vPlan, cal: vCal, races: vRaces, data: vData }[st.tab](k); st.msg = "";
   return `<div class="spapp" style="--sp:${SP_COLOR[k]}">
     <div class="sp-head"><button class="sp-back" data-act="ex-back" aria-label="Volver a Deportes">‹</button><span class="sp-ico" aria-hidden="true">${Cc.e}</span><b>${Cc.n}</b>
       <button class="sp-reg" data-act="sp-reg">+ Registrar</button></div>
@@ -195,7 +196,7 @@ function vHoy(k) {
   const ws = C.weekStart(today()), wActs = actsOf(k).filter((a) => a.day >= ws), wMin = wActs.reduce((a, x) => a + (+x.dur || 0), 0) / 60, wKm = wActs.reduce((a, x) => a + (+x.km || 0), 0);
   const cw = P ? curWeek(P) : -1, wPlan = P?.weeks[cw]?.sessions.length || 0, wDone = P?.weeks[cw] ? P.weeks[cw].sessions.filter((_, i) => isDone(k, cw, i)).length : 0;
   const last = actsOf(k).slice(0, 4);
-  return `${nr ? `<button class="card sp-race-cd" data-act="sp-tab" data-t="races"><span class="sp-cd"><b>${daysTo(nr.date)}</b><small>días</small></span><span><small class="note">Próxima ${RACE_W(k).one}${nr.prio === "A" ? " · objetivo principal" : ""}</small><b>${esc(nr.name)}</b><small class="note">${C.dayLabel(nr.date)}${nr.km ? ` · ${km2(nr.km)} km` : ""}${nr.elev ? ` · ${nr.elev} m+` : ""}</small></span></button>` : ""}
+  return `${nr ? `<button class="card sp-race-cd" data-act="sp-tab" data-t="races"><span class="sp-cd"><b>${daysTo(nr.date)}</b><small>días</small></span><span><small class="note">Próxima ${RACE_W(k).one}</small><b>${esc(nr.name)}</b><small class="note">${C.dayLabel(nr.date)}${nr.km ? ` · ${km2(nr.km)} km` : ""}${nr.elev ? ` · ${nr.elev} m+` : ""}</small></span></button>` : ""}
   ${!P ? `<div class="card sp-cta"><b>Crea tu plan de ${COACH[k].n.toLowerCase()}</b><p class="note">Te preparo los entrenos de cada semana según tu objetivo, y los ajusto a la carga que llevas.</p><button class="btn" data-act="sp-tab" data-t="plan">Crear mi plan</button></div>`
     : tod.length ? `<h2 class="sp-h2">Hoy te toca</h2>${tod.map((o) => sesCard(k, o, { noToday: true })).join("")}`
     : `<div class="card"><b>Hoy toca descanso 😌</b><p class="note" style="margin:0">${next ? `Siguiente: <b>${esc(next.x.title)}</b> ${next.in === 1 ? "mañana" : `el ${DAY_N[next.x.d].toLowerCase()}`}.` : "Descansar también es entrenar."}</p></div>`}
@@ -227,15 +228,36 @@ function planForm(k) {
     <div class="f"><span>¿Cuál es tu objetivo?</span><div class="seg-g">${Cc.goals.map(([v, l]) => o("scGoal", v, l, g0)).join("")}</div></div>
     <div class="f"><span>Tu nivel</span><div class="seg-g">${o("scLv", "beg", "Empiezo", P.level)}${o("scLv", "mid", "Intermedio", P.level || "mid")}${o("scLv", "adv", "Avanzado", P.level)}</div></div>
     <div class="f"><span>¿Cuántos días a la semana puedes entrenar?</span><div class="seg-g">${[2, 3, 4, 5, 6].map((d) => o("scDays", d, d, P.days || 3)).join("")}</div></div>
-    ${isEnd(k) ? `<label class="f">Fecha de tu carrera u objetivo (opcional)<input type="date" id="scDate" min="${C.addDays(C.today(), 14)}" value="${C.esc(P.date || (nr && daysTo(nr.date) >= 14 ? nr.date : ""))}"></label>` : ""}
+    ${isEnd(k) && planTarget(k) ? `<p class="note sp-adj" style="margin:0">🏁 Tu plan se prepara para <b>${C.esc(planTarget(k).name)}</b> (tu carrera de más carga) y mete el resto de tus carreras. Cambia tus carreras en «Carreras».</p>` : isEnd(k) ? `<label class="f">Fecha de tu carrera u objetivo (opcional)<input type="date" id="scDate" min="${C.addDays(C.today(), 14)}" value="${C.esc(P.date || (nr && daysTo(nr.date) >= 14 ? nr.date : ""))}"></label>` : ""}
     ${actsOf(k).length ? `<p class="note" style="margin:0">Uso tus últimos entrenos para que el plan empiece a tu nivel actual.</p>` : ""}
     <button class="btn" data-act="sp-make">${C.S.scoach?.[k] ? "Rehacer mi plan" : "Crear mi plan"}</button>
     ${C.S.scoach?.[k] ? `<button class="btn ghost" data-act="sp-edit" data-v="0">Cancelar</button>` : ""}</div>`;
 }
 function recentLong(k) { const since = C.addDays(C.today(), -28); const l = actsOf(k).filter((a) => a.day >= since).map((a) => (+a.dur || 0) / 60); return l.length ? Math.round(Math.max(...l)) : 0; }
+// las carreras que vienen mandan: el plan apunta a la de más carga (distancia + desnivel) y mete las demás con su descanso
+export function planTarget(k) {
+  const up = racesOf(k).filter((r) => r.date > C.today()).sort((a, b) => a.date < b.date ? -1 : 1);
+  if (!up.length || !isEnd(k)) return null;
+  const horizon = C.addDays(C.today(), 24 * 7), inH = up.filter((r) => r.date <= horizon);
+  const L = inH.length ? inH : [up[0]];
+  return L.reduce((b, r) => raceMinutes(k, r) > raceMinutes(k, b) + 1e-6 ? r : b);
+}
 export function makePlanFor(k, req) {
-  const P = makeCoachPlan(k, { ...req, recentLong: recentLong(k) }, C.today()); P.done = {};
-  return C.put("sportcoach", { plans: { ...(C.S.scoach || {}), [k]: P } });
+  const T = planTarget(k), base = { ...req, recentLong: recentLong(k) };
+  const rq = T ? { ...base, ...raceReq(k, T) } : { ...base, raceId: "", raceName: "", peak: 0, taper: 0 };
+  let P = makeCoachPlan(k, rq, C.today());
+  P = insertRaces(P, racesOf(k).filter((r) => r.date >= C.today()));
+  P.done = {}; P.races = racesSig(k);
+  const out = C.put("sportcoach", { plans: { ...(C.S.scoach || {}), [k]: P } });
+  return out.then((x) => { for (const a of actsOf(k)) if (a.day >= P.start) autoMark(k, a.day); return x; });
+}
+const racesSig = (k) => racesOf(k).filter((r) => r.date >= C.today()).map((r) => `${r.id}:${r.date}:${r.km || 0}:${r.elev || 0}`).sort().join("|");
+// si cambian las carreras (o ya pasó la carrera objetivo), rehace el plan con tus mismas respuestas
+export function syncPlan(k) {
+  const P = C.S.scoach?.[k]; if (!P) return;
+  const passed = P.req.raceId && P.req.date && P.req.date < C.today();
+  if ((P.races ?? "") === racesSig(k) && !passed) return;
+  const { goal, level, days } = P.req; return makePlanFor(k, { goal, level, days, date: passed ? "" : P.req.date });
 }
 const DAY3 = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 function weekBlock(k, P, w, cur) {
@@ -292,7 +314,7 @@ function raceRow(k, r) {
   const { esc } = C, fut = r.date >= C.today(), dd = daysTo(r.date);
   const res = isEnd(k) ? (r.time ? `⏱ ${hms(r.time)}${r.km ? ` · ${paceS(r.time / r.km)} /km` : ""}${r.pos ? ` · ${esc(r.pos)}º` : ""}` : "") : (r.res ? `${{ W: "✅ Victoria", D: "🤝 Empate", L: "❌ Derrota" }[r.res] || ""}${r.score ? ` · ${esc(r.score)}` : ""}` : "");
   return `<button class="card sp-race" data-act="sp-race-edit" data-id="${esc(r.id)}"><span class="sp-rd"><b>${C.parseDay(r.date).getDate()}</b><small>${MON3[C.parseDay(r.date).getMonth()]}</small></span>
-    <span class="n"><b>${esc(r.name)}${r.prio ? ` <i class="sp-prio p${r.prio}">${r.prio}</i>` : ""}</b><small>${[r.km ? km2(r.km) + " km" : "", r.elev ? r.elev + " m+" : "", r.kind || ""].filter(Boolean).join(" · ")}${r.goal && fut ? ` · objetivo ${hms(r.goal)}` : ""}</small>
+    <span class="n"><b>${esc(r.name)}${C.S.scoach?.[k]?.req?.raceId === r.id && r.date >= C.today() ? ` <i class="sp-prio pA">Objetivo del plan</i>` : ""}</b><small>${[r.km ? km2(r.km) + " km" : "", r.elev ? r.elev + " m+" : "", r.kind || ""].filter(Boolean).join(" · ")}${r.goal && fut ? ` · objetivo ${hms(r.goal)}` : ""}</small>
     ${fut ? `<small class="sp-in">${dd === 0 ? "¡Hoy!" : dd === 1 ? "Mañana" : `En ${dd} días`}</small>` : res ? `<small class="sp-res">${res}</small>` : `<small class="note">Toca para poner tu resultado</small>`}</span><span class="prof-ch" aria-hidden="true">›</span></button>`;
 }
 function vRaces(k) {
@@ -302,15 +324,13 @@ function vRaces(k) {
   ${past.length ? `<h2 class="sp-h2">Hechas</h2>${past.map((r) => raceRow(k, r)).join("")}` : ""}`;
 }
 export function openRace(k, id, day) {
-  const { esc } = C, r = (C.S.races || []).find((x) => x.id === id) || { sport: k, date: day || C.today(), prio: "B" }, W = RACE_W(k), end = isEnd(k), fut = r.date >= C.today();
-  const o = (v, l) => `<label class="seg-o"><input type="radio" name="rPrio" value="${v}" ${r.prio === v ? "checked" : ""}><span>${l}</span></label>`;
+  const { esc } = C, r = (C.S.races || []).find((x) => x.id === id) || { sport: k, date: day || C.today() }, W = RACE_W(k), end = isEnd(k), fut = r.date >= C.today();
   const ro = (v, l) => `<label class="seg-o"><input type="radio" name="rRes" value="${v}" ${r.res === v ? "checked" : ""}><span>${l}</span></label>`;
   C.openSheet(id ? r.name : W.add, `<label class="f">${end ? "Nombre de la carrera" : k === "boxing" ? "Rival o evento" : "Rival o torneo"}<input id="rName" value="${esc(r.name || "")}" placeholder="${end ? "Ej.: Behobia-San Sebastián" : "Ej.: vs. CD Ejemplo"}"></label>
     <label class="f">Fecha<input type="date" id="rDate" value="${esc(r.date)}"></label>
     ${end ? `<div class="grid2"><label class="f">Distancia (km)<input id="rKm" inputmode="decimal" value="${r.km ? String(r.km).replace(".", ",") : ""}"></label>${hasElev(k) ? `<label class="f">Desnivel + (m)<input id="rElev" inputmode="numeric" value="${r.elev || ""}"></label>` : `<label class="f">Tiempo objetivo<input id="rGoal" placeholder="h:mm:ss" value="${r.goal ? hms(r.goal) : ""}"></label>`}</div>
       ${hasElev(k) ? `<label class="f">Tiempo objetivo<input id="rGoal" placeholder="h:mm:ss" value="${r.goal ? hms(r.goal) : ""}"></label>` : ""}
-      <div class="f"><span>Importancia</span><div class="seg-g">${o("A", "A · objetivo principal")}${o("B", "B · importante")}${o("C", "C · entreno")}</div></div>
-      <label class="tgl"><input type="checkbox" id="rPlan" ${!id && fut ? "checked" : ""}><span>Preparar mi plan para esta carrera (si es la A)</span></label>
+      ${fut ? `<p class="note" style="margin:0">🔄 Al guardar, tu plan se rehace solo: se prepara para tu carrera de más carga y mete las demás con días suaves antes y recuperación después, según su distancia y desnivel.</p>` : ""}
       <details class="card" ${!fut ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Resultado</summary><div class="stack" style="margin-top:10px">
         <div class="grid2"><label class="f">Tiempo final<input id="rTime" placeholder="h:mm:ss" value="${r.time ? hms(r.time) : ""}"></label><label class="f">Posición<input id="rPos" inputmode="numeric" value="${esc(r.pos || "")}"></label></div></div></details>`
     : `<label class="f">Tipo<select id="rKind">${["Liga", "Amistoso", "Torneo", "Copa", "Entreno"].map((x) => `<option ${r.kind === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
@@ -327,12 +347,17 @@ export async function saveRace(k, id) {
   if (!name || !date) { const m = $("rMsg"); m.textContent = "Pon el nombre y la fecha."; m.hidden = false; return; }
   const radio = (n) => document.querySelector(`input[name=${n}]:checked`)?.value || "";
   const r = { id: id || "r" + Date.now(), sport: k, name, date, notes: v("rNotes"),
-    ...(isEnd(k) ? { km: +v("rKm").replace(",", ".") || 0, elev: +v("rElev") || 0, goal: parseT(v("rGoal")), prio: radio("rPrio") || "B", time: parseT(v("rTime")), pos: v("rPos") }
+    ...(isEnd(k) ? { km: +v("rKm").replace(",", ".") || 0, elev: +v("rElev") || 0, goal: parseT(v("rGoal")), time: parseT(v("rTime")), pos: v("rPos") }
       : { kind: v("rKind"), res: radio("rRes"), score: v("rScore"), min: +v("rMin") || 0 }) };
-  const plan = isEnd(k) && $("rPlan")?.checked && r.prio === "A" && daysTo(r.date) >= 14;
   await C.put("races", { list: [r, ...(C.S.races || []).filter((x) => x.id !== r.id)] });
-  if (plan) { const old = C.S.scoach?.[k]?.req || {}; await makePlanFor(k, { goal: goalFromRace(k, r.km), level: old.level || "mid", days: old.days || 4, date: r.date }); st.tab = "plan"; st.week = null; }
-  C.closeSheet(); C.render(); scrollTo(0, 0);
+  let msg = "";
+  if (r.date >= C.today()) {
+    const old = C.S.scoach?.[k]?.req || {};
+    await makePlanFor(k, { goal: old.goal || (isEnd(k) ? goalFromRace(k, raceEffortKm(k, r)) : COACH[k].goals[0][0]), level: old.level || "mid", days: old.days || (isEnd(k) ? 4 : 3), date: "" });
+    const T = planTarget(k); msg = T ? `Plan rehecho: preparo ${T.name}${T.id !== r.id ? ` y meto ${r.name} con sus días suaves y de recuperación` : ""}.` : `Plan actualizado con ${r.name}.`;
+    st.tab = "plan"; st.week = null;
+  } else await syncPlan(k);
+  st.msg = msg; C.closeSheet(); C.render(); scrollTo(0, 0);
 }
 
 /* ---------- Registrar entreno ---------- */
@@ -467,7 +492,7 @@ export function spAction(act, el, k) {
     case "sp-race-new": openRace(k, null, d.d || null); return true;
     case "sp-race-edit": openRace(k, d.id); return true;
     case "sp-race-save": saveRace(k, d.id || null); return true;
-    case "sp-race-del": if (d.sure) { C.put("races", { list: (C.S.races || []).filter((r) => r.id !== d.id) }).then(() => { C.closeSheet(); C.render(); }); } else { d.sure = 1; el.textContent = "Toca otra vez para borrar"; } return true;
+    case "sp-race-del": if (d.sure) { C.put("races", { list: (C.S.races || []).filter((r) => r.id !== d.id) }).then(() => syncPlan(k)).then(() => { st.msg = "Carrera borrada: he ajustado tu plan."; C.closeSheet(); C.render(); }); } else { d.sure = 1; el.textContent = "Toca otra vez para borrar"; } return true;
     case "sp-data": st.data = d.v; C.render(); return true;
     case "sp-per": st.per = d.v; st.off = 0; C.render(); return true;
     case "sp-off": st.off = +d.v; C.render(); return true;
