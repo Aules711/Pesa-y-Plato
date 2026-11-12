@@ -225,6 +225,12 @@ function authView(mode, msg){
   A.className = "landing"; A.innerHTML = landingHTML(card, mode);
 }
 const ICONS = {
+  pie:'<path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/>',
+  doc:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  report:'<path d="M4 20V4M4 20h16"/><path d="M8 16v-4M12 16V8M16 16v-6"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
   lift:'<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
   food:'<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2.5 1-4 3.5-4 7v3h4"/>',
   chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
@@ -246,45 +252,54 @@ function landingHTML(card, mode){
     <section class="hero"><div class="hero-txt">
         <span class="kicker">Gratis · En el móvil y el ordenador</span>
         <h1>Tu dieta, <em>al gramo</em>, sin complicarte.</h1>
-        <p class="lead">Mete tu plan de comidas una vez y cada día te lo encuentras puesto. Escribe los gramos que has comido, marca ✓ y la app calcula tus calorías y tus macros.</p>
+        <p class="lead">Tu plan de comidas hecho a tu medida (o el de tu nutricionista), ya puesto cada día. Escribe los gramos, marca ✓ y la app calcula tus calorías, tus macros y hasta tus vitaminas.</p>
         <div class="hero-cta">${SIGNUP_OPEN?`<button class="btn big" data-auth="signup" data-go>Crear cuenta gratis</button>`:""}<button class="btn ghost big" data-auth="login" data-go>Ya tengo cuenta</button></div>
         <p class="note">Funciona en iPhone, Android y ordenador. Se instala en la pantalla de inicio como una app.</p>
       </div>
       <div class="hero-side">
-        <div class="phone" aria-hidden="true">
-          <div class="ph-top"><b>HOY · DÍA 11</b><span class="ph-chip">🔥 6 días</span></div>
-          <div class="ph-ringrow"><svg viewBox="0 0 132 132" class="ph-ring"><circle cx="66" cy="66" r="54"/><circle cx="66" cy="66" r="54" class="fg" stroke-dasharray="339.3" stroke-dashoffset="128"/></svg>
-            <div class="ph-ringc"><b>624</b><span>kcal restantes</span></div></div>
-          <div class="ph-mac"><i style="--w:62%;--c:var(--carb)"></i><i style="--w:48%;--c:var(--fat)"></i><i style="--w:81%;--c:var(--prot)"></i></div>
-          <div class="ph-card"><b class="ph-ex">COMIDA · TERNERA CON PATATA</b>
-            <div class="ph-item ok"><em>✓</em><span>Ternera magra</span><b>150 g</b></div>
-            <div class="ph-item ok"><em>✓</em><span>Patata</span><b>300 g</b></div>
-            <div class="ph-item"><em>✓</em><span>Verduras</span><b>250 g</b></div>
-            <div class="ph-item"><em>✓</em><span>Aceite de oliva</span><b>5 g</b></div></div>
-          <div class="ph-scan"><span class="ph-bars" aria-hidden="true"></span><span><b>Yogur natural · Pascual</b><small>62 kcal · P 3,6 · C 4,8 · G 3,1 por 100 g</small></span></div>
+        <div class="phone ph2" aria-hidden="true">
+          <div class="p2-bar"><b>Hoy</b><span class="p2-prem">Premium</span><span class="p2-av">A</span></div>
+          <div class="p2-wk">${["L","M","X","J","V","S","D"].map((l,i) => `<span class="${i<3?"on":""} ${i===3?"t":""}"><small>${l}</small><i>${i<3?"✓":""}</i></span>`).join("")}<span class="p2-fire">🔥</span></div>
+          <div class="p2-card"><small>Calorías</small><div class="p2-row"><b>1.576 cal <span>/ 2.200</span></b><span><b>624</b> restan</span></div><div class="p2-b"><i style="width:72%"></i></div></div>
+          <div class="p2-card p2-m">${[["Carbohidratos",165,230,"var(--carb)"],["Grasas",48,70,"var(--fat)"],["Proteínas",118,140,"var(--prot)"]].map(([l,v,o,c]) => `<div><small>${l}</small><b>${v} g</b><div class="p2-b"><i style="width:${v/o*100}%;background:${c}"></i></div></div>`).join("")}</div>
+          <div class="p2-sec"><b>Comidas</b><span>Mira el diario</span></div>
+          <div class="p2-meal"><div><b>Desayuno</b><small>412 kcal · Avena, plátano</small></div><em>✓</em></div>
+          <div class="p2-meal"><div><b>Comida</b><small>Pollo con arroz y verduras</small></div><span class="p2-reg">Regístralo</span></div>
+          <div class="p2-nav"><span class="on">Hoy</span><span>Diario</span><span>Nutrientes</span><span>Progreso</span><i>+</i></div>
         </div>
       </div>
     </section>
     <section class="lf"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
-        ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida y cena. Solo escribes los gramos.")}
-        ${feat("scan","Foto al código de barras ⭐","Haz una foto al código del paquete y la app trae sus calorías, proteínas, hidratos y grasas. Premium: 3 € al mes.")}
-        ${feat("ring","Calorías y macros del día","Un anillo te dice cuánto te queda, y las barras cuánta proteína, hidratos y grasa llevas.")}
-        ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Y si tu plan trae objetivo por día, se usa ese.")}
+        ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida, cena y snacks. Solo escribes los gramos y marcas ✓.")}
+        ${feat("ring","Calorías y macros del día","Tarjetas claras con lo que llevas y lo que te queda: calorías, proteínas, hidratos y grasas, y tu semana de un vistazo.")}
+        ${feat("pie","Nutrientes como un profesional","Fibra, azúcar, grasas saturadas, sal, potasio, calcio, hierro y vitaminas de cada día o de la semana, con tu objetivo y lo que te falta.")}
+        ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Si tu plan trae objetivo por día, se usa ese.")}
         ${feat("chart","Tu progreso a la vista","Peso corporal y calorías de las últimas semanas, para ver la tendencia y no fijarte en un solo día.")}
         ${feat("fire","Racha de días","Cada día que apuntas suma a tu racha. Ver la llama encendida ayuda a no saltarse días.")}
-        ${feat("swap","Trae tus datos","Importa tu historial de comidas de MyFitnessPal y descarga los tuyos cuando quieras.")}
+        ${feat("swap","Trae tus datos","Importa tu plan de comidas o tu historial de MyFitnessPal, y descarga los tuyos cuando quieras.")}
         ${feat("lock","Privado","Tus datos solo los ves tú. Puedes descargarlos o borrar tu cuenta en cualquier momento.")}
+      </div></section>
+    <section class="lf lprem"><h2 class="lsec">Con Premium, como tener un entrenador</h2><p class="note lprem-sub">3 € al mes · por Bizum · sin permanencia</p>
+      <div class="lf-grid">
+        ${feat("spark","Plan de nutrición a medida","Respondes unas preguntas (objetivo, entrenos, lo que te gusta y lo que no) y te crea al momento tu menú semanal con platos, gramos y calorías. Cambias los platos que quieras.")}
+        ${feat("doc","Sube el estudio de tu nutricionista","PDF o foto: la app lee tu metabolismo, % de grasa, masa muscular, proteína recomendada… y crea el plan con esos datos. Si trae menú, lo carga tal cual.")}
+        ${feat("scan","Foto al código de barras","Haz una foto al código del paquete y la app trae sus calorías, macros, fibra, azúcar y sal.")}
+        ${feat("timer","Ayuno intermitente","Cronometra tus ayunos 16:8, 18:6… con un anillo de progreso y tu historial.")}
+        ${feat("report","Informe semanal","Tu media de calorías y proteína, los días que cumpliste, tu mejor día, tu peso y un consejo cada semana.")}
+        ${feat("link","Garmin y WHOOP","Tus entrenos llegan solos con las calorías que has quemado, y con WHOOP también tu recuperación. Strava y TrainingPeaks, muy pronto.")}
       </div></section>
     <section class="lsteps"><h2 class="lsec">Empieza en un minuto</h2>
       <ol><li><b>Crea tu cuenta</b><span>Con tu email y una contraseña. Confirma desde el correo que te llega.</span></li>
-        <li><b>Pon tu objetivo o tu plan</b><span>Calcula tus calorías en un paso, o mete el plan de comidas que ya sigues.</span></li>
-        <li><b>Apunta lo que comes</b><span>Gramos y ✓. O haz una foto al código de barras de lo que no esté en tu plan.</span></li></ol></section>
+        <li><b>Pon tu objetivo o tu plan</b><span>Calcula tus calorías en un paso, mete el plan que ya sigues o crea uno a tu medida.</span></li>
+        <li><b>Apunta lo que comes</b><span>Gramos y ✓, o el botón + para registrar rápido. Lo demás lo calcula la app.</span></li></ol></section>
     <section class="lauth" id="lauth"><div class="lauth-txt"><h2 class="lsec">${mode==="signup"?"Crea tu cuenta":mode==="forgot"?"Recupera tu contraseña":"Entra en tu cuenta"}</h2><p class="note">${mode==="signup"?"Es gratis. Solo necesitas un email.":mode==="forgot"?"Te enviamos un enlace para elegir una nueva.":"¿Aún no tienes cuenta? Créala gratis en un minuto."}</p></div>${card}</section>
     <section class="lfaqs"><h2 class="lsec">Preguntas frecuentes</h2>
       ${faq("¿Cuánto cuesta?","La app es gratis. El plan a medida, la foto al código de barras y el resto de extras son Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
       ${faq("¿Tengo que descargar algo?","No. Es una web que funciona en el navegador. En el iPhone, abre la web en Safari, pulsa Compartir y «Añadir a pantalla de inicio» para tenerla como una app.")}
-      ${faq("¿Puedo meter la dieta que ya sigo?","Sí. En Diario › Crear a mano montas cada día de la semana con sus alimentos y gramos habituales. A partir de ahí, cada día te aparece ya puesto y solo cambias los gramos si hace falta.")}
+      ${faq("¿Puedo meter la dieta que ya sigo?","Sí. En Perfil › Mi plan de comidas importas tu plan o lo montas a mano. Con Premium también puedes subir el PDF o una foto del plan o estudio de tu nutricionista. A partir de ahí, cada día te aparece ya puesto.")}
+      ${faq("¿Cómo funciona el plan a medida?","Respondes unas preguntas (o subes el estudio de tu nutricionista) y la app calcula tus calorías y macros y monta un menú de lunes a domingo con recetas sencillas españolas y sus gramos. Respeta alergias y lo que no comes, y puedes cambiar cualquier plato.")}
+      ${faq("¿Qué relojes y apps se pueden conectar?","Con Premium, Garmin y WHOOP. Strava y TrainingPeaks llegarán pronto. Tus entrenos aparecen con sus calorías y, si quieres, se suman a lo que puedes comer ese día.")}
       ${faq("¿Y si un producto no sale al hacerle la foto?","Los datos vienen de Open Food Facts, una base de datos abierta. Si un producto no está, créalo en «Crear» copiando la etiqueta y se queda guardado para la próxima vez.")}
       ${faq("¿Puedo pasar mis datos de MyFitnessPal?","Sí. Exporta el archivo «Nutrition Summary» desde la web de MyFitnessPal e impórtalo en Perfil › Importar.")}
       ${faq("¿Quién puede ver mis datos?","Solo tú. Cada cuenta ve únicamente sus propios datos. Más detalles en la política de privacidad.")}

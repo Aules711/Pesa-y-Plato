@@ -714,3 +714,26 @@ nav.tabbar{background:var(--surface)}
 .wh-rec b{font-size:26px;font-variant-numeric:tabular-nums}.wh-rec span{font-size:13px;color:var(--muted)}
 .wh-rec.g b{color:#16C784}.wh-rec.y b{color:#F5C518}.wh-rec.r b{color:#FF4D4F}
 .st-logo.soon{opacity:.6}
+/* móvil de ejemplo (diseño nuevo) */
+.ph2{display:flex;flex-direction:column;gap:9px;background:#121725;color:#EEF1F7;border-color:#2B3346;padding:16px 12px 12px}
+.p2-bar{display:flex;align-items:center;gap:8px}.p2-bar b{font-size:22px;flex:1}
+.p2-prem{background:#F7C948;color:#1B1A10;border-radius:99px;padding:3px 9px;font-size:11px;font-weight:700}
+.p2-av{width:26px;height:26px;border-radius:50%;border:1px solid #2B3346;display:grid;place-items:center;font-size:12px;font-weight:700}
+.p2-wk{display:flex;align-items:center;gap:4px}.p2-wk span{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9px;color:#9AA3B6}
+.p2-wk i{width:18px;height:18px;border-radius:50%;border:1.5px solid #2B3346;font-style:normal;font-size:9px;display:grid;place-items:center;color:#fff}
+.p2-wk span.on i{background:#4A8CFF;border-color:#4A8CFF}.p2-wk span.t i{border-style:dashed;border-color:#EEF1F7}
+.p2-wk .p2-fire{flex:none;font-size:20px}
+.p2-card{background:#1C2232;border-radius:14px;padding:9px 11px;display:flex;flex-direction:column;gap:5px}
+.p2-card small{font-size:10px;color:#9AA3B6}.p2-row{display:flex;justify-content:space-between;align-items:baseline;font-size:11px}
+.p2-row b{font-size:14px}.p2-row b span{font-size:10px;color:#9AA3B6;font-weight:400}.p2-row > span{color:#9AA3B6}.p2-row > span b{color:#EEF1F7;font-size:12px}
+.p2-b{height:5px;border-radius:9px;background:#262D3F;overflow:hidden}.p2-b i{display:block;height:100%;background:#4A8CFF;border-radius:9px}
+.p2-m{flex-direction:row;gap:8px}.p2-m > div{flex:1;display:flex;flex-direction:column;gap:3px}.p2-m b{font-size:12px}
+.p2-sec{display:flex;justify-content:space-between;font-size:12px;padding:0 2px}.p2-sec span{color:#4A8CFF;font-weight:600}
+.p2-meal{background:#1C2232;border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px}
+.p2-meal div{flex:1;min-width:0}.p2-meal b{display:block;font-size:12px}.p2-meal small{font-size:10px;color:#9AA3B6}
+.p2-meal em{color:#4CC487;font-style:normal;font-weight:800}
+.p2-reg{background:#1E2C4D;color:#4A8CFF;border-radius:99px;padding:4px 9px;font-size:10px;font-weight:700}
+.p2-nav{display:flex;align-items:center;gap:4px;margin-top:2px}.p2-nav span{flex:1;text-align:center;font-size:9px;color:#9AA3B6;padding:6px 0;border-radius:99px;background:#1C2232}
+.p2-nav span.on{color:#EEF1F7;background:#262D3F}.p2-nav i{width:30px;height:30px;border-radius:50%;background:#4A8CFF;color:#fff;font-style:normal;display:grid;place-items:center;font-size:18px;flex:none}
+.lprem .lsec{margin-bottom:2px}.lprem-sub{margin:0 0 14px}
+.lprem .lf-ic{background:linear-gradient(135deg,#F5A64C,#E8364F);color:#fff}
