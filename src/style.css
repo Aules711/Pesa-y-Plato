@@ -713,3 +713,4 @@ nav.tabbar{background:var(--surface)}
 .wh-rec{display:flex;align-items:center;gap:12px;border-radius:14px;padding:10px 14px;background:var(--surface2)}
 .wh-rec b{font-size:26px;font-variant-numeric:tabular-nums}.wh-rec span{font-size:13px;color:var(--muted)}
 .wh-rec.g b{color:#16C784}.wh-rec.y b{color:#F5C518}.wh-rec.r b{color:#FF4D4F}
+.st-logo.soon{opacity:.6}

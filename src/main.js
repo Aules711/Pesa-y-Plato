@@ -91,7 +91,8 @@ let tab = "home", day = today(), metric = "kg", progEx = "";
 let memMode = false, activeLoaded = false, user = null;
 const AI_ON = import.meta.env.VITE_AI_ENABLED === "true";
 const SIGNUP_OPEN = import.meta.env.VITE_ALLOW_SIGNUP === "true";
-const TRAIN_ON = false;   // sección de entrenos oculta por ahora: poner true para volver a mostrarla
+const TRAIN_ON = false;
+const STRAVA_SOON = true;   // Strava aparece como «Muy pronto» (poner false para activarlo)   // sección de entrenos oculta por ahora: poner true para volver a mostrarla
 const INVITE_REQUIRED = import.meta.env.VITE_INVITE_REQUIRED === "true";
 const smp = AI_ON ? {} : null;
 const MAX_VIDEO_MB = 50;
@@ -903,7 +904,7 @@ function openFab(){
   const T = (act, ico, l, sub, prem) => `<button class="fab-t" data-act="${act}"><span class="fab-i" aria-hidden="true">${ico}</span><b>${l}${prem && !isPremium() ? " ⭐" : ""}</b>${sub?`<small>${sub}</small>`:""}</button>`;
   const R = (act, ico, l) => `<button class="fab-r" data-act="${act}"><span aria-hidden="true">${ico}</span>${l}<span class="prof-ch" aria-hidden="true">›</span></button>`;
   openSheet("Registrar", `<div class="fab-grid">${T("fab-food","🔍","Registrar alimento",mealNow())}${T("fab-photo","📸","Foto del plato o código","",true)}</div>
-    <div class="fab-list">${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Strava, Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
+    <div class="fab-list">${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
 }
 /* ---------- Strava ---------- */
 let stravaMsg = "", stravaBusy = false, stravaSetup = false;
@@ -945,18 +946,20 @@ const stravaErr = e => e.code==="whoop_disabled" ? (isOwner() ? "WHOOP aún no e
   : e.code==="bad_app" ? "Revisa los datos: el Client ID son solo números y el Client Secret es un código largo de letras y números." : e.code==="premium" ? "Conectar Strava o Garmin es Premium." : e.code==="garmin_disabled" ? "Falta configurar Garmin en Vercel (GARMIN_CLIENT_ID y GARMIN_CLIENT_SECRET)." : e.code==="strava_disabled" ? "Falta configurar Strava en Vercel (STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET)." : e.code==="no_table" ? "Falta crear la tabla: ejecuta supabase/strava.sql en Supabase." : e.code==="strava_rate" ? "Strava está saturado ahora mismo. Prueba en unos minutos." : e.code==="disabled" ? "Falta la clave secreta de Supabase en Vercel." : e.code===404 ? "Solo funciona en la web publicada." : "No se pudo hablar con Strava. Inténtalo otra vez.";
 function connSection(){
   const msg = stravaMsg ? `<div class="conn-msg ${/^✓/.test(stravaMsg)?"ok":""}" role="status">${esc(stravaMsg)}</div>` : "";
-  if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Conecta tu reloj, WHOOP o Strava</h3>
-      <p class="note">Con Premium, cada carrera, salida en bici o entreno que guardes en <b>Strava</b>, en tu reloj <b>Garmin</b> o en tu <b>WHOOP</b> llega solo a la app con sus calorías: en Inicio, en el Diario y en Progreso. Eliges el que uses.</p>
-      <div class="conn-logos"><span class="st-logo" aria-hidden="true">S</span><span class="gm-logo" aria-hidden="true">G</span><span class="wh-logo" aria-hidden="true">W</span></div>
+  if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Conecta tu reloj Garmin o tu WHOOP</h3>
+      <p class="note">Con Premium, cada carrera, salida en bici o entreno que guardes en tu reloj <b>Garmin</b> o en tu <b>WHOOP</b> llega solo a la app con sus calorías: en Inicio, en el Diario y en Progreso. Eliges el que uses.</p>
+      <div class="conn-logos"><span class="gm-logo" aria-hidden="true">G</span><span class="wh-logo" aria-hidden="true">W</span></div>
+      <p class="note" style="margin:0">Strava y TrainingPeaks, muy pronto.</p>
       <button class="btn" data-act="prof-sec" data-k="premium">Hazte Premium</button></div>${msg}`;
   const C = S.strava, G = S.garmin, last = C?.list?.[0], glast = G?.list?.[0];
   return `${msg}<p class="note">Conecta el que uses (o los dos). Las actividades salen en Inicio, en el Diario y en Progreso.</p>
-    <div class="card strava"><div class="st-h"><span class="st-logo" aria-hidden="true">S</span><div><b>Strava</b><small>${C ? `Conectado${C.athlete ? " como "+esc(C.athlete) : ""}` : "No conectado"}</small></div>${C?`<span class="st-on">●</span>`:""}</div>
+    ${!C && STRAVA_SOON ? `<div class="card"><div class="st-h"><span class="st-logo soon" aria-hidden="true">S</span><div><b>Strava</b><small>Muy pronto</small></div></div>
+      <p class="note">${isOwner() ? "Strava exige una suscripción de pago para crear la conexión. Cuando la tengas, cambia STRAVA_SOON a false y pon STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET en Vercel." : "Estamos trabajando para conectar Strava. Mientras tanto, si tu reloj es Garmin o usas WHOOP, conéctalos y tus entrenos llegarán igual."}</p></div>` : `<div class="card strava"><div class="st-h"><span class="st-logo" aria-hidden="true">S</span><div><b>Strava</b><small>${C ? `Conectado${C.athlete ? " como "+esc(C.athlete) : ""}` : "No conectado"}</small></div>${C?`<span class="st-on">●</span>`:""}</div>
     ${C ? `<p class="note">Tus actividades llegan solas cada vez que abres la app. ${last ? `Última: ${SPORT_ICO(last.type)} ${esc(sportName(last.type))}, ${dayLabel(last.day).toLowerCase()}.` : "Aún no hay actividades en los últimos 3 meses."}</p>
       <button class="btn soft" data-act="strava-sync" ${stravaBusy?"disabled":""}>Sincronizar ahora</button>
       <button class="btn danger" data-act="conn-off" data-s="strava">Desconectar Strava</button>`
     : stravaSetup ? stravaSetupForm()
-    : `<p class="note">Trae tus actividades de los últimos 3 meses y las nuevas cada vez que abras la app.</p><button class="btn st-btn" data-act="conn-on" data-s="strava">Conectar con Strava</button>`}</div>
+    : `<p class="note">Trae tus actividades de los últimos 3 meses y las nuevas cada vez que abras la app.</p><button class="btn st-btn" data-act="conn-on" data-s="strava">Conectar con Strava</button>`}</div>`}
     <div class="card garmin"><div class="st-h"><span class="gm-logo" aria-hidden="true">G</span><div><b>Garmin Connect</b><small>${G ? "Conectado" : "No conectado"}</small></div>${G?`<span class="st-on">●</span>`:""}</div>
     ${G ? `<p class="note">Cada actividad que guarde tu reloj llega sola a la app al sincronizarse con Garmin Connect. ${glast ? `Última: ${SPORT_ICO(glast.type)} ${esc(sportName(glast.type))}, ${dayLabel(glast.day).toLowerCase()}.` : "Aún no ha llegado ninguna: aparecerán desde tu próxima actividad."}</p>
       <button class="btn danger" data-act="conn-off" data-s="garmin">Desconectar Garmin</button>`
@@ -1225,7 +1228,7 @@ function viewProfile(){
     ${row("goals","🎯","Objetivos", `${fmt(g.kcal)} kcal · ${g.p} g proteína`)}
   </div>
   <div class="prof-group">
-    ${row("conn","🔗","Conexiones", (() => { const on = [S.strava?"Strava":"", S.garmin?"Garmin":"", S.whoop?"WHOOP":""].filter(Boolean); return on.length ? on.join(", ") + (on.length>1?" conectados":" conectado") : "Strava, Garmin o WHOOP ⭐"; })())}
+    ${row("conn","🔗","Conexiones", (() => { const on = [S.strava?"Strava":"", S.garmin?"Garmin":"", S.whoop?"WHOOP":""].filter(Boolean); return on.length ? on.join(", ") + (on.length>1?" conectados":" conectado") : "Garmin o WHOOP ⭐"; })())}
     ${row("account","👤","Cuenta", "Email y contraseña")}
     ${row("io","📥","Importar y exportar", "Tu plan, copias de seguridad, MyFitnessPal")}
     ${row("privacy","🔒","Privacidad y datos", "Borrar datos, eliminar cuenta, términos")}
@@ -1541,7 +1544,7 @@ function premFeats(on){
              ["fast","⏱️","Ayuno intermitente","Cronometra tus ayunos 16:8, 18:6… con anillo de progreso e historial."],
              ["report","📊","Informe semanal","Media de calorías y proteína, días cumplidos, tu mejor día, peso y un consejo cada semana."],
              ["top","👑","Alimentos más ricos","Descubre qué alimentos te aportan más calorías, azúcar, sal, proteína…"],
-             ["conn","🔗","Strava, Garmin o WHOOP","Tus carreras, salidas en bici y entrenos llegan solos con sus calorías. Conecta el que uses."]];
+             ["conn","🔗","Garmin o WHOOP","Tus carreras, salidas en bici y entrenos llegan solos con sus calorías. Conecta el que uses (Strava, muy pronto)."]];
   return `<div class="prem-feats">${F.map(([k,i,t,d]) => `<div class="prem-f"><span class="prem-fi" aria-hidden="true">${i}</span><div><b>${t}</b><p class="note">${d}</p>
     ${on ? k==="fast" ? `<button class="btn soft" data-act="fast-open">Abrir</button>` : k==="report" ? `<button class="btn soft" data-act="week-report">Ver informe</button>` : k==="top" ? `<button class="btn soft" data-act="nutri-go" data-k="cal">Ver</button>` : k==="nutri" ? `<button class="btn soft" data-act="open-nutri">Crear mi plan</button>` : k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
 }
