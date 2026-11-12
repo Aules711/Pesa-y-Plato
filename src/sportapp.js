@@ -99,10 +99,10 @@ const FACT = { E: 1, R: 1.08, L: 1.03, Q: 0.93 };
 function kmFrom(k, mins, t, base) { const f = FACT[t] || 1, km = mins * 60 / (base * f * (k === "trail" && t === "L" ? 1.1 : 1)); return k === "swim" ? Math.max(0.1, Math.round(km * 20) / 20) : k === "bike" ? Math.round(km) : Math.max(0.5, Math.round(km * 2) / 2); }
 export const kmTxt = (k, km) => k === "swim" ? `${Math.round(km * 1000).toLocaleString("es-ES")} m` : `${String(km).replace(".", ",")} km`;
 function withKm(k, P, w, list) {
-  if (!isEnd(k)) return list;
+  if (!isEnd(k)) return list.map((x) => ({ ...x, short: shortOf(k, x) }));
   const base = paceFor(k).s, phase = P.weeks[w].phase.replace(" · descarga", ""), { goal, level } = P.req;
   return list.map((x) => {
-    if (x.t === "S") return x;
+    if (x.t === "S") return { ...x, short: shortOf(k, x) };
     if (x.t === "RACE") { const r = racesOf(k).find((r) => r.date === C.addDays(P.start, w * 7 + x.d)); return r?.km ? { ...x, km: r.km } : x; }
     const amt = (m) => kmTxt(k, kmFrom(k, m, "E", base));
     let km = kmFrom(k, x.dur, x.t, base);
@@ -112,8 +112,23 @@ function withKm(k, P, w, list) {
       if (tot) km = tot / 1000;
     }
     const [title, desc] = describeEnd(k, x.t, phase, x.dur, goal, w, level, (m) => m === x.dur ? kmTxt(k, km) : amt(m));
-    return { ...x, title, desc: desc.replace(/^: /, ""), km };
+    const rate = { trail: { E: 25, R: 16, Q: 35, L: { t21: 32, t50: 40, ultra: 48, mont: 45 }[goal] || 38 }, hike: { E: 55, R: 40, Q: 70, L: 75 }, bike: { E: 7, R: 5, Q: 10, L: goal === "puertos" ? 20 : 12 } }[k]?.[x.t] || 0;
+    const elev = rate && k !== "bike" ? Math.round(km * rate) : rate ? Math.round(km * rate / 10) * 10 : 0;
+    const d2 = desc.replace(/^: /, "").replace(/unos \d+ m de desnivel positivo/, `unos ${elev} m de desnivel positivo`);
+    return { ...x, title, desc: d2, km, ...(elev ? { elev } : {}), zone: zoneOf(x), short: shortOf(k, { ...x, desc: d2 }) };
   });
+}
+function zoneOf(x) {
+  if (x.t === "E" || x.t === "L") return "Z2"; if (x.t === "R") return "Z1-Z2"; if (x.t !== "Q") return "";
+  const t = x.title || ""; return /VO2/.test(t) ? "Z5" : /Series|Cuestas/.test(t) && !/cortas/.test(t) ? "Z4-Z5" : /umbral|Umbral|Subida|Ritmo$/.test(t) ? "Z3-Z4" : /Bajadas/.test(t) ? "Z3" : /cambios|Cadencia/.test(t) ? "Z2-Z3" : "Z3-Z4";
+}
+function shortOf(k, x) {
+  if (x.t === "E") return k === "swim" ? "Ejercicios de técnica y nado cómodo" : k === "bike" ? "En llano, cadencia ágil y ritmo cómodo" : "Ritmo conversacional";
+  if (x.t === "R") return "Muy suave, solo para soltar las piernas";
+  if (x.t === "L") return k === "swim" ? "Nado seguido a ritmo cómodo" : `Constante y conversacional${(x.dur || 0) >= 90 ? ". Practica la nutrición" : ""}${k === "trail" ? ". Anda las subidas fuertes" : ""}`;
+  if (x.t === "RACE") return "¡Disfruta! Sal suave y come y bebe lo practicado";
+  if (x.t === "S" || x.t === "F" || x.t === "F2") return x.desc.replace(/^Unos \d+ min(, más ligera)?\. ?/, "").replace(/ · /g, ", ").replace(/\.$/, "");
+  const p = x.desc.split(" · "); return (p.length > 2 ? p.slice(1, -1).join(", ") : p[0]).replace(/\.$/, "");
 }
 const amountOf = (k, x) => x.km ? kmTxt(k, x.km) : x.dur ? C.fmtMin(x.dur * 60) : "";
 
@@ -167,7 +182,7 @@ export function spView(k) {
 function sesCard(k, o, opts = {}) {
   const { esc, fmtMin, today, addDays } = C, P = C.S.scoach[k], x = o.x, day = addDays(P.start, o.w * 7 + x.d), done = isDone(k, o.w, o.i), isT = day === today();
   return `<div class="card sc-s ${done ? "done" : ""} ${isT && !opts.noToday ? "is-today" : ""}"><div class="sc-h"><span class="sc-d"><b>${DAY_N[x.d].slice(0, 3)}</b><small>${C.parseDay(day).getDate()}</small></span>
-    <div class="sc-t"><b>${esc(x.title)}</b><small>${isT ? "Hoy · " : ""}${amountOf(k, x)}${x.adj ? " · ajustada a tu carga" : ""}</small></div>
+    <div class="sc-t"><b>${esc(x.title)}</b><small>${isT ? "Hoy · " : ""}${[amountOf(k, x), x.elev ? x.elev + " m+" : "", x.zone || ""].filter(Boolean).join(" · ")}${x.adj ? " · ajustada a tu carga" : ""}</small></div>
     ${x.t === "RACE" ? "" : `<button class="sc-chk" data-act="sp-done" data-w="${o.w}" data-i="${o.i}" aria-pressed="${done}" aria-label="Marcar como hecha">✓</button>`}</div>
     <p class="sc-desc">${esc(x.desc).replace(/ · /g, "<br>· ")}</p>
     ${!done && day <= today() && x.t !== "RACE" ? `<div class="sc-acts">${COACH[k].gps && !["S", "F", "F2", "M"].includes(x.t) ? `<button class="btn soft" data-act="sp-gps" data-w="${o.w}" data-i="${o.i}">▶ Grabar con GPS</button>` : ""}<button class="btn ghost" data-act="sp-reg" data-w="${o.w}" data-i="${o.i}">Registrar</button></div>` : ""}
@@ -222,21 +237,30 @@ export function makePlanFor(k, req) {
   const P = makeCoachPlan(k, { ...req, recentLong: recentLong(k) }, C.today()); P.done = {};
   return C.put("sportcoach", { plans: { ...(C.S.scoach || {}), [k]: P } });
 }
+const DAY3 = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+function weekBlock(k, P, w, cur) {
+  const { esc, fmtMin } = C, list = weekSessions(k, w), wk = P.weeks[w], a0 = C.addDays(P.start, w * 7), a6 = C.addDays(a0, 6), d0 = C.parseDay(a0);
+  const done = actsOf(k).filter((a) => a.day >= a0 && a.day <= a6), el = hasElev(k);
+  const pKm = list.reduce((s, x) => s + (x.t === "RACE" ? 0 : x.km || 0), 0), pEl = list.reduce((s, x) => s + (x.elev || 0), 0), pMin = list.reduce((s, x) => s + (x.dur || 0), 0);
+  const dKm = done.reduce((s, x) => s + (+x.km || 0), 0), dEl = done.reduce((s, x) => s + (+x.elev || 0), 0), dMin = done.reduce((s, x) => s + (+x.dur || 0), 0) / 60;
+  const fk = (km) => kmTxt(k, Math.round(km * 10) / 10);
+  const phase = wk.phase.includes("descarga") ? "Recuperación" : wk.phase;
+  const tot = isEnd(k) ? `Plan ${fk(pKm)}${el ? ` · ${Math.round(pEl)} m+` : ""} — Hecho ${fk(dKm)}${el ? ` · ${Math.round(dEl)} m+` : ""}` : `Plan ${fmtMin(pMin * 60)} — Hecho ${fmtMin(dMin * 60)}`;
+  const rows = list.map((x, i) => { const dn = isDone(k, w, i), day = C.addDays(a0, x.d);
+    const meta = [x.km ? kmTxt(k, x.km) : x.t === "RACE" ? "" : x.dur ? fmtMin(x.dur * 60) : "", x.elev ? `${x.elev} m+` : "", x.zone || ""].filter(Boolean).join(" · ");
+    return `<li><button class="pw-row ${dn ? "done" : ""} ${day === C.today() ? "hoy" : ""}" data-act="sp-ses" data-w="${w}" data-i="${i}"><span class="pw-dot" aria-hidden="true">${dn ? "✓" : ""}</span><span class="pw-t"><span>${DAY3[x.d]}: <b>${esc(x.title)}</b>${meta ? ` — ${meta}` : ""}</span><small>${esc(x.short || "")}</small></span></button></li>`; }).join("");
+  return `<details class="card pw" ${w === cur ? "open" : ""}><summary><span class="pw-h"><b>Sem. ${w + 1}</b> · ${d0.getDate()} ${MON3[d0.getMonth()].toLowerCase()} ${String(d0.getFullYear()).slice(2)} <i class="pw-ph ${phase === "Recuperación" ? "rec" : ""}">${esc(phase)}</i>${w === cur ? `<i class="pw-now">Esta semana</i>` : ""}</span><small>${tot}</small></summary>
+    <ul class="pw-list">${rows}</ul></details>`;
+}
 function vPlan(k) {
-  const { esc, fmtMin } = C, P = C.S.scoach?.[k];
+  const { esc } = C, P = C.S.scoach?.[k];
   if (!P || st.edit) return planForm(k);
-  const cur = curWeek(P), W = Math.max(0, Math.min(P.weeks.length - 1, st.week ?? cur)), wk = P.weeks[W], list = weekSessions(k, W);
-  const all = P.weeks.reduce((n, x) => n + x.sessions.length, 0), dn = Object.keys(P.done || {}).length;
-  const wDone = list.filter((_, i) => isDone(k, W, i)).length, mins = list.reduce((a, x) => a + (x.dur || 0), 0), A = adjFor(k);
-  return `<div class="card sc-hero"><span class="sc-e" aria-hidden="true">${COACH[k].e}</span><div><b>${esc(goalName(k, P.req.goal))}</b><span class="note">${P.req.date ? `Para el ${C.parseDay(P.req.date).getDate()} de ${MONTHS[C.parseDay(P.req.date).getMonth()]} · ` : ""}${P.req.days} días/semana · ${P.weeks.length} semanas</span></div></div>
-  ${(W === cur || W === cur + 1) && (A.f !== 1 || A.easy) ? `<div class="sp-adj">⚙️ ${esc(A.why)}</div>` : ""}
-  <div class="card"><div class="sc-wk"><button class="iconb" data-act="sp-week" data-w="${W - 1}" ${W <= 0 ? "disabled" : ""} aria-label="Semana anterior">‹</button>
-    <div><b>Semana ${W + 1} de ${P.weeks.length}</b><small>${esc(wk.phase)}${W === cur ? " · esta semana" : ""}</small></div>
-    <button class="iconb" data-act="sp-week" data-w="${W + 1}" ${W >= P.weeks.length - 1 ? "disabled" : ""} aria-label="Semana siguiente">›</button></div>
-    <div class="gh-bar" style="--tc:var(--sp)"><i style="width:${Math.round(wDone / Math.max(1, list.length) * 100)}%"></i></div>
-    <span class="note">${wDone} de ${list.length} hechas · ${isEnd(k) ? kmTxt(k, Math.round(list.reduce((a, x) => a + (x.t === "RACE" ? 0 : x.km || 0), 0) * 10) / 10) : fmtMin(mins * 60)} en total · plan: ${dn}/${all}</span>${isEnd(k) ? `<span class="note">Distancias calculadas con ${paceFor(k).src}${paceFor(k).src === "tu nivel" ? `. Pon tu ritmo en Datos › Zonas para afinarlas` : ""}.</span>` : ""}</div>
+  const cur = curWeek(P), all = P.weeks.reduce((n, x) => n + x.sessions.length, 0), dn = Object.keys(P.done || {}).length, A = adjFor(k), src = paceFor(k).src;
+  return `<div class="card sc-hero"><span class="sc-e" aria-hidden="true">${COACH[k].e}</span><div><b>${esc(goalName(k, P.req.goal))}</b><span class="note">${P.req.date ? `Para el ${C.parseDay(P.req.date).getDate()} de ${MONTHS[C.parseDay(P.req.date).getMonth()]} · ` : ""}${P.req.days} días/semana · ${P.weeks.length} semanas · ${dn}/${all} hechas</span></div></div>
+  ${A.f !== 1 || A.easy ? `<div class="sp-adj">⚙️ ${esc(A.why)}</div>` : ""}
   ${cur >= P.weeks.length ? `<div class="card"><b>🎉 ¡Plan terminado!</b><p class="note">Crea uno nuevo para seguir mejorando.</p><button class="btn" data-act="sp-edit" data-v="1">Nuevo plan</button></div>` : ""}
-  ${list.map((x, i) => sesCard(k, { x, w: W, i })).join("")}
+  ${P.weeks.map((_, w) => weekBlock(k, P, w, cur)).join("")}
+  ${isEnd(k) ? `<p class="note">Toca un entreno para ver el detalle, grabarlo o marcarlo como hecho. Distancias calculadas con ${src}${src === "tu nivel" ? "; pon tu ritmo en Datos › Zonas para afinarlas" : ""}. Z = zona de intensidad (míralas en Datos › Zonas).</p>` : `<p class="note">Toca un entreno para ver el detalle o marcarlo como hecho.</p>`}
   <button class="btn ghost" data-act="sp-edit" data-v="1">Cambiar mi plan</button>
   <button class="btn danger" data-act="sp-del-plan">Borrar plan</button>`;
 }
@@ -433,7 +457,8 @@ export function spAction(act, el, k) {
     case "sp-make": { const r = (n) => document.querySelector(`input[name=${n}]:checked`)?.value;
       makePlanFor(k, { goal: r("scGoal"), level: r("scLv") || "mid", days: +r("scDays") || 3, date: C.$("scDate")?.value || "" }).then(() => { st.edit = false; st.week = null; C.render(); scrollTo(0, 0); }); return true; }
     case "sp-del-plan": if (d.sure) { const P = { ...C.S.scoach }; delete P[k]; C.put("sportcoach", { plans: P }).then(C.render); } else { d.sure = 1; el.textContent = "Toca otra vez para borrar el plan"; } return true;
-    case "sp-done": setDone(k, +d.w, +d.i); C.render(); return true;
+    case "sp-done": setDone(k, +d.w, +d.i); if (C.$("sheet") && !C.$("sheet").hidden) C.closeSheet(); C.render(); return true;
+    case "sp-ses": { const x = weekSessions(k, +d.w)[+d.i]; if (x) C.openSheet(DAY_N[x.d], sesCard(k, { x, w: +d.w, i: +d.i }, { noToday: true })); return true; }
     case "sp-gps": C.closeSheet(); C.trkStart(COACH[k].gps, d.w != null ? { k, w: +d.w, i: +d.i } : { k }); return true;
     case "sp-reg": openReg(k, d.w != null ? +d.w : null, d.i != null ? +d.i : null); return true;
     case "sp-reg-save": saveReg(k, d.w != null ? +d.w : null, d.i != null ? +d.i : null); return true;

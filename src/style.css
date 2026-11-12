@@ -906,3 +906,23 @@ body.sportapp .appbar{display:none}
 .spapp .sc-s.is-today{outline:2px solid var(--sp);outline-offset:-2px}.spapp .sc-chk[aria-pressed="true"]{background:var(--sp);border-color:var(--sp)}
 .ex-sp.on small{color:var(--sp)}
 .warn-card{border-left:4px solid #E8364F!important;background:color-mix(in srgb,#E8364F 9%,var(--surface))!important}
+
+/* plan por semanas (lista compacta) */
+.pw{padding:14px 16px!important}
+.pw summary{list-style:none;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.pw summary::-webkit-details-marker{display:none}
+.pw-h{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:17px}
+.pw-h::before{content:"▶";font-size:12px;transition:transform .15s;display:inline-block}
+.pw[open] .pw-h::before{transform:rotate(90deg)}
+.pw summary small{color:var(--muted);font-size:13.5px;padding-left:18px}
+.pw-ph{font-style:normal;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:99px;background:color-mix(in srgb,var(--sp) 16%,transparent);color:var(--sp)}
+.pw-ph.rec{background:rgba(69,211,199,.16);color:#2CB5AA}
+.pw-now{font-style:normal;font-size:11.5px;font-weight:700;color:var(--muted)}
+.pw-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column}
+.pw-row{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;background:none;border:0;color:inherit;font:inherit;padding:8px 0;cursor:pointer;border-radius:10px}
+.pw-row.hoy{background:color-mix(in srgb,var(--sp) 10%,transparent);margin:0 -8px;padding:8px;width:calc(100% + 16px)}
+.pw-dot{flex:none;width:9px;height:9px;border-radius:50%;background:currentColor;margin-top:8px;font-size:0}
+.pw-row.done .pw-dot{width:18px;height:18px;margin-top:2px;background:var(--sp);color:#fff;font-size:12px;font-weight:900;display:grid;place-items:center}
+.pw-row.done .pw-t{opacity:.65}
+.pw-t{display:flex;flex-direction:column;font-size:15.5px;line-height:1.4}
+.pw-t small{color:var(--muted);font-size:13.5px;margin-top:2px}
