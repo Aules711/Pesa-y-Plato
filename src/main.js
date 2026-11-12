@@ -690,15 +690,19 @@ async function stravaSync(force){
   catch(e){ if (force) stravaMsg = stravaErr(e); }
   stravaBusy = false; if (force || tab !== "profile") render();
 }
-const stravaErr = e => e.code==="bad_app" ? "Revisa los datos: el Client ID son solo números y el Client Secret es un código largo de letras y números." : e.code==="premium" ? "Conectar Strava o Garmin es Premium." : e.code==="garmin_disabled" ? "Falta configurar Garmin en Vercel (GARMIN_CLIENT_ID y GARMIN_CLIENT_SECRET)." : e.code==="strava_disabled" ? "Falta configurar Strava en Vercel (STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET)." : e.code==="no_table" ? "Falta crear la tabla: ejecuta supabase/strava.sql en Supabase." : e.code==="strava_rate" ? "Strava está saturado ahora mismo. Prueba en unos minutos." : e.code==="disabled" ? "Falta la clave secreta de Supabase en Vercel." : e.code===404 ? "Solo funciona en la web publicada." : "No se pudo hablar con Strava. Inténtalo otra vez.";
+const stravaErr = e => !isOwner() && ["disabled","no_table","strava_disabled","garmin_disabled",404,500,501].includes(e.code)
+  ? (e.code==="garmin_disabled" ? "La conexión con Garmin estará disponible muy pronto." : "Esta conexión no está disponible ahora mismo. Inténtalo más tarde.")
+  : e.code==="disabled" ? "No funciona porque en Vercel SUPABASE_SERVICE_ROLE_KEY no tiene la clave SECRETA de Supabase (sb_secret_… o service_role). Cámbiala y haz Redeploy."
+  : e.code==="garmin_disabled" ? "Garmin aún no está activado: falta que Garmin apruebe tu acceso y poner GARMIN_CLIENT_ID y GARMIN_CLIENT_SECRET en Vercel."
+  : e.code==="bad_app" ? "Revisa los datos: el Client ID son solo números y el Client Secret es un código largo de letras y números." : e.code==="premium" ? "Conectar Strava o Garmin es Premium." : e.code==="garmin_disabled" ? "Falta configurar Garmin en Vercel (GARMIN_CLIENT_ID y GARMIN_CLIENT_SECRET)." : e.code==="strava_disabled" ? "Falta configurar Strava en Vercel (STRAVA_CLIENT_ID y STRAVA_CLIENT_SECRET)." : e.code==="no_table" ? "Falta crear la tabla: ejecuta supabase/strava.sql en Supabase." : e.code==="strava_rate" ? "Strava está saturado ahora mismo. Prueba en unos minutos." : e.code==="disabled" ? "Falta la clave secreta de Supabase en Vercel." : e.code===404 ? "Solo funciona en la web publicada." : "No se pudo hablar con Strava. Inténtalo otra vez.";
 function connSection(){
-  const msg = stravaMsg ? `<p class="note conn-msg"><b>${esc(stravaMsg)}</b></p>` : "";
+  const msg = stravaMsg ? `<div class="conn-msg ${/^✓/.test(stravaMsg)?"ok":""}" role="status">${esc(stravaMsg)}</div>` : "";
   if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Conecta tu reloj o Strava</h3>
       <p class="note">Con Premium, cada carrera, salida en bici o entreno que guardes en <b>Strava</b> o en tu reloj <b>Garmin</b> llega solo a la app con sus calorías: en Inicio, en el Diario y en Progreso. Eliges el que uses.</p>
       <div class="conn-logos"><span class="st-logo" aria-hidden="true">S</span><span class="gm-logo" aria-hidden="true">G</span></div>
       <button class="btn" data-act="prof-sec" data-k="premium">Hazte Premium</button></div>${msg}`;
   const C = S.strava, G = S.garmin, last = C?.list?.[0], glast = G?.list?.[0];
-  return `<p class="note">Conecta el que uses (o los dos). Las actividades salen en Inicio, en el Diario y en Progreso.</p>
+  return `${msg}<p class="note">Conecta el que uses (o los dos). Las actividades salen en Inicio, en el Diario y en Progreso.</p>
     <div class="card strava"><div class="st-h"><span class="st-logo" aria-hidden="true">S</span><div><b>Strava</b><small>${C ? `Conectado${C.athlete ? " como "+esc(C.athlete) : ""}` : "No conectado"}</small></div>${C?`<span class="st-on">●</span>`:""}</div>
     ${C ? `<p class="note">Tus actividades llegan solas cada vez que abres la app. ${last ? `Última: ${SPORT_ICO(last.type)} ${esc(sportName(last.type))}, ${dayLabel(last.day).toLowerCase()}.` : "Aún no hay actividades en los últimos 3 meses."}</p>
       <button class="btn soft" data-act="strava-sync" ${stravaBusy?"disabled":""}>Sincronizar ahora</button>
@@ -711,7 +715,6 @@ function connSection(){
     : `<p class="note">Las actividades nuevas de tu reloj llegan solas. Garmin no envía las anteriores a la conexión.</p><button class="btn gm-btn" data-act="conn-on" data-s="garmin">Conectar con Garmin</button>`}</div>
     ${C || G ? `<div class="card"><label class="tgl"><input type="checkbox" id="stAddEx" ${S.settings.addEx?"checked":""}><span>Sumar las calorías del ejercicio a lo que puedes comer ese día</span></label>
       <p class="note" style="margin:0">Desactívalo si tu plan ya cuenta con el ejercicio.</p></div>` : ""}
-    ${msg}
     <p class="note">Solo se leen tus actividades; la app nunca publica nada en tu Strava ni en tu Garmin. Puedes quitar el permiso cuando quieras desde aquí o desde la propia app de Strava o Garmin Connect.</p>`;
 }
 function stravaSetupForm(){
@@ -1693,7 +1696,7 @@ document.addEventListener("click", e => {
   const a = S.active, c = sheetCtx;
   switch (act){
     case "conn-on": { const sv = el.dataset.s; el.disabled = true; el.textContent = `Abriendo ${sv==="garmin"?"Garmin":"Strava"}…`;
-      stravaCall("start", sv).then(r => { location.href = r.url; }).catch(e => { if (sv==="strava" && e.code==="needs_app"){ stravaSetup = true; stravaMsg = ""; } else stravaMsg = stravaErr(e); render(); }); break; }
+      stravaCall("start", sv).then(r => { location.href = r.url; }).catch(e => { if (sv==="strava" && e.code==="needs_app"){ stravaSetup = true; stravaMsg = ""; } else stravaMsg = stravaErr(e); render(); scrollTo({top:0, behavior:"smooth"}); }); break; }
     case "strava-app": { const cid = $("stCid").value.trim(), sec = $("stSec").value.trim(); el.disabled = true; el.textContent = "Abriendo Strava…";
       stravaCall("app", "strava", {client_id:cid, client_secret:sec}).then(r => { location.href = r.url; }).catch(e => { stravaMsg = stravaErr(e); el.disabled = false; el.textContent = "Guardar y conectar"; const m = document.querySelector(".conn-msg"); if (m) m.innerHTML = `<b>${esc(stravaMsg)}</b>`; else el.insertAdjacentHTML("afterend", `<p class="note conn-msg"><b>${esc(stravaMsg)}</b></p>`); }); break; }
     case "strava-sync": stravaSync(true); break;

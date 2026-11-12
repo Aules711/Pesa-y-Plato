@@ -578,3 +578,5 @@ nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
 .st-steps a{color:#FC4C02;font-weight:700}
 .st-steps code{background:var(--surface2);padding:2px 6px;border-radius:6px;font-size:13px}
 .st-steps .copy{display:flex;gap:8px;align-items:center;margin-top:6px}
+.conn-msg{background:color-mix(in srgb,var(--danger) 12%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--danger) 40%,transparent);border-radius:14px;padding:12px 14px;font-size:14px;font-weight:600;line-height:1.4}
+.conn-msg.ok{background:color-mix(in srgb,var(--ok) 12%,var(--surface));border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
