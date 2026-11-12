@@ -707,3 +707,9 @@ nav.tabbar{background:var(--surface)}
 .sv{background:var(--surface2);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:1px;min-width:0}
 .sv span{font-size:12px;color:var(--muted)}.sv b{font-size:17px;font-variant-numeric:tabular-nums}.sv small{font-size:12px;color:var(--muted)}
 .sv.ok small{color:var(--ok)}.sv.warn small{color:var(--warn)}
+.wh-logo{width:44px;height:44px;border-radius:12px;background:#000;color:#fff;font-weight:900;font-size:22px;display:grid;place-items:center;flex:none;border:1px solid var(--line);letter-spacing:-.04em}
+.wh-btn{background:#000!important;color:#fff!important;border:1px solid var(--line)!important}
+.tp-logo{width:44px;height:44px;border-radius:12px;background:#1B6BDE;color:#fff;font-weight:900;font-size:16px;display:grid;place-items:center;flex:none;opacity:.6}
+.wh-rec{display:flex;align-items:center;gap:12px;border-radius:14px;padding:10px 14px;background:var(--surface2)}
+.wh-rec b{font-size:26px;font-variant-numeric:tabular-nums}.wh-rec span{font-size:13px;color:var(--muted)}
+.wh-rec.g b{color:#16C784}.wh-rec.y b{color:#F5C518}.wh-rec.r b{color:#FF4D4F}

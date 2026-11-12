@@ -31,3 +31,14 @@ create table if not exists public.garmin (
 );
 alter table public.garmin enable row level security;
 -- sin políticas a propósito: desde la web no se puede ver ni tocar
+
+create table if not exists public.whoop (
+  user_id        uuid primary key references auth.users (id) on delete cascade,
+  whoop_user_id  text,
+  name           text,
+  access_token   text not null,
+  refresh_token  text,
+  expires_at     bigint not null,
+  updated_at     timestamptz not null default now()
+);
+alter table public.whoop enable row level security;
