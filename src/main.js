@@ -3,6 +3,7 @@ import "./style.css";
 import { microFor, microFromOFF, MICRO_KEYS } from "./micros.js";
 import { makePlan, swapMeal, PLANNER_FOODS } from "./planner.js";
 import { fileText, parsePlan, parseStudy, EXTRA_FOODS } from "./planparse.js";
+import { SPORT_LIST, SPORT, kcalFor, pace, speed, newTrack, elapsed, addPoint, markGap, packRoute, makeMap, drawRoute, hereMarker, fitRoute } from "./sport.js";
 import { TIERS, STD, tierOf, kgFor, repsFor, isBW, exerciseRanks, muscleRanks, GYM_MUSCLES, bodyMap, badge, suggest, makeGymPlan, NEW_LIB } from "./gym.js";
 
 let sb = null;
@@ -117,6 +118,7 @@ function applyDoc(id, v){
   else if (id==="garmin") S.garmin = v?.connected ? v : null;
   else if (id==="whoop") S.whoop = v?.connected ? v : null;
   else if (id==="aiplan") S.aiplan = v?.plan ? v : null;
+  else if (id==="sports") S.sports = v?.list || [];
 }
 let q = Promise.resolve();
 function enqueue(fn){ const p = q.then(fn); q = p.catch(()=>{}); return p; }
@@ -188,7 +190,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {fast:null, strava:null, garmin:null, whoop:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {sports:[], fast:null, strava:null, garmin:null, whoop:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -399,7 +401,7 @@ function render(){
   const TT = {home:"Hoy", train:"Gym", food:"Diario", nutri:"Nutrición", progress:"Progreso"};
   const ini = ((user?.email || "?")[0] || "?").toUpperCase();
   const appbar = TT[tab] ? `<div class="appbar"><b class="ab-t">${TT[tab]}</b>${isPremium() ? "" : `<button class="prem-pill" data-act="prof-sec" data-k="premium">Pásate a Premium</button>`}<button class="ab-av" data-act="tab" data-tab="profile" aria-label="Perfil y ajustes">${esc(ini)}</button></div>` : "";
-  const top = appbar + `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
+  const top = appbar + (trk ? `<button class="trk-pill" data-act="fab-sport"><i aria-hidden="true"></i>${esc(SPORT[trk.type]?.n||"Actividad")} · <span data-trk>${clock(elapsed(trk)*1000)}</span>${trk.status==="pause"?" · en pausa":""}<span class="prof-ch" aria-hidden="true">›</span></button>` : "") + `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
   const views = {home:viewHome, train:viewTrain, food:viewFood, nutri:viewNutri, progress:viewProgress, profile:viewProfile};
   renderPending = false; const y = scrollY;
   $("main").innerHTML = top + views[tab]();
@@ -471,7 +473,7 @@ function homeFood(t, tot, remaining){
       <span class="hc-bar"><i style="width:${pct}%" class="${remaining<0?"over":""}"></i></span>
       ${ex ? `<span class="note">Incluye ${fmt(ex)} kcal de ejercicio</span>` : ""}</button>
     <button class="card hc hm3" data-act="nutri-go" data-k="mac">${[["Carbohidratos",tot.c,g.c,"var(--carb)"],["Grasas",tot.f,g.f,"var(--fat)"],["Proteínas",tot.p,g.p,"var(--prot)"]].map(([l,v,o,c]) => `<span class="hm3-c"><span class="hc-l">${l}</span><b>${r0(v)} g</b> <span class="note">/ ${r0(o)}</span><span class="hc-bar"><i style="width:${Math.min(100,o?v/o*100:0)}%;background:${c}"></i></span></span>`).join("")}</button>
-    ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(a=>`<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`).join("")}</div>` : ""}
+    ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(actChip).join("")}</div>` : ""}
     ${S.fast?.active ? `<button class="card nutri-cta" data-act="fast-open"><span class="chat-av" aria-hidden="true">⏳</span><span><b>Ayunando · <span data-fast="t"></span></b><small data-fast="left"></small></span><span class="prof-ch" aria-hidden="true">›</span></button>` : ""}
     <div class="sec-h"><h3>Comidas</h3><button class="link" data-act="tab" data-tab="food">Mira el diario</button></div>
     <div class="ml">${meals}</div>
@@ -681,6 +683,7 @@ function tick(){
   if (S.fast?.active) document.querySelectorAll("[data-fast]").forEach(el => { const ms = Date.now() - S.fast.active.start, goal = S.fast.active.hours*3600e3;
     el.textContent = el.dataset.fast === "left" ? (ms >= goal ? "¡Objetivo cumplido!" : "Quedan " + clock(goal - ms)) : clock(ms);
     if (el.dataset.fast === "ring") el.textContent = ""; });
+  if (trk) trkUpdate();
   if (S.active) document.querySelectorAll("[data-elapsed]").forEach(el => el.textContent = clock(Date.now()-S.active.start));
   if (rest){ const left = rest.end-Date.now();
     if (left<=0){ stopRest(); beep(); try { navigator.vibrate?.([200,100,200]); } catch {} }
@@ -709,7 +712,7 @@ function viewFood(){
         <circle cx="66" cy="66" r="${R}" class="ring-bg"/><circle cx="66" cy="66" r="${R}" class="ring-fg ${over?"over":""}" stroke-dasharray="${C}" style="stroke-dashoffset:${C}" data-ring="${C*(1-pct)}"/></svg>
         <div class="ring-c"><b class="${remaining<0?"neg":""}">${fmt(Math.abs(remaining))}</b><span>${remaining<0?"de más":"restantes"}</span></div></div>`; })()}
     <div class="equation ${exK?"ex":""}"><div><div class="big">${fmt(g.kcal)}</div><span>Objetivo</span></div><div class="op">−</div><div><div class="big">${fmt(tot.kcal)}</div><span>Alimentos</span></div>${exK?`<div class="op">+</div><div><div class="big">${fmt(exK)}</div><span>Ejercicio</span></div>`:""}</div>
-    ${actsOn(day).length ? `<div class="st-day">${actsOn(day).map(a=>`<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`).join("")}</div>` : ""}
+    ${actsOn(day).length ? `<div class="st-day">${actsOn(day).map(actChip).join("")}</div>` : ""}
     <div class="macros">${mac("Carbohidratos",tot.c,g.c,"var(--carb)")}${mac("Grasas",tot.f,g.f,"var(--fat)")}${mac("Proteínas",tot.p,g.p,"var(--prot)")}</div>
     ${planBar()}</div>
   ${meals}`;
@@ -1008,7 +1011,124 @@ function openFab(){
   const T = (act, ico, l, sub, prem) => `<button class="fab-t" data-act="${act}"><span class="fab-i" aria-hidden="true">${ico}</span><b>${l}${prem && !isPremium() ? " ⭐" : ""}</b>${sub?`<small>${sub}</small>`:""}</button>`;
   const R = (act, ico, l) => `<button class="fab-r" data-act="${act}"><span aria-hidden="true">${ico}</span>${l}<span class="prof-ch" aria-hidden="true">›</span></button>`;
   openSheet("Registrar", `<div class="fab-grid">${T("fab-food","🔍","Registrar alimento",mealNow())}${T("fab-photo","▥","Foto al código de barras","",true)}</div>
-    <div class="fab-list">${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-gym","🏋️", S.active ? "Seguir entreno" : "Empezar entreno")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
+    <div class="fab-list">${R("fab-sport", trk ? "🔴" : "🏅", trk ? "Actividad en curso" : "Deportes y GPS")}${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-gym","🏋️", S.active ? "Seguir entreno" : "Empezar entreno")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
+}
+/* ---------- Deportes y GPS ---------- */
+let trk = null, trkWatch = null, trkMap = null, trkLine = null, trkHere = null, trkLock = null, trkSaveT = 0, trkErr = "", detailMap = null;
+try { const x = JSON.parse(localStorage.getItem("bh-trk") || "null"); if (x && x.start && Date.now() - x.start < 12*3600e3){ trk = x; if (trk.status === "run"){ trk.moving += Math.max(0, (x.savedAt||Date.now()) - trk.lastResume); trk.status = "pause"; } } } catch {}
+const trkStore = () => { try { if (trk) localStorage.setItem("bh-trk", JSON.stringify({...trk, savedAt:Date.now()})); else localStorage.removeItem("bh-trk"); } catch {} };
+const sportKg = () => gymBW() || +S.settings.profile?.w || 75;
+function openSports(){
+  const tile = s => `<button class="sp-t" data-act="sport-pick" data-k="${s.k}"><span aria-hidden="true">${s.e}</span><b>${esc(s.n)}</b></button>`;
+  const all = Object.values(SPORT);
+  openSheet("Deportes", `<p class="note">Elige el deporte y pulsa empezar. Los que llevan GPS dibujan tu recorrido en el mapa y miden distancia y ritmo.</p>
+    <h2>Con GPS</h2><div class="sp-grid">${all.filter(s=>s.gps).map(tile).join("")}</div>
+    <h2>Otros deportes</h2><div class="sp-grid">${all.filter(s=>!s.gps).map(tile).join("")}</div>
+    <button class="btn ghost" data-act="sport-manual">+ Añadir uno que ya hiciste</button>`);
+}
+function openSportManual(k){
+  openSheet("Añadir actividad", `<label class="f">Deporte<select id="smType">${Object.values(SPORT).map(s=>`<option value="${s.k}" ${s.k===(k||"run")?"selected":""}>${s.e} ${esc(s.n)}</option>`).join("")}</select></label>
+    <label class="f">Día<input type="date" id="smDay" value="${today()}" max="${today()}"></label>
+    <div class="grid2"><label class="f">Duración (min)<input id="smMin" inputmode="numeric" placeholder="45"></label><label class="f">Distancia (km)<input id="smKm" inputmode="decimal" placeholder="opcional"></label></div>
+    <span class="msg" id="smMsg" hidden></span>
+    <button class="btn" data-act="sport-manual-save">Guardar</button>`);
+}
+function saveSportManual(){
+  const type = $("smType").value, day = $("smDay").value || today(), min = +$("smMin").value.replace(",", "."), km = +($("smKm").value||"0").replace(",", ".") || 0;
+  if (!(min > 0)){ const m = $("smMsg"); m.textContent = "Pon cuántos minutos duró."; m.hidden = false; return; }
+  const start = parseDay(day).getTime() + 12*3600e3, dur = Math.round(min*60);
+  const a = {id:"a"+Date.now(), type, name:"", start, day, dur, km:Math.round(km*100)/100, kcal:kcalFor(type, sportKg(), dur, km)};
+  put("sports", {list:[a, ...(S.sports||[])]}).then(() => { closeSheet(); render(); });
+}
+function trkStart(type){
+  trk = newTrack(type); trkErr = ""; trkStore(); trkShow();
+}
+function trkShow(){
+  const T = SPORT[trk.type] || SPORT.other, gps = T.gps;
+  let box = $("trk"); if (!box){ box = document.createElement("div"); box.id = "trk"; box.className = "trk"; document.body.appendChild(box); }
+  box.hidden = false; document.body.style.overflow = "hidden";
+  box.innerHTML = `${gps ? `<div class="trk-map" id="trkMap"></div>` : `<div class="trk-hero"><span aria-hidden="true">${T.e}</span></div>`}
+    <div class="trk-panel">
+      <div class="trk-top"><b>${T.e} ${esc(T.n)}</b>${gps ? `<span class="trk-gps" id="trkGps">GPS…</span>` : ""}<button class="iconb" data-act="trk-min" aria-label="Minimizar">⌄</button></div>
+      <div class="trk-big"><b id="trkTime">0:00</b><span>Tiempo</span></div>
+      <div class="trk-stats">${gps ? `<div><b id="trkKm">0,00</b><span>km</span></div><div><b id="trkPace">—</b><span>${T.unit==="speed"?"km/h":"min/km"}</span></div>` : ""}<div><b id="trkKcal">0</b><span>kcal</span></div></div>
+      <div class="trk-btns" id="trkBtns"></div>
+      <p class="note trk-note" id="trkNote"></p>
+    </div>`;
+  if (gps){
+    if (trkMap){ trkMap.remove(); trkMap = null; trkLine = null; trkHere = null; }
+    const last = trk.pts[trk.pts.length-1];
+    trkMap = makeMap($("trkMap"), {center: last ? [last[0], last[1]] : null});
+    if (trk.pts.length){ trkLine = drawRoute(trkMap, trk.pts); trkHere = hereMarker(trkMap, [last[0], last[1]]); }
+    setTimeout(() => trkMap?.invalidateSize(), 60);
+    trkWatchOn();
+  }
+  trkButtons(); trkUpdate();
+}
+function trkHide(){ const b = $("trk"); if (b) b.hidden = true; document.body.style.overflow = ""; }
+function trkButtons(){
+  const st = trk.status, B = $("trkBtns"); if (!B) return;
+  B.innerHTML = st === "ready" ? `<button class="btn trk-go" data-act="trk-go">Empezar</button><button class="btn ghost" data-act="trk-cancel">Cancelar</button>`
+    : st === "run" ? `<button class="btn trk-pause" data-act="trk-pause">Pausar</button>`
+    : `<button class="btn trk-go" data-act="trk-resume">Seguir</button><button class="btn danger" data-act="trk-finish">Terminar</button>`;
+  const N = $("trkNote");
+  if (N) N.textContent = trkErr || (SPORT[trk.type]?.gps ? (st === "ready" ? "Espera a que el GPS marque buena señal (± pocos metros) y pulsa Empezar." : "Deja la app abierta y la pantalla encendida: el iPhone no deja que una web use el GPS con la pantalla bloqueada.") : "Las calorías se calculan con tu peso y el tipo de deporte.");
+}
+function trkUpdate(){
+  if (!trk) return; document.querySelectorAll("[data-trk]").forEach(el => el.textContent = clock(elapsed(trk)*1000)); if (!$("trkTime")) return;
+  const sec = elapsed(trk), km = trk.m/1000, T = SPORT[trk.type] || SPORT.other;
+  $("trkTime").textContent = clock(sec*1000);
+  if ($("trkKm")) $("trkKm").textContent = km.toFixed(2).replace(".", ",");
+  if ($("trkPace")) $("trkPace").textContent = T.unit === "speed" ? speed(sec, km) : pace(sec, km);
+  $("trkKcal").textContent = fmt(kcalFor(trk.type, sportKg(), sec, km));
+  const g = $("trkGps"); if (g) { g.textContent = trk.acc == null ? "Buscando GPS…" : `GPS ± ${trk.acc} m`; g.className = "trk-gps " + (trk.acc == null ? "" : trk.acc <= 15 ? "ok" : trk.acc <= 35 ? "mid" : "bad"); }
+}
+function trkWatchOn(){
+  if (trkWatch != null || !navigator.geolocation) { if (!navigator.geolocation){ trkErr = "Este móvil no deja usar el GPS desde la web."; trkButtons(); } return; }
+  trkWatch = navigator.geolocation.watchPosition(pos => {
+    if (!trk) return; if (trkErr){ trkErr = ""; trkButtons(); }
+    const ll = [pos.coords.latitude, pos.coords.longitude], added = addPoint(trk, pos);
+    if (trkMap){ trkHere = hereMarker(trkMap, ll, trkHere); if (added){ trkLine = drawRoute(trkMap, trk.pts, trkLine); } if (trk.status !== "pause") trkMap.panTo(ll, {animate:true}); if (trkMap.getZoom() < 14) trkMap.setView(ll, 16); }
+    if (Date.now() - trkSaveT > 5000){ trkSaveT = Date.now(); trkStore(); }
+    trkUpdate();
+  }, err => {
+    if (err.code !== 1 && trk?.acc != null) return;
+    trkErr = err.code === 1 ? "No hay permiso de ubicación. En el iPhone: Ajustes › Privacidad y seguridad › Localización › Safari (o Sitios web de Safari) › «Al usar la app» y activa «Ubicación exacta». Luego vuelve a abrir esto." : "No llega la señal GPS. Sal a un sitio abierto y espera unos segundos.";
+    trkButtons();
+  }, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+}
+function trkWatchOff(){ if (trkWatch != null){ navigator.geolocation.clearWatch(trkWatch); trkWatch = null; } }
+async function trkWake(on){ try { if (on && "wakeLock" in navigator){ trkLock = await navigator.wakeLock.request("screen"); } else if (!on && trkLock){ await trkLock.release(); trkLock = null; } } catch {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && trk?.status === "run") trkWake(true); });
+function trkGo(){ trk.status = "run"; trk.start = Date.now(); trk.lastResume = Date.now(); trk.pts = trk.pts.slice(-1); trk.m = 0; trk.elev = 0; trkWake(true); trkStore(); trkButtons(); trkUpdate(); try { navigator.vibrate?.(80); } catch {} }
+function trkPause(){ if (trk.status !== "run") return; trk.moving += Date.now() - trk.lastResume; trk.status = "pause"; markGap(trk); trkWake(false); trkStore(); trkButtons(); trkUpdate(); }
+function trkResume(){ trk.status = "run"; trk.lastResume = Date.now(); trkWake(true); trkStore(); trkButtons(); }
+function trkEnd(){ trkWatchOff(); trkWake(false); if (trkMap){ trkMap.remove(); trkMap = null; trkLine = trkHere = null; } trk = null; trkStore(); trkHide(); render(); }
+function trkFinish(){
+  const T = SPORT[trk.type] || SPORT.other, sec = elapsed(trk), km = trk.m/1000, kcal = kcalFor(trk.type, sportKg(), sec, km);
+  trkHide();
+  openSheet("Actividad terminada", `${T.gps && trk.pts.length > 1 ? `<div class="sp-map" id="spMap"></div>` : `<div class="done-hero"><span style="font-size:44px" aria-hidden="true">${T.e}</span></div>`}
+    <div class="sp-stats"><div><span>Tiempo</span><b>${clock(sec*1000)}</b></div>${T.gps ? `<div><span>Distancia</span><b>${km.toFixed(2).replace(".", ",")} km</b></div><div><span>${T.unit==="speed"?"Velocidad":"Ritmo"}</span><b>${T.unit==="speed"?speed(sec, km)+" km/h":pace(sec, km)+" /km"}</b></div>` : ""}<div><span>Calorías</span><b>${fmt(kcal)}</b></div>${trk.elev > 5 ? `<div><span>Desnivel +</span><b>${Math.round(trk.elev)} m</b></div>` : ""}</div>
+    <label class="f">Nombre<input id="spName" placeholder="${esc(T.n)} ${dayLabel(today()).toLowerCase()}"></label>
+    ${sec < 30 ? `<p class="note">La actividad dura menos de 30 segundos.</p>` : ""}
+    <button class="btn" data-act="trk-save">Guardar actividad</button>
+    <button class="btn soft" data-act="trk-back">Seguir con la actividad</button>
+    <button class="btn danger" data-act="trk-discard">Borrar</button>`, {kind:"trkdone"});
+  if ($("spMap")){ if (detailMap) detailMap.remove(); detailMap = makeMap($("spMap"), {interactive:false}); drawRoute(detailMap, trk.pts); setTimeout(() => { detailMap.invalidateSize(); fitRoute(detailMap, trk.pts); }, 80); }
+}
+function trkSave(){
+  const sec = elapsed(trk), km = Math.round(trk.m/10)/100, d = new Date(trk.start);
+  const a = {id:"a"+trk.start, type:trk.type, name:($("spName")?.value||"").trim(), start:trk.start, day:iso(d), dur:sec, km, elev:Math.round(trk.elev)||0,
+    kcal:kcalFor(trk.type, sportKg(), sec, trk.m/1000), ...(trk.pts.length > 1 ? {route:packRoute(trk.pts)} : {})};
+  put("sports", {list:[a, ...(S.sports||[]).filter(x=>x.id!==a.id)]}).then(ok => { if (!ok) return; trkEnd(); closeSheet(); confetti(); });
+}
+function openSport(id){
+  const a = (S.sports||[]).find(x=>x.id===id); if (!a) return; const T = SPORT[a.type] || SPORT.other, km = +a.km || 0;
+  openSheet(a.name || T.n, `${a.route?.length > 1 ? `<div class="sp-map big" id="spMap"></div>` : ""}
+    <span class="note">${T.e} ${esc(T.n)} · ${dayLabel(a.day)} · ${pad(new Date(a.start).getHours())}:${pad(new Date(a.start).getMinutes())}</span>
+    <div class="sp-stats"><div><span>Tiempo</span><b>${clock(a.dur*1000)}</b></div>${km ? `<div><span>Distancia</span><b>${String(km.toFixed(2)).replace(".", ",")} km</b></div><div><span>${T.unit==="speed"?"Velocidad":"Ritmo"}</span><b>${T.unit==="speed"?speed(a.dur, km)+" km/h":pace(a.dur, km)+" /km"}</b></div>` : ""}<div><span>Calorías</span><b>${fmt(a.kcal||0)}</b></div>${a.elev > 5 ? `<div><span>Desnivel +</span><b>${a.elev} m</b></div>` : ""}</div>
+    <button class="btn danger" data-act="sport-del" data-id="${esc(a.id)}">Borrar actividad</button>`);
+  if ($("spMap")){ if (detailMap) detailMap.remove(); detailMap = makeMap($("spMap")); drawRoute(detailMap, a.route); setTimeout(() => { detailMap.invalidateSize(); fitRoute(detailMap, a.route); }, 80); }
 }
 /* ---------- Strava ---------- */
 let stravaMsg = "", stravaBusy = false, stravaSetup = false;
@@ -1018,16 +1138,17 @@ const SPORTS = {Run:"Carrera",TrailRun:"Trail",VirtualRun:"Carrera (cinta)",Walk
 const GSPORTS = {RUNNING:"Carrera",TREADMILL_RUNNING:"Carrera (cinta)",TRAIL_RUNNING:"Trail",STREET_RUNNING:"Carrera",TRACK_RUNNING:"Pista",CYCLING:"Bici",ROAD_BIKING:"Bici de carretera",MOUNTAIN_BIKING:"Bici de montaña",GRAVEL_CYCLING:"Gravel",INDOOR_CYCLING:"Bici (rodillo)",
   WALKING:"Caminata",HIKING:"Senderismo",LAP_SWIMMING:"Natación (piscina)",OPEN_WATER_SWIMMING:"Natación (aguas abiertas)",SWIMMING:"Natación",STRENGTH_TRAINING:"Fuerza",CARDIO:"Cardio",HIIT:"HIIT",YOGA:"Yoga",PILATES:"Pilates",
   ELLIPTICAL:"Elíptica",INDOOR_ROWING:"Remo",ROWING:"Remo",STAIR_CLIMBING:"Escaleras",TENNIS:"Tenis",PADEL:"Pádel",SOCCER:"Fútbol",BASKETBALL:"Baloncesto",BOXING:"Boxeo",OTHER:"Actividad"};
-const SPORT_ICO = t => /run/i.test(t) ? "🏃" : /ride|cycl|bik/i.test(t) ? "🚴" : /swim/i.test(t) ? "🏊" : /walk|hik/i.test(t) ? "🚶" : /weight|strength|crossfit|workout|hiit|cardio/i.test(t) ? "🏋️" : /yoga|pilates/i.test(t) ? "🧘" : /soccer/i.test(t) ? "⚽" : /tennis|padel|badminton/i.test(t) ? "🎾" : "💪";
+const SPORT_ICO = t => SPORT[t]?.e || (/run/i.test(t) ? "🏃" : /ride|cycl|bik/i.test(t) ? "🚴" : /swim/i.test(t) ? "🏊" : /walk|hik/i.test(t) ? "🚶" : /weight|strength|crossfit|workout|hiit|cardio/i.test(t) ? "🏋️" : /yoga|pilates/i.test(t) ? "🧘" : /soccer/i.test(t) ? "⚽" : /tennis|padel|badminton/i.test(t) ? "🎾" : "💪");
 const WSPORTS = {running:"Carrera",cycling:"Bici",walking:"Caminata",hiking:"Senderismo",weightlifting:"Pesas","powerlifting":"Powerlifting","functional-fitness":"Entreno funcional",hiit:"HIIT",yoga:"Yoga",pilates:"Pilates",
   swimming:"Natación",tennis:"Tenis",padel:"Pádel",soccer:"Fútbol",basketball:"Baloncesto",boxing:"Boxeo",rowing:"Remo",spin:"Spinning",crossfit:"CrossFit",elliptical:"Elíptica","stairmaster":"Escaleras",activity:"Actividad"};
-const sportName = t => SPORTS[t] || GSPORTS[t] || WSPORTS[t] || String(t||"Actividad").replace(/_/g," ").toLowerCase().replace(/^./, c => c.toUpperCase()).replace(/([a-z])([A-Z])/g,"$1 $2");
-const allActs = () => [...(S.strava?.list || []).map(a => ({...a, src:"strava"})), ...(S.garmin?.list || []).map(a => ({...a, src:"garmin"})), ...(S.whoop?.list || []).map(a => ({...a, src:"whoop"}))].sort((a,b) => b.start - a.start);
+const sportName = t => SPORT[t]?.n || SPORTS[t] || GSPORTS[t] || WSPORTS[t] || String(t||"Actividad").replace(/_/g," ").toLowerCase().replace(/^./, c => c.toUpperCase()).replace(/([a-z])([A-Z])/g,"$1 $2");
+const allActs = () => [...(S.strava?.list || []).map(a => ({...a, src:"strava"})), ...(S.garmin?.list || []).map(a => ({...a, src:"garmin"})), ...(S.whoop?.list || []).map(a => ({...a, src:"whoop"})), ...(S.sports || []).map(a => ({...a, src:"app"}))].sort((a,b) => b.start - a.start);
 const actsOn = d => allActs().filter(a => a.day === d);
-const actLink = a => a.src==="whoop" ? "" : a.src==="garmin" ? (a.gid ? `https://connect.garmin.com/modern/activity/${a.gid}` : "") : `https://www.strava.com/activities/${a.id}`;
+const actLink = a => a.src==="whoop" || a.src==="app" ? "" : a.src==="garmin" ? (a.gid ? `https://connect.garmin.com/modern/activity/${a.gid}` : "") : `https://www.strava.com/activities/${a.id}`;
 const exKcal = d => actsOn(d).reduce((a,x) => a + (+x.kcal||0), 0);
 const exAdd = d => S.settings.addEx ? exKcal(d) : 0;
 const fmtMin = sec => { const m = Math.round(sec/60); return m >= 60 ? `${Math.floor(m/60)} h ${m%60 ? (m%60)+" min" : ""}`.trim() : `${m} min`; };
+const actChip = a => a.src==="app" ? `<button class="st-chip" data-act="sport-open" data-id="${esc(a.id)}">${SPORT_ICO(a.type)} ${esc(a.name || sportName(a.type))} · ${actLine(a)} ›</button>` : `<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`;
 const actLine = a => [fmtMin(a.dur), a.km ? String(r1(a.km)).replace(".",",")+" km" : "", a.kcal ? fmt(a.kcal)+" kcal" : ""].filter(Boolean).join(" · ");
 async function stravaCall(action, svc = "strava", extra){
   const { data:{ session } } = await sb.auth.getSession();
@@ -1094,16 +1215,16 @@ function stravaSetupForm(){
     <p class="note" style="margin:0">Tu Client Secret solo lo guarda el servidor de la app y solo se usa para leer tus actividades.</p></div>`;
 }
 function stravaCard(){
-  const L = allActs(); if (!S.strava && !S.garmin && !S.whoop) return "";
+  const L = allActs(); if (!L.length && !S.strava && !S.garmin && !S.whoop) return "";
   const ws = weekStart(today()), wk = L.filter(a => a.day >= ws), km = wk.reduce((a,x)=>a+(x.km||0),0), kc = wk.reduce((a,x)=>a+(x.kcal||0),0), dur = wk.reduce((a,x)=>a+(x.dur||0),0);
   const bars = []; for (let i=27;i>=0;i--){ const d = addDays(today(),-i); bars.push({x:shortDay(d), y:exKcal(d)}); }
   const mx = Math.max(1, ...bars.map(b=>b.y));
-  return `<div class="card"><div class="top"><h2>Actividades</h2><span class="note">${[S.strava?"Strava":"", S.garmin?"Garmin":"", S.whoop?"WHOOP":""].filter(Boolean).join(" · ")}</span></div>
+  return `<div class="card"><div class="top"><h2>Actividades</h2><span class="note">${[S.sports?.length?"App":"", S.strava?"Strava":"", S.garmin?"Garmin":"", S.whoop?"WHOOP":""].filter(Boolean).join(" · ")}</span></div>
     <div class="nu-big"><div><b>${wk.length}</b><span>esta semana</span></div><div><b>${String(r1(km)).replace(".",",")}</b><span>km</span></div><div><b>${fmt(kc)}</b><span>kcal</span></div></div>
     <div class="st-bars" role="img" aria-label="Calorías de ejercicio por día, últimas 4 semanas">${bars.map(b=>`<i style="height:${Math.max(2,b.y/mx*100)}%" title="${b.x}: ${fmt(b.y)} kcal"></i>`).join("")}</div>
     <p class="note" style="margin:0">Calorías de ejercicio por día · últimas 4 semanas · ${fmtMin(dur)} esta semana</p>
     <div class="list">${L.slice(0,8).map(a => { const href = actLink(a), inner = `<span class="st-i" aria-hidden="true">${SPORT_ICO(a.type)}</span><span class="n"><b>${esc(a.name || sportName(a.type))}</b><small>${dayLabel(a.day)} · ${actLine(a)}</small></span>`;
-      return href ? `<a class="li st-act" href="${href}" target="_blank" rel="noopener">${inner}<span class="st-v ${a.src}">Ver en ${a.src==="garmin"?"Garmin":"Strava"} ›</span></a>` : `<div class="li st-act">${inner}</div>`; }).join("") || `<div class="li note">Aún no hay actividades.</div>`}</div></div>`;
+      return a.src==="app" ? `<button class="li st-act" data-act="sport-open" data-id="${esc(a.id)}">${inner}<span class="prof-ch" aria-hidden="true">›</span></button>` : href ? `<a class="li st-act" href="${href}" target="_blank" rel="noopener">${inner}<span class="st-v ${a.src}">Ver en ${a.src==="garmin"?"Garmin":"Strava"} ›</span></a>` : `<div class="li st-act">${inner}</div>`; }).join("") || `<div class="li note">Aún no hay actividades.</div>`}</div></div>`;
 }
 /* ---------- plan semanal ---------- */
 const WDAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
@@ -2204,6 +2325,21 @@ document.addEventListener("click", e => {
     case "fab-photo": closeSheet(); if (!isPremium()){ profSec = "premium"; tab = "profile"; render(); break; } day = today(); tab = "food"; render(); openAddFood(mealNow()); sheetCtx.t = "scan"; drawFood(); document.querySelectorAll("#ftabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t==="scan")); break;
     case "fab-weight": { closeSheet(); tab = "progress"; render(); setTimeout(() => { const i = $("bwIn"); if (i){ i.scrollIntoView({block:"center"}); i.focus(); } }, 80); break; }
     case "fab-ex": closeSheet(); profSec = "conn"; tab = "profile"; render(); scrollTo(0,0); break;
+    case "fab-sport": closeSheet(); if (trk) trkShow(); else openSports(); break;
+    case "sport-pick": closeSheet(); trkStart(el.dataset.k); break;
+    case "sport-manual": openSportManual(el.dataset.k); break;
+    case "sport-manual-save": saveSportManual(); break;
+    case "trk-go": trkGo(); break;
+    case "trk-pause": trkPause(); break;
+    case "trk-resume": trkResume(); break;
+    case "trk-finish": trkPause(); trkFinish(); break;
+    case "trk-cancel": trkEnd(); break;
+    case "trk-min": trkHide(); render(); break;
+    case "trk-save": trkSave(); break;
+    case "trk-discard": if (el.dataset.sure){ trkEnd(); closeSheet(); } else { el.dataset.sure = 1; el.textContent = "Toca otra vez para borrarla"; } break;
+    case "trk-back": closeSheet(); trkShow(); break;
+    case "sport-open": openSport(el.dataset.id); break;
+    case "sport-del": if (el.dataset.sure){ put("sports", {list:S.sports.filter(a=>a.id!==el.dataset.id)}).then(() => { closeSheet(); render(); }); } else { el.dataset.sure = 1; el.textContent = "Toca otra vez para borrarla"; } break;
     case "gym-plan": openGymPlan(); break;
     case "gym-plan-make": el.disabled = true; makeGymRoutines(); break;
     case "gym-tiers": openTiers(); break;
