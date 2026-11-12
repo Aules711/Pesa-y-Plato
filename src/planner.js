@@ -190,3 +190,5 @@ function tipsFor(v, t){
   T.push("Las especias, el vinagre, el limón y el café o el té sin azúcar los puedes usar libremente.");
   return T.slice(0, 5);
 }
+// lista de alimentos (por 100 g) para reconocer los de un plan subido
+export const PLANNER_FOODS = Object.values(F).map(([name, kcal, p, c, f]) => ({ name, kcal, p, c, f }));
