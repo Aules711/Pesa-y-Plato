@@ -248,7 +248,23 @@ function landingHTML(card, mode){
   const feat = (k,t,d) => `<div class="lf-item"><span class="lf-ic">${ic(k)}</span><h3>${t}</h3><p>${d}</p></div>`;
   const faq = (q,a) => `<details class="lf-faq"><summary>${q}</summary><p>${a}</p></details>`;
   return `<header class="lh"><div class="lh-in"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><b>BEINGHEALTHY</b></a>
-      <nav>${SIGNUP_OPEN?`<button class="btn soft" data-auth="signup" data-go>Crear cuenta</button>`:""}<button class="btn ghost" data-auth="login" data-go>Entrar</button></nav></div></header>
+      <div class="lmenu-links">
+        <details class="ldrop"><summary>Funciones <span aria-hidden="true">▾</span></summary>
+          <div class="ldrop-p">
+            <a href="#sec-free"><b>🍽️ Tu plan y tu diario</b><small>Plan ya puesto, gramos y ✓, calorías y macros</small></a>
+            <a href="#sec-free"><b>🥦 Nutrientes</b><small>Fibra, azúcar, sal, vitaminas y minerales</small></a>
+            <a href="#sec-prem"><b>✨ Plan a medida</b><small>Tu menú semanal con gramos, al momento</small></a>
+            <a href="#sec-prem"><b>📄 Estudio del nutricionista</b><small>Sube el PDF o una foto y se usa en tu plan</small></a>
+            <a href="#sec-prem"><b>⏱️ Ayuno y 📊 informe semanal</b><small>Cronómetro de ayuno y resumen de tu semana</small></a>
+            <a href="#sec-prem"><b>🔗 Garmin y WHOOP</b><small>Tus entrenos y calorías quemadas, solos</small></a>
+          </div></details>
+        <a href="#sec-prem">Premium</a><a href="#sec-faq">Preguntas</a></div>
+      <nav>${SIGNUP_OPEN?`<button class="btn soft lnav-cta" data-auth="signup" data-go>Crear cuenta</button>`:""}<button class="btn ghost" data-auth="login" data-go>Entrar</button>
+        <details class="lburger"><summary aria-label="Abrir menú"><span></span><span></span><span></span></summary>
+          <div class="lburger-p">
+            <a href="#sec-free">🍽️ Funciones</a><a href="#sec-prem">⭐ Premium</a><a href="#sec-steps">🚀 Cómo empezar</a><a href="#sec-faq">❓ Preguntas frecuentes</a>
+            ${SIGNUP_OPEN?`<button class="btn" data-auth="signup" data-go>Crear cuenta gratis</button>`:""}<button class="btn ghost" data-auth="login" data-go>Entrar</button>
+          </div></details></nav></div></header>
     <section class="hero"><div class="hero-txt">
         <span class="kicker">Gratis · En el móvil y el ordenador</span>
         <h1>Tu dieta, <em>al gramo</em>, sin complicarte.</h1>
@@ -269,7 +285,7 @@ function landingHTML(card, mode){
         </div>
       </div>
     </section>
-    <section class="lf"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
+    <section class="lf" id="sec-free"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
         ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida, cena y snacks. Solo escribes los gramos y marcas ✓.")}
         ${feat("ring","Calorías y macros del día","Tarjetas claras con lo que llevas y lo que te queda: calorías, proteínas, hidratos y grasas, y tu semana de un vistazo.")}
@@ -280,7 +296,7 @@ function landingHTML(card, mode){
         ${feat("swap","Trae tus datos","Importa tu plan de comidas o tu historial de MyFitnessPal, y descarga los tuyos cuando quieras.")}
         ${feat("lock","Privado","Tus datos solo los ves tú. Puedes descargarlos o borrar tu cuenta en cualquier momento.")}
       </div></section>
-    <section class="lf lprem"><h2 class="lsec">Con Premium, como tener un entrenador</h2><p class="note lprem-sub">3 € al mes · por Bizum · sin permanencia</p>
+    <section class="lf lprem" id="sec-prem"><h2 class="lsec">Con Premium, como tener un entrenador</h2><p class="note lprem-sub">3 € al mes · por Bizum · sin permanencia</p>
       <div class="lf-grid">
         ${feat("spark","Plan de nutrición a medida","Respondes unas preguntas (objetivo, entrenos, lo que te gusta y lo que no) y te crea al momento tu menú semanal con platos, gramos y calorías. Cambias los platos que quieras.")}
         ${feat("doc","Sube el estudio de tu nutricionista","PDF o foto: la app lee tu metabolismo, % de grasa, masa muscular, proteína recomendada… y crea el plan con esos datos. Si trae menú, lo carga tal cual.")}
@@ -289,12 +305,12 @@ function landingHTML(card, mode){
         ${feat("report","Informe semanal","Tu media de calorías y proteína, los días que cumpliste, tu mejor día, tu peso y un consejo cada semana.")}
         ${feat("link","Garmin y WHOOP","Tus entrenos llegan solos con las calorías que has quemado, y con WHOOP también tu recuperación. Strava y TrainingPeaks, muy pronto.")}
       </div></section>
-    <section class="lsteps"><h2 class="lsec">Empieza en un minuto</h2>
+    <section class="lsteps" id="sec-steps"><h2 class="lsec">Empieza en un minuto</h2>
       <ol><li><b>Crea tu cuenta</b><span>Con tu email y una contraseña. Confirma desde el correo que te llega.</span></li>
         <li><b>Pon tu objetivo o tu plan</b><span>Calcula tus calorías en un paso, mete el plan que ya sigues o crea uno a tu medida.</span></li>
         <li><b>Apunta lo que comes</b><span>Gramos y ✓, o el botón + para registrar rápido. Lo demás lo calcula la app.</span></li></ol></section>
     <section class="lauth" id="lauth"><div class="lauth-txt"><h2 class="lsec">${mode==="signup"?"Crea tu cuenta":mode==="forgot"?"Recupera tu contraseña":"Entra en tu cuenta"}</h2><p class="note">${mode==="signup"?"Es gratis. Solo necesitas un email.":mode==="forgot"?"Te enviamos un enlace para elegir una nueva.":"¿Aún no tienes cuenta? Créala gratis en un minuto."}</p></div>${card}</section>
-    <section class="lfaqs"><h2 class="lsec">Preguntas frecuentes</h2>
+    <section class="lfaqs" id="sec-faq"><h2 class="lsec">Preguntas frecuentes</h2>
       ${faq("¿Cuánto cuesta?","La app es gratis. El plan a medida, la foto al código de barras y el resto de extras son Premium: 3 € al mes, que se pagan por Bizum desde la propia app. No se renueva solo: cada mes decides si sigues.")}
       ${faq("¿Tengo que descargar algo?","No. Es una web que funciona en el navegador. En el iPhone, abre la web en Safari, pulsa Compartir y «Añadir a pantalla de inicio» para tenerla como una app.")}
       ${faq("¿Puedo meter la dieta que ya sigo?","Sí. En Perfil › Mi plan de comidas importas tu plan o lo montas a mano. Con Premium también puedes subir el PDF o una foto del plan o estudio de tu nutricionista. A partir de ahí, cada día te aparece ya puesto.")}
@@ -307,6 +323,12 @@ function landingHTML(card, mode){
     </section>
     <footer class="lfoot"><span>© ${new Date().getFullYear()} BEINGHEALTHY</span><span><a href="/terminos.html">Términos</a> · <a href="/privacidad.html">Privacidad</a></span></footer>`;
 }
+document.addEventListener("click", e => {
+  const a = e.target.closest(".lh a[href^='#sec-']");
+  if (a){ e.preventDefault(); document.getElementById(a.getAttribute("href").slice(1))?.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth", block:"start"}); }
+  document.querySelectorAll(".ldrop[open], .lburger[open]").forEach(d => { if (!d.contains(e.target) || a || e.target.closest("[data-auth]")) d.open = false; });
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".ldrop[open], .lburger[open]").forEach(d => d.open = false); });
 document.addEventListener("click", async e => { const rs = e.target.closest("[data-resend]");
   if (rs){ rs.disabled = true; const { error } = await sb.auth.resend({type:"signup", email:rs.dataset.resend, options:{emailRedirectTo:location.origin}});
     authView("login", error ? {t: /rate|seconds|limit/i.test(error.message) ? "Espera un minuto antes de pedir otro email." : "No se pudo reenviar. Inténtalo en un rato."} : {ok:true, t:"Te hemos enviado otro email de confirmación. Revisa también el spam."}); return; }
