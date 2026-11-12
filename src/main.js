@@ -110,6 +110,7 @@ function applyDoc(id, v){
   else if (id==="health") S.health = {days:v?.days||{}, wos:v?.wos||[]};
   else if (id==="strava") S.strava = v?.connected ? v : null;
   else if (id==="garmin") S.garmin = v?.connected ? v : null;
+  else if (id==="nutri") S.chat = v?.msgs || [];
 }
 let q = Promise.resolve();
 function enqueue(fn){ const p = q.then(fn); q = p.catch(()=>{}); return p; }
@@ -181,7 +182,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {strava:null, garmin:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {strava:null, garmin:null, chat:[], plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -291,6 +292,8 @@ document.addEventListener("click", async e => { const rs = e.target.closest("[da
     authView("login", error ? {t: /rate|seconds|limit/i.test(error.message) ? "Espera un minuto antes de pedir otro email." : "No se pudo reenviar. Inténtalo en un rato."} : {ok:true, t:"Te hemos enviado otro email de confirmación. Revisa también el spam."}); return; }
   const b = e.target.closest("[data-auth]"); if (!b) return; authView(b.dataset.auth);
   if (b.hasAttribute("data-go")) setTimeout(() => { $("lauth")?.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth", block:"start"}); $("aEmail")?.focus({preventScroll:true}); }, 30); });
+document.addEventListener("keydown", e => { if (e.target.id==="chatQ" && e.key==="Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); e.target.form.requestSubmit(); } });
+document.addEventListener("input", e => { if (e.target.id==="chatQ"){ e.target.style.height = "auto"; e.target.style.height = Math.min(140, e.target.scrollHeight) + "px"; } });
 document.addEventListener("submit", async e => {
   if (e.target.id==="fAuth"){ e.preventDefault(); const mode = e.target.dataset.mode, email = $("aEmail").value.trim(), pass = $("aPass")?.value, btn = e.target.querySelector("button[type=submit]");
     btn.disabled = true;
@@ -412,14 +415,16 @@ function homeFood(t, tot, remaining){
       const logged = (S.diary[t]||[]).filter(e => e.meal===m), lk = logged.reduce((a,e)=>a+(+e.kcal||0),0);
       if (!items.length && !logged.length) return "";
       const pk = items.reduce((a,f)=>a+nutr(f,f.g).kcal,0);
-      return `<button class="hm-row" data-act="tab" data-tab="food"><span class="hm-m">${m}</span><span class="hm-d">${esc(dishes[m] || (items.length ? items.filter(f => !/aceite|leche desnatada \(en el café\)/i.test(f.name)).slice(0,3).map(f => f.name.replace(/\s*\(.*?\)/g,"")).join(", ") : logged.map(e=>e.name).join(", ")))}</span>
+return `<button class="hm-row" data-act="tab" data-tab="food"><span class="hm-m">${m}</span><span class="hm-d">${esc(dishes[m] || (items.length ? items.filter(f => !/aceite|leche desnatada \(en el café\)/i.test(f.name)).slice(0,3).map(f => f.name.replace(/\s*\(.*?\)/g,"")).join(", ") : logged.map(e=>e.name).join(", ")))}</span>
         <span class="hm-k ${logged.length?"ok":""}">${logged.length ? "✓ "+fmt(lk) : fmt(pk)} kcal</span></button>`; }).join("");
+  const nutriCard = `<button class="card nutri-cta" data-act="open-nutri"><span class="chat-av" aria-hidden="true">✨</span><span><b>Pregunta a Nutri</b><small>${isPremium() ? "Tu nutricionista con IA: qué cenar, cómo vas esta semana…" : "Nutricionista con IA · Premium"}</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
   return `<div class="card today"><h2>Hoy</h2><div><span class="big">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"} de ${fmt(g.kcal)}</span></div>
       <div class="hm-mac">${[["Proteínas",tot.p,g.p],["Carbohidratos",tot.c,g.c],["Grasas",tot.f,g.f]].map(([l,v,o])=>`<div><span>${l}</span><b>${r0(v)} / ${r0(o)} g</b><i style="--w:${Math.min(100,o?v/o*100:0)}%"></i></div>`).join("")}</div>
       ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(a=>`<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`).join("")}</div>` : ""}
       <button class="btn soft" data-act="tab" data-tab="food">Abrir diario</button></div>
     ${meals ? `<div class="card"><div class="top"><h2>${P._n ? "Hoy toca · día "+P._n : "Hoy toca"}</h2><button class="link" data-act="tab" data-tab="food">Ver diario</button></div><div class="hm-list">${meals}</div></div>`
-      : `<div class="card"><h2>Tu plan de comidas</h2><p class="note">Importa tu plan y aquí verás qué te toca comer cada día.</p><button class="btn" data-act="prof-sec" data-k="plan">Importar mi plan</button></div>`}`;
+      : `<div class="card"><h2>Tu plan de comidas</h2><p class="note">Importa tu plan y aquí verás qué te toca comer cada día.</p><button class="btn" data-act="prof-sec" data-k="plan">Importar mi plan</button></div>`}
+    ${nutriCard}`;
 }
 const WTYPES = {Running:"Correr",Walking:"Caminar",Cycling:"Ciclismo",TraditionalStrengthTraining:"Fuerza",FunctionalStrengthTraining:"Fuerza funcional",HighIntensityIntervalTraining:"HIIT",
   Swimming:"Natación",Soccer:"Fútbol",Basketball:"Baloncesto",Tennis:"Tenis",Paddle:"Pádel",PickleBall:"Pickleball",Elliptical:"Elíptica",Rowing:"Remo",Yoga:"Yoga",Hiking:"Senderismo",CoreTraining:"Core",
@@ -618,11 +623,12 @@ function nutriData(){
 }
 const nfmt = (v, u) => u === "g" ? (v < 10 ? String(r1(v)).replace(".",",") : fmt(v)) : (v < 10 ? String(r1(v)).replace(".",",") : fmt(v));
 function viewNutri(){
+  if (nutriSub === "ia") return `<div class="seg nu-seg" role="tablist">${[["cal","Calorías"],["nut","Nutrientes"],["mac","Macros"],["ia","✨ Nutri IA"]].map(([k,l])=>`<button role="tab" data-act="nutri-sub" data-k="${k}" ${nutriSub===k?'aria-selected="true" class="on"':""}>${l}</button>`).join("")}</div>` + viewChat();
   const D = nutriData(), g = D.g, sem = nutriRange === "sem";
   const head = `<div class="daynav"><button class="iconb" data-act="day-prev" aria-label="Día anterior">‹</button>
     <div style="text-align:center"><div class="lbl">${sem ? `Semana hasta ${dayLabel(day).toLowerCase()}` : dayLabel(day)}</div>${day!==today()?`<button class="link" data-act="day-today" style="padding:0;font-size:13px">Volver a hoy</button>`:""}</div>
     <button class="iconb" data-act="day-next" aria-label="Día siguiente">›</button></div>
-    <div class="seg nu-seg" role="tablist">${[["cal","Calorías"],["nut","Nutrientes"],["mac","Macros"]].map(([k,l])=>`<button role="tab" data-act="nutri-sub" data-k="${k}" ${nutriSub===k?'aria-selected="true" class="on"':""}>${l}</button>`).join("")}</div>
+    <div class="seg nu-seg" role="tablist">${[["cal","Calorías"],["nut","Nutrientes"],["mac","Macros"],["ia","✨ Nutri IA"]].map(([k,l])=>`<button role="tab" data-act="nutri-sub" data-k="${k}" ${nutriSub===k?'aria-selected="true" class="on"':""}>${l}</button>`).join("")}</div>
     <div class="nu-range">${[["dia","Día"],["sem","Semana"]].map(([k,l])=>`<button data-act="nutri-range" data-k="${k}" class="${nutriRange===k?"on":""}">${l}</button>`).join("")}${sem?`<span class="note">Media de ${D.logged || 0} día${D.logged===1?"":"s"} con registros</span>`:""}</div>`;
   if (!D.items.length && !D.noData) return head + `<div class="card nu-empty"><h3>Aún no hay nada apuntado</h3><p class="note">Cuando añadas comidas en el Diario, aquí verás tus proteínas, hidratos, grasas, fibra, azúcar, vitaminas y minerales.</p><button class="btn" data-act="tab" data-tab="food">Ir al Diario</button></div>`;
   let body = "";
@@ -661,6 +667,69 @@ function openNutriDetail(k){
     ${list.slice(0,15).map(([n,v])=>`<div class="nu-row"><div class="nu-l"><span>${esc(n)}</span><b>${nfmt(v,u)} ${u}</b></div><div class="bar"><i style="width:${v/tot*100}%"></i></div></div>`).join("")}`
     : `<p class="note">Ningún alimento apuntado aporta ${l.toLowerCase()}.</p>`);
 }
+/* ---------- Nutricionista con IA ---------- */
+let chatBusy = false, chatErr = "";
+const CHAT_IDEAS = ["¿Qué ceno hoy para cuadrar mis macros?", "Analiza cómo he comido esta semana", "Ideas de desayuno alto en proteína", "¿Cómo voy de fibra, azúcar y sal?", "Dame un snack de menos de 200 kcal", "¿Qué como antes y después de entrenar?"];
+function md(t){
+  const lines = esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").split("\n"); let out = "", inList = false;
+  for (const l of lines){ const m = l.match(/^\s*(?:[-•*]|\d+[.)])\s+(.*)/);
+    if (m){ if (!inList){ out += "<ul>"; inList = true; } out += `<li>${m[1]}</li>`; }
+    else { if (inList){ out += "</ul>"; inList = false; } if (l.trim()) out += `<p>${l.replace(/^#+\s*/, "")}</p>`; } }
+  return out + (inList ? "</ul>" : "");
+}
+function daySum(d){ const e = S.diary[d] || []; return {n:e.length, kcal:e.reduce((a,x)=>a+(+x.kcal||0),0), p:e.reduce((a,x)=>a+(+x.p||0),0), c:e.reduce((a,x)=>a+(+x.c||0),0), f:e.reduce((a,x)=>a+(+x.f||0),0)}; }
+function nutriContext(){
+  const t = today(), g = goalsFor(t), pr = S.settings.profile || {}, L = [];
+  const lastW = Object.entries(S.body||{}).sort(([a],[b]) => a<b?1:-1)[0];
+  L.push(`Hoy es ${longDay(t)} (${t}). Hora: ${new Date().toTimeString().slice(0,5)}.`);
+  const who = [pr.sex==="m"?"hombre":pr.sex==="f"?"mujer":"", pr.age?pr.age+" años":"", pr.h?pr.h+" cm":"", lastW?`${lastW[1].kg} kg (pesado el ${lastW[0]})`:pr.w?pr.w+" kg":"", pr.goal?({lose:"objetivo: perder grasa",keep:"objetivo: mantener",gain:"objetivo: ganar músculo"}[pr.goal]||""):""].filter(Boolean).join(", ");
+  if (who) L.push(`Persona: ${who}.`);
+  L.push(`Objetivo diario: ${fmt(g.kcal)} kcal, ${g.p} g proteína, ${g.c} g hidratos, ${g.f} g grasa${S.settings.addEx?" (se suman las kcal del ejercicio)":""}.`);
+  const ds = daySum(t), ex = exAdd(t);
+  L.push(`HOY lleva ${fmt(ds.kcal)} kcal, ${r0(ds.p)} g P, ${r0(ds.c)} g C, ${r0(ds.f)} g G. Le quedan ${fmt(g.kcal + ex - ds.kcal)} kcal y ${r0(g.p - ds.p)} g de proteína.`);
+  for (const m of MEALS){ const e = (S.diary[t]||[]).filter(x => x.meal===m); if (e.length) L.push(`- ${m}: ${e.map(x => `${x.name}${x.g?` ${r0(x.g)} g`:""} (${fmt(x.kcal)} kcal)`).join("; ")}`); }
+  const cp = curPlan(t); if (cp?.dishes){ const pl = MEALS.map(m => cp.dishes[m]?.length ? `${m}: ${cp.dishes[m].join(", ")}` : "").filter(Boolean); if (pl.length) L.push(`Su plan de comidas para hoy: ${pl.join(" | ")}.`); }
+  const past = []; for (let i=1;i<=7;i++){ const d = addDays(t,-i), x = daySum(d); if (x.n) past.push(`${d}: ${fmt(x.kcal)} kcal, ${r0(x.p)} g P, ${r0(x.c)} g C, ${r0(x.f)} g G`); }
+  L.push(past.length ? `Últimos 7 días (días con registros):\n${past.join("\n")}` : "No tiene registros en los últimos 7 días.");
+  const keep = [nutriSub, nutriRange]; nutriRange = "sem"; const W = nutriData(); [nutriSub, nutriRange] = keep;
+  if (W.items.length) L.push(`Media diaria semanal estimada: fibra ${r0(W.val.fib)} g, azúcar ${r0(W.val.azu)} g, saturadas ${r0(W.val.sat)} g, sodio ${fmt(W.val.na)} mg, calcio ${fmt(W.val.ca)} mg, hierro ${r1(W.val.fe)} mg, vitamina C ${fmt(W.val.vc)} mg, vitamina D ${r1(W.val.vd)} µg.`);
+  const acts = allActs().filter(a => a.day >= addDays(t,-7)); if (acts.length) L.push(`Ejercicio (7 días): ${acts.map(a => `${a.day} ${sportName(a.type)} ${actLine(a)}`).join("; ")}.`);
+  return L.join("\n");
+}
+function viewChat(){
+  if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Tu nutricionista con IA</h3>
+    <p class="note">Pregúntale lo que quieras: qué cenar para cuadrar tus macros, cómo has comido esta semana, ideas de desayunos… Conoce tus objetivos, lo que has comido, tu plan y tu ejercicio, y te contesta al momento.</p>
+    <div class="chat demo"><div class="msg me">¿Qué ceno hoy?</div><div class="msg ai"><p>Te quedan <b>620 kcal</b> y <b>45 g de proteína</b>. Por ejemplo: <b>150 g de salmón</b> a la plancha con <b>200 g de verduras</b> y <b>80 g de patata</b>. 🐟</p></div></div>
+    <button class="btn" data-act="prof-sec" data-k="premium">Hazte Premium</button></div>`;
+  const M = S.chat || [];
+  return `<div class="chat" id="chat">
+    ${M.length ? "" : `<div class="chat-hi"><span class="chat-av" aria-hidden="true">✨</span><div><b>Hola, soy Nutri</b><p class="note">Tu nutricionista con IA. Veo tus objetivos, lo que has comido, tu plan y tu ejercicio. ¿En qué te ayudo?</p></div></div>
+      <div class="chips chat-ideas">${CHAT_IDEAS.map(q => `<button class="chip" data-act="chat-idea" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>`}
+    ${M.map(m => m.role==="user" ? `<div class="msg me">${esc(m.text)}</div>` : `<div class="msg ai">${md(m.text)}</div>`).join("")}
+    ${chatBusy ? `<div class="msg ai typing" aria-label="Nutri está escribiendo"><i></i><i></i><i></i></div>` : ""}
+    ${chatErr ? `<div class="conn-msg">${esc(chatErr)}</div>` : ""}
+  </div>
+  <form class="chat-in" id="fChat"><textarea id="chatQ" rows="1" placeholder="Pregunta a Nutri…" aria-label="Escribe tu pregunta" maxlength="1000"></textarea><button class="btn" type="submit" ${chatBusy?"disabled":""} aria-label="Enviar">↑</button></form>
+  <p class="note chat-foot">Orientativo: Nutri no sustituye a un médico ni a un dietista-nutricionista colegiado. ${M.length?`<button class="link" data-act="chat-new">Nueva conversación</button>`:""}</p>`;
+}
+async function chatSend(q){
+  q = String(q||"").trim(); if (!q || chatBusy) return;
+  chatErr = ""; const M = [...(S.chat||[]), {role:"user", text:q, t:Date.now()}]; S.chat = M; chatBusy = true; render(); chatScroll();
+  try {
+    const { data:{ session } } = await sb.auth.getSession();
+    const r = await fetch("/api/nutri", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({messages:M.slice(-12), context:nutriContext()})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw {code: j.code || r.status};
+    S.chat = [...M, {role:"assistant", text:j.text, t:Date.now()}].slice(-40);
+    put("nutri", {msgs:S.chat});
+  } catch(e){
+    S.chat = M.slice(0,-1); chatErr = e.code==="premium" ? "Nutri es Premium." : e.code==="rate_limited" ? "Has hecho muchas preguntas seguidas. Espera un poco." : e.code==="disabled" ? (isOwner() ? "Falta ANTHROPIC_API_KEY en Vercel (y hacer Redeploy)." : "Nutri no está disponible ahora mismo.") : e.code==="no_service" ? (isOwner() ? "Falta la clave SECRETA de Supabase en Vercel (SUPABASE_SERVICE_ROLE_KEY)." : "Nutri no está disponible ahora mismo.") : e.code==="not_granted" ? "Tu sesión ha caducado. Vuelve a entrar." : "No he podido responder. Inténtalo otra vez.";
+    setTimeout(() => { const i = $("chatQ"); if (i && !i.value) i.value = q; }, 0);
+  }
+  chatBusy = false; render(); chatScroll();
+}
+const chatScroll = () => requestAnimationFrame(() => { const c = $("chat"); if (c) c.lastElementChild?.scrollIntoView({block:"end", behavior:"smooth"}); });
+
 /* ---------- Strava ---------- */
 let stravaMsg = "", stravaBusy = false, stravaSetup = false;
 const SPORTS = {Run:"Carrera",TrailRun:"Trail",VirtualRun:"Carrera (cinta)",Walk:"Caminata",Hike:"Senderismo",Ride:"Bici",MountainBikeRide:"Bici de montaña",GravelRide:"Gravel",EBikeRide:"Bici eléctrica",VirtualRide:"Bici (rodillo)",
@@ -1276,9 +1345,10 @@ function premiumStatus(){
 function premFeats(on){
   const F = [["plate","📸","Foto al plato con IA","Haz una foto a lo que vas a comer: la IA reconoce cada alimento y calcula gramos, calorías y macros. Tú solo revisas y añades."],
              ["code","▥","Foto al código de barras","Para lo envasado: foto al código y salen sus calorías, macros, fibra, azúcar y sal de la etiqueta."],
+             ["nutri","✨","Nutricionista con IA","Pregúntale qué cenar para cuadrar tus macros, cómo has comido esta semana o ideas de recetas. Conoce tus datos y te contesta al momento."],
              ["conn","🔗","Strava o Garmin","Tus carreras, salidas en bici y entrenos llegan solos con sus calorías. Conecta el que uses."]];
   return `<div class="prem-feats">${F.map(([k,i,t,d]) => `<div class="prem-f"><span class="prem-fi" aria-hidden="true">${i}</span><div><b>${t}</b><p class="note">${d}</p>
-    ${on ? k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
+    ${on ? k==="nutri" ? `<button class="btn soft" data-act="open-nutri">Hablar con Nutri</button>` : k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
 }
 const mealNow = () => { const h = new Date().getHours() + new Date().getMinutes()/60; return h < 11 ? "Desayuno" : h < 16.5 ? "Comida" : h < 20 ? "Snacks" : "Cena"; };
 function premiumPitch(){
@@ -1812,7 +1882,10 @@ document.addEventListener("click", e => {
     case "day-prev": day = addDays(day,-1); render(); break;
     case "day-next": day = addDays(day,1); render(); break;
     case "day-today": day = today(); render(); break;
-    case "nutri-sub": nutriSub = el.dataset.k; render(); break;
+    case "nutri-sub": nutriSub = el.dataset.k; render(); if (nutriSub==="ia") chatScroll(); break;
+    case "chat-idea": chatSend(el.dataset.q); break;
+    case "chat-new": S.chat = []; chatErr = ""; put("nutri", {msgs:[]}); render(); break;
+    case "open-nutri": tab = "nutri"; nutriSub = "ia"; render(); chatScroll(); break;
     case "nutri-range": nutriRange = el.dataset.k; render(); break;
     case "nutri-detail": openNutriDetail(el.dataset.k); break;
     case "add-food": openAddFood(el.dataset.meal); break;
@@ -1918,6 +1991,7 @@ document.addEventListener("submit", async e => {
     m.textContent = ok ? `Guardado: ${fmt(st)} pasos y ${fmt(kc)} kcal activas el ${dayLabel(d).toLowerCase()}.` : "No se pudo guardar."; return; }
   if (e.target.id==="fPass"){ const v = $("newPass").value, m = $("passMsg"); if (v.length<6){ m.textContent = "Usa al menos 6 caracteres."; return; }
     const { error } = await sb.auth.updateUser({password:v}); m.textContent = error ? "No se pudo cambiar. Inténtalo otra vez." : "Contraseña cambiada."; if (!error) $("newPass").value = ""; return; }
+  if (e.target.id==="fChat"){ e.preventDefault(); const i = $("chatQ"), q = i.value; i.value = ""; i.blur(); chatSend(q); return; }
   if (e.target.id==="fWeight"){ const kg = parseNum($("bwIn").value); if (kg>0){ await put("body", {log:{...S.body, [today()]:{kg:r1(kg)}}}); render(); } }
 });
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("sheet").hidden) closeSheet(); });
