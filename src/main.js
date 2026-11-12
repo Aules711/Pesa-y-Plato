@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import "./style.css";
 import { microFor, microFromOFF, MICRO_KEYS } from "./micros.js";
+import { makePlan, swapMeal } from "./planner.js";
 
 let sb = null;
 
@@ -110,7 +111,7 @@ function applyDoc(id, v){
   else if (id==="health") S.health = {days:v?.days||{}, wos:v?.wos||[]};
   else if (id==="strava") S.strava = v?.connected ? v : null;
   else if (id==="garmin") S.garmin = v?.connected ? v : null;
-  else if (id==="nutri") S.chat = v?.msgs || [];
+  else if (id==="aiplan") S.aiplan = v?.plan ? v : null;
 }
 let q = Promise.resolve();
 function enqueue(fn){ const p = q.then(fn); q = p.catch(()=>{}); return p; }
@@ -182,7 +183,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {strava:null, garmin:null, chat:[], plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {strava:null, garmin:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -292,8 +293,8 @@ document.addEventListener("click", async e => { const rs = e.target.closest("[da
     authView("login", error ? {t: /rate|seconds|limit/i.test(error.message) ? "Espera un minuto antes de pedir otro email." : "No se pudo reenviar. Inténtalo en un rato."} : {ok:true, t:"Te hemos enviado otro email de confirmación. Revisa también el spam."}); return; }
   const b = e.target.closest("[data-auth]"); if (!b) return; authView(b.dataset.auth);
   if (b.hasAttribute("data-go")) setTimeout(() => { $("lauth")?.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth", block:"start"}); $("aEmail")?.focus({preventScroll:true}); }, 30); });
-document.addEventListener("keydown", e => { if (e.target.id==="chatQ" && e.key==="Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); e.target.form.requestSubmit(); } });
-document.addEventListener("input", e => { if (e.target.id==="chatQ"){ e.target.style.height = "auto"; e.target.style.height = Math.min(140, e.target.scrollHeight) + "px"; } });
+document.addEventListener("input", e => { if (/^c(Sex|Age|H|W|Act|Goal)$/.test(e.target.id)){ const t = calcGoals(coachVals()), el = $("cTarget"); if (el) el.innerHTML = t ? `Tu objetivo: <b>${fmt(t.kcal)} kcal</b> · <b>${t.p} g</b> proteína · ${t.c} g hidratos · ${t.f} g grasa` : "Rellena edad, altura y peso para calcular tu objetivo."; if ($("cGo")) $("cGo").disabled = !t; } });
+document.addEventListener("change", e => { if (/^c(Sex|Act|Goal)$/.test(e.target.id)) e.target.dispatchEvent(new Event("input", {bubbles:true})); });
 document.addEventListener("submit", async e => {
   if (e.target.id==="fAuth"){ e.preventDefault(); const mode = e.target.dataset.mode, email = $("aEmail").value.trim(), pass = $("aPass")?.value, btn = e.target.querySelector("button[type=submit]");
     btn.disabled = true;
@@ -417,7 +418,7 @@ function homeFood(t, tot, remaining){
       const pk = items.reduce((a,f)=>a+nutr(f,f.g).kcal,0);
 return `<button class="hm-row" data-act="tab" data-tab="food"><span class="hm-m">${m}</span><span class="hm-d">${esc(dishes[m] || (items.length ? items.filter(f => !/aceite|leche desnatada \(en el café\)/i.test(f.name)).slice(0,3).map(f => f.name.replace(/\s*\(.*?\)/g,"")).join(", ") : logged.map(e=>e.name).join(", ")))}</span>
         <span class="hm-k ${logged.length?"ok":""}">${logged.length ? "✓ "+fmt(lk) : fmt(pk)} kcal</span></button>`; }).join("");
-  const nutriCard = `<button class="card nutri-cta" data-act="open-nutri"><span class="chat-av" aria-hidden="true">✨</span><span><b>Pregunta a Nutri</b><small>${isPremium() ? "Tu nutricionista con IA: qué cenar, cómo vas esta semana…" : "Nutricionista con IA · Premium"}</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
+  const nutriCard = `<button class="card nutri-cta" data-act="open-nutri"><span class="chat-av" aria-hidden="true">✨</span><span><b>${S.aiplan?.plan ? "Tu plan a medida" : "Crea tu plan a medida"}</b><small>${isPremium() ? (S.aiplan?.plan ? esc(S.aiplan.plan.title) : "Tu entrenador personal te prepara el menú de la semana") : "Entrenador de nutrición · Premium"}</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
   return `<div class="card today"><h2>Hoy</h2><div><span class="big">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"} de ${fmt(g.kcal)}</span></div>
       <div class="hm-mac">${[["Proteínas",tot.p,g.p],["Carbohidratos",tot.c,g.c],["Grasas",tot.f,g.f]].map(([l,v,o])=>`<div><span>${l}</span><b>${r0(v)} / ${r0(o)} g</b><i style="--w:${Math.min(100,o?v/o*100:0)}%"></i></div>`).join("")}</div>
       ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(a=>`<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`).join("")}</div>` : ""}
@@ -623,12 +624,12 @@ function nutriData(){
 }
 const nfmt = (v, u) => u === "g" ? (v < 10 ? String(r1(v)).replace(".",",") : fmt(v)) : (v < 10 ? String(r1(v)).replace(".",",") : fmt(v));
 function viewNutri(){
-  if (nutriSub === "ia") return `<div class="seg nu-seg" role="tablist">${[["cal","Calorías"],["nut","Nutrientes"],["mac","Macros"],["ia","✨ Nutri IA"]].map(([k,l])=>`<button role="tab" data-act="nutri-sub" data-k="${k}" ${nutriSub===k?'aria-selected="true" class="on"':""}>${l}</button>`).join("")}</div>` + viewChat();
+  if (nutriSub === "ia") return `<div class="seg nu-seg" role="tablist">${[["cal","Calorías"],["nut","Nutrientes"],["mac","Macros"],["ia","✨ Mi plan"]].map(([k,l])=>`<button role="tab" data-act="nutri-sub" data-k="${k}" ${nutriSub===k?'aria-selected="true" class="on"':""}>${l}</button>`).join("")}</div>` + viewCoach();
   const D = nutriData(), g = D.g, sem = nutriRange === "sem";
   const head = `<div class="daynav"><button class="iconb" data-act="day-prev" aria-label="Día anterior">‹</button>
     <div style="text-align:center"><div class="lbl">${sem ? `Semana hasta ${dayLabel(day).toLowerCase()}` : dayLabel(day)}</div>${day!==today()?`<button class="link" data-act="day-today" style="padding:0;font-size:13px">Volver a hoy</button>`:""}</div>
     <button class="iconb" data-act="day-next" aria-label="Día siguiente">›</button></div>
-    <div class="seg nu-seg" role="tablist">${[["cal","Calorías"],["nut","Nutrientes"],["mac","Macros"],["ia","✨ Nutri IA"]].map(([k,l])=>`<button role="tab" data-act="nutri-sub" data-k="${k}" ${nutriSub===k?'aria-selected="true" class="on"':""}>${l}</button>`).join("")}</div>
+    <div class="seg nu-seg" role="tablist">${[["cal","Calorías"],["nut","Nutrientes"],["mac","Macros"],["ia","✨ Mi plan"]].map(([k,l])=>`<button role="tab" data-act="nutri-sub" data-k="${k}" ${nutriSub===k?'aria-selected="true" class="on"':""}>${l}</button>`).join("")}</div>
     <div class="nu-range">${[["dia","Día"],["sem","Semana"]].map(([k,l])=>`<button data-act="nutri-range" data-k="${k}" class="${nutriRange===k?"on":""}">${l}</button>`).join("")}${sem?`<span class="note">Media de ${D.logged || 0} día${D.logged===1?"":"s"} con registros</span>`:""}</div>`;
   if (!D.items.length && !D.noData) return head + `<div class="card nu-empty"><h3>Aún no hay nada apuntado</h3><p class="note">Cuando añadas comidas en el Diario, aquí verás tus proteínas, hidratos, grasas, fibra, azúcar, vitaminas y minerales.</p><button class="btn" data-act="tab" data-tab="food">Ir al Diario</button></div>`;
   let body = "";
@@ -667,68 +668,81 @@ function openNutriDetail(k){
     ${list.slice(0,15).map(([n,v])=>`<div class="nu-row"><div class="nu-l"><span>${esc(n)}</span><b>${nfmt(v,u)} ${u}</b></div><div class="bar"><i style="width:${v/tot*100}%"></i></div></div>`).join("")}`
     : `<p class="note">Ningún alimento apuntado aporta ${l.toLowerCase()}.</p>`);
 }
-/* ---------- Nutricionista con IA ---------- */
-let chatBusy = false, chatErr = "";
-const CHAT_IDEAS = ["¿Qué ceno hoy para cuadrar mis macros?", "Analiza cómo he comido esta semana", "Ideas de desayuno alto en proteína", "¿Cómo voy de fibra, azúcar y sal?", "Dame un snack de menos de 200 kcal", "¿Qué como antes y después de entrenar?"];
-function md(t){
-  const lines = esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").split("\n"); let out = "", inList = false;
-  for (const l of lines){ const m = l.match(/^\s*(?:[-•*]|\d+[.)])\s+(.*)/);
-    if (m){ if (!inList){ out += "<ul>"; inList = true; } out += `<li>${m[1]}</li>`; }
-    else { if (inList){ out += "</ul>"; inList = false; } if (l.trim()) out += `<p>${l.replace(/^#+\s*/, "")}</p>`; } }
-  return out + (inList ? "</ul>" : "");
-}
-function daySum(d){ const e = S.diary[d] || []; return {n:e.length, kcal:e.reduce((a,x)=>a+(+x.kcal||0),0), p:e.reduce((a,x)=>a+(+x.p||0),0), c:e.reduce((a,x)=>a+(+x.c||0),0), f:e.reduce((a,x)=>a+(+x.f||0),0)}; }
-function nutriContext(){
-  const t = today(), g = goalsFor(t), pr = S.settings.profile || {}, L = [];
-  const lastW = Object.entries(S.body||{}).sort(([a],[b]) => a<b?1:-1)[0];
-  L.push(`Hoy es ${longDay(t)} (${t}). Hora: ${new Date().toTimeString().slice(0,5)}.`);
-  const who = [pr.sex==="m"?"hombre":pr.sex==="f"?"mujer":"", pr.age?pr.age+" años":"", pr.h?pr.h+" cm":"", lastW?`${lastW[1].kg} kg (pesado el ${lastW[0]})`:pr.w?pr.w+" kg":"", pr.goal?({lose:"objetivo: perder grasa",keep:"objetivo: mantener",gain:"objetivo: ganar músculo"}[pr.goal]||""):""].filter(Boolean).join(", ");
-  if (who) L.push(`Persona: ${who}.`);
-  L.push(`Objetivo diario: ${fmt(g.kcal)} kcal, ${g.p} g proteína, ${g.c} g hidratos, ${g.f} g grasa${S.settings.addEx?" (se suman las kcal del ejercicio)":""}.`);
-  const ds = daySum(t), ex = exAdd(t);
-  L.push(`HOY lleva ${fmt(ds.kcal)} kcal, ${r0(ds.p)} g P, ${r0(ds.c)} g C, ${r0(ds.f)} g G. Le quedan ${fmt(g.kcal + ex - ds.kcal)} kcal y ${r0(g.p - ds.p)} g de proteína.`);
-  for (const m of MEALS){ const e = (S.diary[t]||[]).filter(x => x.meal===m); if (e.length) L.push(`- ${m}: ${e.map(x => `${x.name}${x.g?` ${r0(x.g)} g`:""} (${fmt(x.kcal)} kcal)`).join("; ")}`); }
-  const cp = curPlan(t); if (cp?.dishes){ const pl = MEALS.map(m => cp.dishes[m]?.length ? `${m}: ${cp.dishes[m].join(", ")}` : "").filter(Boolean); if (pl.length) L.push(`Su plan de comidas para hoy: ${pl.join(" | ")}.`); }
-  const past = []; for (let i=1;i<=7;i++){ const d = addDays(t,-i), x = daySum(d); if (x.n) past.push(`${d}: ${fmt(x.kcal)} kcal, ${r0(x.p)} g P, ${r0(x.c)} g C, ${r0(x.f)} g G`); }
-  L.push(past.length ? `Últimos 7 días (días con registros):\n${past.join("\n")}` : "No tiene registros en los últimos 7 días.");
-  const keep = [nutriSub, nutriRange]; nutriRange = "sem"; const W = nutriData(); [nutriSub, nutriRange] = keep;
-  if (W.items.length) L.push(`Media diaria semanal estimada: fibra ${r0(W.val.fib)} g, azúcar ${r0(W.val.azu)} g, saturadas ${r0(W.val.sat)} g, sodio ${fmt(W.val.na)} mg, calcio ${fmt(W.val.ca)} mg, hierro ${r1(W.val.fe)} mg, vitamina C ${fmt(W.val.vc)} mg, vitamina D ${r1(W.val.vd)} µg.`);
-  const acts = allActs().filter(a => a.day >= addDays(t,-7)); if (acts.length) L.push(`Ejercicio (7 días): ${acts.map(a => `${a.day} ${sportName(a.type)} ${actLine(a)}`).join("; ")}.`);
-  return L.join("\n");
-}
-function viewChat(){
-  if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Tu nutricionista con IA</h3>
-    <p class="note">Pregúntale lo que quieras: qué cenar para cuadrar tus macros, cómo has comido esta semana, ideas de desayunos… Conoce tus objetivos, lo que has comido, tu plan y tu ejercicio, y te contesta al momento.</p>
-    <div class="chat demo"><div class="msg me">¿Qué ceno hoy?</div><div class="msg ai"><p>Te quedan <b>620 kcal</b> y <b>45 g de proteína</b>. Por ejemplo: <b>150 g de salmón</b> a la plancha con <b>200 g de verduras</b> y <b>80 g de patata</b>. 🐟</p></div></div>
+/* ---------- Plan de nutrición a medida (entrenador personal, sin IA de pago) ---------- */
+const coach = {step:null, day:1, err:""};
+const ACTS = [["sed","Poco (oficina, casi sin moverme)"],["lig","Algo (camino, 1-2 entrenos)"],["mod","Bastante (3-4 entrenos)"],["alt","Mucho (5+ entrenos o trabajo físico)"]];
+const DIETS = [["omni","Como de todo"],["pesc","Pescetariana"],["veg","Vegetariana"],["vegan","Vegana"]];
+function coachReq(){ const pr = S.settings.profile || {}, lastW = Object.entries(S.body||{}).sort(([a],[b]) => a<b?1:-1)[0]?.[1]?.kg;
+  return {sex:pr.sex||"m", age:pr.age||"", h:pr.h||"", w:lastW||pr.w||"", act:pr.act||"mod", goal:pr.goal||"lose", train:3, sport:"", diet:"omni", avoid:"", like:"", cook:"normal", budget:"normal", extra:"", ...(S.aiplan?.req||{})}; }
+function coachVals(){ const g = id => $(id)?.value ?? "";
+  return {sex:g("cSex"), age:parseNum(g("cAge")), h:parseNum(g("cH")), w:parseNum(g("cW")), act:g("cAct"), goal:g("cGoal"), train:+g("cTrain"), sport:g("cSport").trim(),
+    diet:g("cDiet"), avoid:g("cAvoid").trim(), like:g("cLike").trim(), cook:g("cCook"), budget:g("cBudget"), extra:g("cExtra").trim()}; }
+const coachDayTot = day => { const o = {kcal:0,p:0,c:0,f:0}; for (const m in day.meals) day.meals[m].items.forEach(i => { for (const k in o) o[k] += i.per[k]*i.g/100; }); return o; };
+function viewCoach(){
+  if (!isPremium()) return `<div class="card prem"><span class="prem-badge">⭐ Premium</span><h3>Tu plan de nutrición a medida</h3>
+    <p class="note">Como un entrenador personal: respondes unas preguntas (objetivo, entrenos, lo que te gusta y lo que no) y la app te crea un <b>menú semanal completo</b>, con platos, gramos y tus calorías y proteína de cada día. Lo cargas en tu Diario con un toque y lo puedes ir ajustando.</p>
     <button class="btn" data-act="prof-sec" data-k="premium">Hazte Premium</button></div>`;
-  const M = S.chat || [];
-  return `<div class="chat" id="chat">
-    ${M.length ? "" : `<div class="chat-hi"><span class="chat-av" aria-hidden="true">✨</span><div><b>Hola, soy Nutri</b><p class="note">Tu nutricionista con IA. Veo tus objetivos, lo que has comido, tu plan y tu ejercicio. ¿En qué te ayudo?</p></div></div>
-      <div class="chips chat-ideas">${CHAT_IDEAS.map(q => `<button class="chip" data-act="chat-idea" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>`}
-    ${M.map(m => m.role==="user" ? `<div class="msg me">${esc(m.text)}</div>` : `<div class="msg ai">${md(m.text)}</div>`).join("")}
-    ${chatBusy ? `<div class="msg ai typing" aria-label="Nutri está escribiendo"><i></i><i></i><i></i></div>` : ""}
-    ${chatErr ? `<div class="conn-msg">${esc(chatErr)}</div>` : ""}
-  </div>
-  <form class="chat-in" id="fChat"><textarea id="chatQ" rows="1" placeholder="Pregunta a Nutri…" aria-label="Escribe tu pregunta" maxlength="1000"></textarea><button class="btn" type="submit" ${chatBusy?"disabled":""} aria-label="Enviar">↑</button></form>
-  <p class="note chat-foot">Orientativo: Nutri no sustituye a un médico ni a un dietista-nutricionista colegiado. ${M.length?`<button class="link" data-act="chat-new">Nueva conversación</button>`:""}</p>`;
+  const A = S.aiplan;
+  if (A?.plan && coach.step !== "form") return coachView(A);
+  const v = coachReq(), t = calcGoals(v);
+  const sel = (id, opts, cur) => `<select id="${id}">${opts.map(([k,l]) => `<option value="${k}" ${String(cur)===String(k)?"selected":""}>${l}</option>`).join("")}</select>`;
+  return `<div class="card"><h2>Tu plan a medida</h2><p class="note">Responde y tu entrenador te creará al momento un menú semanal a tu medida, con gramos y calorías de cada día.</p>
+    <div class="grid2"><label class="f">Sexo${sel("cSex",[["m","Hombre"],["f","Mujer"]],v.sex)}</label><label class="f">Edad<input id="cAge" inputmode="numeric" value="${v.age}"></label>
+    <label class="f">Altura (cm)<input id="cH" inputmode="numeric" value="${v.h}"></label><label class="f">Peso (kg)<input id="cW" inputmode="decimal" value="${v.w}"></label></div>
+    <label class="f">¿Qué quieres conseguir?${sel("cGoal",[["lose","Perder grasa"],["keep","Mantenerme y comer mejor"],["gain","Ganar músculo"]],v.goal)}</label>
+    <label class="f">¿Cuánto te mueves?${sel("cAct",ACTS,v.act)}</label>
+    <div class="grid2"><label class="f">Días que entrenas${sel("cTrain",[0,1,2,3,4,5,6,7].map(n=>[n, n===0?"Ninguno":n+" a la semana"]),v.train)}</label><label class="f">¿Qué entrenas?<input id="cSport" value="${esc(v.sport)}" placeholder="Pesas, correr…"></label></div>
+    <label class="f">Tipo de alimentación${sel("cDiet",DIETS,v.diet)}</label>
+    <label class="f">Alergias o cosas que NO comes<input id="cAvoid" value="${esc(v.avoid)}" placeholder="Ej.: lactosa, marisco, no me gusta el brócoli"></label>
+    <label class="f">Comidas que te gustan<input id="cLike" value="${esc(v.like)}" placeholder="Ej.: pasta, tortilla, pollo al curry"></label>
+    <div class="grid2"><label class="f">Tiempo para cocinar${sel("cCook",[["poco","Poco"],["normal","Normal"],["mucho","Me gusta cocinar"]],v.cook)}</label><label class="f">Presupuesto${sel("cBudget",[["low","Ajustado"],["normal","Normal"]],v.budget)}</label></div>
+    <label class="f">Algo más<input id="cExtra" value="${esc(v.extra)}" placeholder="Ej.: como en el trabajo, ceno tarde…"></label>
+    <div class="coach-t" id="cTarget">${t ? `Tu objetivo: <b>${fmt(t.kcal)} kcal</b> · <b>${t.p} g</b> proteína · ${t.c} g hidratos · ${t.f} g grasa` : "Rellena edad, altura y peso para calcular tu objetivo."}</div>
+    ${coach.err ? `<div class="conn-msg">${esc(coach.err)}</div>` : ""}
+    <button class="btn" data-act="coach-go" ${t?"":"disabled"} id="cGo">✨ Crear mi plan</button>
+    ${A?.plan ? `<button class="btn ghost" data-act="coach-back">Volver a mi plan</button>` : ""}
+    <p class="note" style="margin:0">Orientativo: no sustituye a un médico ni a un dietista-nutricionista colegiado. Si tienes una enfermedad, estás embarazada o tomas medicación, consúltalo antes.</p></div>`;
 }
-async function chatSend(q){
-  q = String(q||"").trim(); if (!q || chatBusy) return;
-  chatErr = ""; const M = [...(S.chat||[]), {role:"user", text:q, t:Date.now()}]; S.chat = M; chatBusy = true; render(); chatScroll();
-  try {
-    const { data:{ session } } = await sb.auth.getSession();
-    const r = await fetch("/api/nutri", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({messages:M.slice(-12), context:nutriContext()})});
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw {code: j.code || r.status};
-    S.chat = [...M, {role:"assistant", text:j.text, t:Date.now()}].slice(-40);
-    put("nutri", {msgs:S.chat});
-  } catch(e){
-    S.chat = M.slice(0,-1); chatErr = e.code==="premium" ? "Nutri es Premium." : e.code==="rate_limited" ? "Has hecho muchas preguntas seguidas. Espera un poco." : e.code==="disabled" ? (isOwner() ? "Falta ANTHROPIC_API_KEY en Vercel (y hacer Redeploy)." : "Nutri no está disponible ahora mismo.") : e.code==="no_service" ? (isOwner() ? "Falta la clave SECRETA de Supabase en Vercel (SUPABASE_SERVICE_ROLE_KEY)." : "Nutri no está disponible ahora mismo.") : e.code==="not_granted" ? "Tu sesión ha caducado. Vuelve a entrar." : "No he podido responder. Inténtalo otra vez.";
-    setTimeout(() => { const i = $("chatQ"); if (i && !i.value) i.value = q; }, 0);
-  }
-  chatBusy = false; render(); chatScroll();
+function coachView(A){
+  const P = A.plan, D = P.days.find(x => x.d===coach.day) || P.days[0], T = D ? coachDayTot(D) : null;
+  return `<div class="card coach-head"><span class="prem-badge">✨ Tu plan</span><h2 class="coach-title">${esc(P.title)}</h2><p class="note">${esc(P.summary)}</p>
+      <div class="nu-big"><div><b>${fmt(P.target.kcal)}</b><span>kcal/día</span></div><div><b>${P.target.p} g</b><span>proteína</span></div><div><b>${P.target.c} g</b><span>hidratos</span></div></div>
+      ${A.applied ? `<div class="conn-msg ok">✓ Es tu plan actual: ya lo tienes cada día en el Diario.</div>` : `<button class="btn" data-act="coach-apply">✅ Usar este plan en mi Diario</button>`}</div>
+    <div class="chips coach-days" role="tablist">${P.days.map(x => `<button class="chip" role="tab" data-act="coach-day" data-d="${x.d}" aria-pressed="${x.d===D?.d}">${WDAYS[x.d-1].slice(0,3)}${x.train?" 🏋️":""}</button>`).join("")}</div>
+    ${D ? `<div class="card"><div class="top"><h2>${WDAYS[D.d-1]}${D.train?" · día de entreno":""}</h2><span class="note">${fmt(T.kcal)} kcal · ${r0(T.p)} g P</span></div>
+      ${MEALS.filter(m => D.meals[m]).map(m => { const x = D.meals[m], k = x.items.reduce((a,i)=>a+i.per.kcal*i.g/100,0);
+        return `<div class="coach-meal"><div class="coach-m"><span>${m}</span><span class="note">${fmt(k)} kcal</span><button class="link" data-act="coach-swap" data-d="${D.d}" data-m="${m}" aria-label="Cambiar ${m.toLowerCase()} del ${WDAYS[D.d-1].toLowerCase()}">↻ Cambiar</button></div><b>${esc(x.t)}</b>
+          <ul>${x.items.map(i => `<li><span>${esc(i.name)}</span><span>${fmt(i.g)} g</span></li>`).join("")}</ul></div>`; }).join("")}
+      <p class="note" style="margin:0">P ${r0(T.p)} g · C ${r0(T.c)} g · G ${r0(T.f)} g</p></div>` : ""}
+    ${P.tips.length ? `<div class="card"><h2>Consejos de tu entrenador</h2><ul class="coach-tips">${P.tips.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
+    <div class="card"><h2>¿Quieres cambiar algo?</h2><p class="note">Pulsa «↻ Cambiar» en cualquier plato para cambiarlo por otro, o pide una propuesta nueva entera.</p>
+      <button class="btn soft" data-act="coach-again">🔀 Otra propuesta</button>
+      <button class="btn ghost" data-act="coach-new">Cambiar mis respuestas</button></div>
+    <p class="note chat-foot">Orientativo: no sustituye a un médico ni a un dietista-nutricionista colegiado.</p>`;
 }
-const chatScroll = () => requestAnimationFrame(() => { const c = $("chat"); if (c) c.lastElementChild?.scrollIntoView({block:"end", behavior:"smooth"}); });
+function coachRun(reuse){
+  const req = reuse ? S.aiplan.req : coachVals(), t = calcGoals(req);
+  if (!t){ coach.err = "Revisa edad, altura y peso."; render(); return; }
+  const plan = makePlan(req, t, Date.now());
+  if (!plan){ coach.err = "Con esas restricciones no encuentro platos suficientes. Quita alguna de «cosas que no comes»."; render(); return; }
+  S.aiplan = {req, plan, created:Date.now(), applied:false}; put("aiplan", S.aiplan);
+  coach.step = null; coach.day = 1; coach.err = ""; render(); scrollTo({top:0}); confetti();
+}
+function coachSwap(d, m){
+  const A = S.aiplan; swapMeal(A.plan, A.req, d, m);
+  S.aiplan = {...A, applied:false}; put("aiplan", S.aiplan); render();
+}
+async function coachApply(){
+  const A = S.aiplan, P = A.plan, days = {};
+  for (const d of P.days){ const T = coachDayTot(d), o = {target:{kcal:r0(T.kcal), p:r0(T.p), label:`${fmt(T.kcal)} kcal · ${r0(T.p)} g proteína`}, dishes:{}};
+    for (const m in d.meals){ o[m] = d.meals[m].items.map(i => ({name:i.name, per:i.per, servings:[], g:i.g})); o.dishes[m] = d.meals[m].t; }
+    days[d.d] = o; }
+  S.plan = days; await savePlan();
+  if (S.planDates){ S.planDates = null; del("plandates"); }
+  await put("settings", {...S.settings, kcal:P.target.kcal, p:P.target.p, c:P.target.c, f:P.target.f, profile:{...(S.settings.profile||{}), sex:A.req.sex, age:A.req.age, h:A.req.h, w:A.req.w, act:A.req.act, goal:A.req.goal}});
+  S.aiplan = {...A, applied:true}; put("aiplan", S.aiplan);
+  tab = "food"; day = today(); render(); setBanner("✓ Plan cargado: cada día verás en el Diario lo que te toca, con sus gramos."); setTimeout(() => setBanner(""), 6000);
+}
 
 /* ---------- Strava ---------- */
 let stravaMsg = "", stravaBusy = false, stravaSetup = false;
@@ -1345,10 +1359,10 @@ function premiumStatus(){
 function premFeats(on){
   const F = [["plate","📸","Foto al plato con IA","Haz una foto a lo que vas a comer: la IA reconoce cada alimento y calcula gramos, calorías y macros. Tú solo revisas y añades."],
              ["code","▥","Foto al código de barras","Para lo envasado: foto al código y salen sus calorías, macros, fibra, azúcar y sal de la etiqueta."],
-             ["nutri","✨","Nutricionista con IA","Pregúntale qué cenar para cuadrar tus macros, cómo has comido esta semana o ideas de recetas. Conoce tus datos y te contesta al momento."],
+             ["nutri","✨","Plan de nutrición a medida","Como un entrenador personal: respondes unas preguntas y te crea al momento tu menú semanal con platos, gramos y calorías. Se carga en tu Diario y cambias los platos que quieras."],
              ["conn","🔗","Strava o Garmin","Tus carreras, salidas en bici y entrenos llegan solos con sus calorías. Conecta el que uses."]];
   return `<div class="prem-feats">${F.map(([k,i,t,d]) => `<div class="prem-f"><span class="prem-fi" aria-hidden="true">${i}</span><div><b>${t}</b><p class="note">${d}</p>
-    ${on ? k==="nutri" ? `<button class="btn soft" data-act="open-nutri">Hablar con Nutri</button>` : k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
+    ${on ? k==="nutri" ? `<button class="btn soft" data-act="open-nutri">Crear mi plan</button>` : k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
 }
 const mealNow = () => { const h = new Date().getHours() + new Date().getMinutes()/60; return h < 11 ? "Desayuno" : h < 16.5 ? "Comida" : h < 20 ? "Snacks" : "Cena"; };
 function premiumPitch(){
@@ -1882,10 +1896,15 @@ document.addEventListener("click", e => {
     case "day-prev": day = addDays(day,-1); render(); break;
     case "day-next": day = addDays(day,1); render(); break;
     case "day-today": day = today(); render(); break;
-    case "nutri-sub": nutriSub = el.dataset.k; render(); if (nutriSub==="ia") chatScroll(); break;
-    case "chat-idea": chatSend(el.dataset.q); break;
-    case "chat-new": S.chat = []; chatErr = ""; put("nutri", {msgs:[]}); render(); break;
-    case "open-nutri": tab = "nutri"; nutriSub = "ia"; render(); chatScroll(); break;
+    case "nutri-sub": nutriSub = el.dataset.k; render(); break;
+    case "open-nutri": tab = "nutri"; nutriSub = "ia"; render(); scrollTo(0,0); break;
+    case "coach-go": coachRun(); break;
+    case "coach-again": coachRun(true); break;
+    case "coach-swap": coachSwap(+el.dataset.d, el.dataset.m); break;
+    case "coach-new": coach.step = "form"; coach.err = ""; render(); scrollTo(0,0); break;
+    case "coach-back": coach.step = null; coach.err = ""; render(); break;
+    case "coach-day": coach.day = +el.dataset.d; render(); break;
+    case "coach-apply": el.disabled = true; coachApply(); break;
     case "nutri-range": nutriRange = el.dataset.k; render(); break;
     case "nutri-detail": openNutriDetail(el.dataset.k); break;
     case "add-food": openAddFood(el.dataset.meal); break;
@@ -1991,7 +2010,6 @@ document.addEventListener("submit", async e => {
     m.textContent = ok ? `Guardado: ${fmt(st)} pasos y ${fmt(kc)} kcal activas el ${dayLabel(d).toLowerCase()}.` : "No se pudo guardar."; return; }
   if (e.target.id==="fPass"){ const v = $("newPass").value, m = $("passMsg"); if (v.length<6){ m.textContent = "Usa al menos 6 caracteres."; return; }
     const { error } = await sb.auth.updateUser({password:v}); m.textContent = error ? "No se pudo cambiar. Inténtalo otra vez." : "Contraseña cambiada."; if (!error) $("newPass").value = ""; return; }
-  if (e.target.id==="fChat"){ e.preventDefault(); const i = $("chatQ"), q = i.value; i.value = ""; i.blur(); chatSend(q); return; }
   if (e.target.id==="fWeight"){ const kg = parseNum($("bwIn").value); if (kg>0){ await put("body", {log:{...S.body, [today()]:{kg:r1(kg)}}}); render(); } }
 });
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("sheet").hidden) closeSheet(); });

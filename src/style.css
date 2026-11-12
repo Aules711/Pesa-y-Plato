@@ -606,3 +606,17 @@ nav.tabbar.six{grid-template-columns:repeat(6,1fr)}
 .nutri-cta > span:nth-child(2){flex:1}.nutri-cta b{display:block;font-size:16px}.nutri-cta small{color:var(--muted);font-size:13px}
 @media (prefers-reduced-motion:reduce){.typing i{animation:none}}
 .chat-in textarea{min-height:0;height:42px;box-shadow:none}
+
+/* ---------- Plan a medida ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.coach-t{background:var(--accent-soft);border-radius:14px;padding:12px 14px;font-size:14px}
+.coach-title{margin:4px 0 0;font-size:22px;text-transform:none;letter-spacing:0;color:var(--ink)}
+.coach-days{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;flex-wrap:nowrap}
+.coach-days .chip{flex:none}
+.coach-meal{padding:12px 0;border-bottom:1px solid var(--line)}.coach-meal:last-of-type{border-bottom:0}
+.coach-m{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.coach-m .note{text-transform:none;letter-spacing:0;font-weight:500}.coach-m .link{margin-left:auto;text-transform:none;letter-spacing:0;font-size:13px}
+.coach-meal b{display:block;font-size:16px;margin:4px 0 6px}
+.coach-meal ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.coach-meal li{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--muted)}.coach-meal li span:last-child{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.coach-tips{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px}
