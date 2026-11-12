@@ -761,3 +761,11 @@ nav.tabbar{background:var(--surface)}
 @media (min-width:720px){.lmenu-links{display:flex}.lburger{display:none}}
 @media (prefers-reduced-motion:reduce){.ldrop-p,.lburger-p{animation:none}}
 section[id^="sec-"]{scroll-margin-top:80px}
+.pay{display:flex;flex-direction:column;gap:10px;background:var(--surface2);border-radius:16px;padding:14px}
+.pay h3{font-size:16px}
+.pay .prem-steps{margin:0}
+.pay-faq p{margin:8px 0 0;font-size:14px;color:var(--muted)}.pay-faq p b{color:var(--ink)}
+.prem-price span{font-size:13px}
+.pay .prem-steps{list-style:none;padding:0;counter-reset:st}
+.pay .prem-steps li{counter-increment:st;position:relative;padding-left:38px}
+.pay .prem-steps li::before{content:counter(st);position:absolute;left:0;top:-2px;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center}

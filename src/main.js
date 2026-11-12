@@ -1231,7 +1231,8 @@ function viewProfile(){
     plan: ["Mi plan de comidas", planSection()],
     admin: ["Administración", adminSection()],
     conn: ["Conexiones", connSection()],
-    premium: ["Premium", `<div class="card"><h2>Premium</h2>${isPremium() ? `<div class="prem"><span class="prem-badge">⭐ ${esc(premiumStatus())}</span>${premFeats(true)}<p class="note">También las tienes en Diario › Añadir alimento › Foto.</p></div>` : premiumPitch()}
+    premium: ["Premium", `<div class="card"><h2>Premium</h2>${isPremium() ? `<div class="prem"><span class="prem-badge">⭐ ${esc(premiumStatus())}</span>${premFeats(true)}
+      ${premium?.until && !isFreePremium() && !adminInfo.admin ? `<details class="lf-faq"><summary>Renovar Premium</summary>${payGuide(true)}</details>` : ""}</div>` : premiumPitch()}
     ${adminInfo.admin ? `<button class="btn" data-act="admin">Panel de administración</button>` : ""}</div>`],
     goals: ["Objetivos", `<form class="card" id="fGoals"><div class="top"><h2>Objetivos diarios</h2><button type="button" class="link" data-act="wizard">Calcular mis objetivos</button></div>
     <div class="grid2"><label class="f">Calorías (kcal)<input id="gKcal" type="number" min="0" step="10" value="${g.kcal}"></label>
@@ -1583,18 +1584,32 @@ function premFeats(on){
     ${on ? k==="fast" ? `<button class="btn soft" data-act="fast-open">Abrir</button>` : k==="report" ? `<button class="btn soft" data-act="week-report">Ver informe</button>` : k==="top" ? `<button class="btn soft" data-act="nutri-go" data-k="cal">Ver</button>` : k==="nutri" ? `<button class="btn soft" data-act="open-nutri">Crear mi plan</button>` : k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
 }
 const mealNow = () => { const h = new Date().getHours() + new Date().getMinutes()/60; return h < 11 ? "Desayuno" : h < 16.5 ? "Comida" : h < 20 ? "Snacks" : "Cena"; };
+const BIZUM = "688756383";
+function payGuide(renew){
+  const ph = adminInfo.phone || BIZUM, price = esc(adminInfo.price || "3"), concept = `Premium ${user?.email || ""}`;
+  return `<div class="pay"><h3>${renew ? "Cómo renovar" : "Cómo pagar"} · paso a paso</h3>
+    <ol class="prem-steps">
+      <li><span>Abre la app de <b>tu banco</b> y entra en <b>Bizum › Enviar dinero</b>.</span></li>
+      <li><span>Envía <b>${price} €</b> a este número:</span><div class="copy"><code>${esc(fmtPhone(ph))}</code><button class="btn soft" data-act="copy" data-v="${esc(String(ph).replace(/\D/g,""))}">Copiar</button></div></li>
+      <li><span>En el <b>concepto</b> pega esto, para que sepamos que es tu cuenta:</span><div class="copy"><code>${esc(concept)}</code><button class="btn soft" data-act="copy" data-v="${esc(concept)}">Copiar</button></div></li>
+      <li><span>Confirma el Bizum en tu banco.</span></li>
+      <li><span>Te activamos Premium en cuanto llegue el pago, normalmente <b>el mismo día</b>. Lo verás aquí arriba con la fecha hasta la que dura.</span></li>
+    </ol>
+    <details class="lf-faq pay-faq"><summary>Dudas sobre el pago</summary>
+      <p><b>¿Cuánto dura?</b> Un mes desde que se activa. Si renuevas antes de que acabe, el mes nuevo se suma al que te queda.</p>
+      <p><b>¿Se renueva solo?</b> No. No hay permanencia ni cobros automáticos: cada mes decides si sigues.</p>
+      <p><b>¿Puedo pagar varios meses?</b> Sí: envía el importe de los meses que quieras (por ejemplo ${(+(adminInfo.price||3))*3} € = 3 meses) y pon en el concepto cuántos meses son.</p>
+      <p><b>No tengo Bizum.</b> Bizum funciona con casi todos los bancos españoles: actívalo desde la app de tu banco con tu número de móvil.</p>
+      <p><b>Pagué y no se ha activado.</b> Revisa que el concepto lleve tu email. Si pasa más de un día, escríbenos con la fecha y el importe del Bizum.</p>
+    </details></div>`;
+}
 function premiumPitch(){
-  const ph = adminInfo.phone, concept = `Premium ${user?.email || ""}`;
   return `<div class="prem"><span class="prem-badge">⭐ Premium</span><h3>Todo lo de Premium</h3>
     ${premFeats(false)}
-    <div class="prem-price"><b>${esc(adminInfo.price||"3")} €</b><span>al mes</span></div>
-    ${ph ? `<ol class="prem-steps">
-      <li><span>Envía <b>${esc(adminInfo.price||"3")} €</b> por <b>Bizum</b> al</span><div class="copy"><code>${esc(fmtPhone(ph))}</code><button class="btn soft" data-act="copy" data-v="${esc(String(ph).replace(/\D/g,""))}">Copiar</button></div></li>
-      <li><span>En el concepto escribe</span><div class="copy"><code>${esc(concept)}</code><button class="btn soft" data-act="copy" data-v="${esc(concept)}">Copiar</button></div></li>
-      <li><span>Te lo activamos en cuanto llegue el pago, normalmente en el mismo día. Dura un mes y no se renueva solo.</span></li></ol>
-      ${premium?.until && premium.until < today() ? `<p class="note">${esc(premiumStatus())}</p>` : ""}`
-    : `<p class="note">El Premium aún no está disponible. Vuelve a mirarlo pronto.</p>`}
-    <p class="note">Sin Premium puedes seguir buscando alimentos y creando los tuyos con los datos de la etiqueta.</p></div>`;
+    <div class="prem-price"><b>${esc(adminInfo.price||"3")} €</b><span>al mes · por Bizum · sin permanencia</span></div>
+    ${premium?.until && premium.until < today() ? `<div class="conn-msg">${esc(premiumStatus())}. Renueva con los pasos de abajo.</div>` : ""}
+    ${payGuide(!!premium)}
+    <p class="note">Sin Premium puedes seguir usando el diario, tu plan, los nutrientes y el progreso, buscar alimentos y crear los tuyos con los datos de la etiqueta.</p></div>`;
 }
 const isOwner = () => adminInfo.admin || isFreePremium();
 const adm = {users:null, q:"", f:"all", err:null, loading:false};
