@@ -109,6 +109,7 @@ function applyDoc(id, v){
   else if (id==="active") S.active = v || null;
   else if (id==="media"){ S.media = JSON.parse(JSON.stringify(v?.map || {})); for (const m of Object.values(S.media)) m.url = mediaUrls[m.id] || ""; queueMediaUrls(); }
   else if (id==="health") S.health = {days:v?.days||{}, wos:v?.wos||[]};
+  else if (id==="fast") S.fast = {active:v?.active||null, log:v?.log||[], plan:v?.plan||16};
   else if (id==="strava") S.strava = v?.connected ? v : null;
   else if (id==="garmin") S.garmin = v?.connected ? v : null;
   else if (id==="aiplan") S.aiplan = v?.plan ? v : null;
@@ -183,7 +184,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {strava:null, garmin:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {fast:null, strava:null, garmin:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -350,10 +351,13 @@ function bestsBefore(name, beforeStart){ let kg=0, rm=0, has=false;
 /* ================= render principal ================= */
 function render(){
   if (!TRAIN_ON && tab==="train") tab = "home";
-  const tb = $("tabbar"); tb.classList.toggle("six", TRAIN_ON); tb.querySelector('[data-tab="train"]').hidden = !TRAIN_ON;
+  const tb = $("tabbar"); tb.classList.toggle("six", TRAIN_ON); tb.querySelector('[data-tab="train"]').hidden = !TRAIN_ON; tb.querySelector('[data-tab="profile"]').hidden = true;
   document.querySelectorAll("#tabbar button").forEach(b => { b.toggleAttribute("aria-current", b.dataset.tab===tab); if (b.dataset.tab===tab) b.setAttribute("aria-current","page");
     b.classList.toggle("live", b.dataset.tab==="train" && !!S.active); });
-  const top = `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
+  const TT = {home:"Hoy", food:"Diario", nutri:"Nutrición", progress:"Progreso"};
+  const ini = ((user?.email || "?")[0] || "?").toUpperCase();
+  const appbar = TT[tab] ? `<div class="appbar"><b class="ab-t">${TT[tab]}</b>${isPremium() ? "" : `<button class="prem-pill" data-act="prof-sec" data-k="premium">Pásate a Premium</button>`}<button class="ab-av" data-act="tab" data-tab="profile" aria-label="Perfil y ajustes">${esc(ini)}</button></div>` : "";
+  const top = appbar + `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
   const views = {home:viewHome, train:viewTrain, food:viewFood, nutri:viewNutri, progress:viewProgress, profile:viewProfile};
   renderPending = false; const y = scrollY;
   $("main").innerHTML = top + views[tab]();
@@ -397,8 +401,9 @@ function viewHome(){
   const dots = ["L","M","X","J","V","S","D"].map((l,i)=>{ const d = addDays(ws,i); return `<div>${l}<i class="${wd.has(d)?"on":""} ${d===t?"today":""}"></i></div>`; }).join("");
   const feed = S.workouts.slice(0,15).map(workoutCard).join("");
   const st = streak(), td = parseDay(today());
-  return `<div class="hello"><div><span class="hello-date">${DIA[td.getDay()]} ${td.getDate()} ${MES[td.getMonth()]}</span><h1>${greet()}</h1></div>
-    <div class="streak ${st?"on":""}" title="Días seguidos apuntando comidas o entrenando"><span class="fire" aria-hidden="true">🔥</span><b>${st}</b><span>${st===1?"día":"días"} de racha</span></div></div>
+  const strip = ["L","M","X","J","V","S","D"].map((l,i) => { const d = addDays(ws,i), has = (S.diary[d]||[]).length, isT = d===t;
+    return `<button class="wk-d ${has?"on":""} ${isT?"today":""} ${d>t?"fut":""}" data-act="wk-day" data-d="${d}" aria-label="${dayLabel(d)}${has?", con comidas apuntadas":""}"><span>${l}</span><i>${has?"✓":""}</i></button>`; }).join("");
+  return `<div class="wk"><div class="wk-days">${strip}</div><div class="wk-fire ${st?"on":""}" title="${st} ${st===1?"día":"días"} seguidos apuntando"><span aria-hidden="true">🔥</span><b>${st}</b></div></div>
   ${!TRAIN_ON ? homeFood(t, tot, remaining) : `<div class="top">${S.active?`<button class="btn" data-act="tab" data-tab="train">Seguir entreno · <span data-elapsed></span></button>`:""}</div>
   <div class="grid2">
     <div class="card"><h2>Esta semana</h2><div><span class="big">${count}</span> <span class="note">/ ${S.settings.days} entrenos</span></div><div class="dots">${dots}</div></div>
@@ -411,20 +416,24 @@ function viewHome(){
      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn" data-act="start-empty">Empezar entreno</button><button class="btn ghost" data-act="tab" data-tab="profile">Importar</button></div></div>`}`}`;
 }
 function homeFood(t, tot, remaining){
-  const g = goalsFor(t), P = curPlan(t), dishes = P.dishes || {};
+  const g = goalsFor(t), P = curPlan(t), dishes = P.dishes || {}, ex = exAdd(t), kgoal = g.kcal + ex;
   const meals = MEALS.map(m => { const items = (P[m]||[]).filter(f => !f.opt || f.opt === (planOpts(P[m]).length ? planOpts(P[m])[0] : null));
       const logged = (S.diary[t]||[]).filter(e => e.meal===m), lk = logged.reduce((a,e)=>a+(+e.kcal||0),0);
-      if (!items.length && !logged.length) return "";
-      const pk = items.reduce((a,f)=>a+nutr(f,f.g).kcal,0);
-return `<button class="hm-row" data-act="tab" data-tab="food"><span class="hm-m">${m}</span><span class="hm-d">${esc(dishes[m] || (items.length ? items.filter(f => !/aceite|leche desnatada \(en el café\)/i.test(f.name)).slice(0,3).map(f => f.name.replace(/\s*\(.*?\)/g,"")).join(", ") : logged.map(e=>e.name).join(", ")))}</span>
-        <span class="hm-k ${logged.length?"ok":""}">${logged.length ? "✓ "+fmt(lk) : fmt(pk)} kcal</span></button>`; }).join("");
+      const sub = logged.length ? `${fmt(lk)} kcal · ${esc(logged.slice(0,2).map(e => e.name).join(", "))}${logged.length>2?"…":""}` : dishes[m] ? esc(dishes[m]) : items.length ? esc(items.filter(f => !/aceite|leche desnatada \(en el café\)/i.test(f.name)).slice(0,3).map(f => f.name.replace(/\s*\(.*?\)/g,"")).join(", ")) : "";
+      return `<div class="ml-row ${logged.length?"done":""}"><button class="ml-n" data-act="tab" data-tab="food"><b>${m}</b>${sub?`<small>${sub}</small>`:""}</button>
+        ${logged.length ? `<span class="ml-ok" aria-label="Apuntado">✓</span><button class="ml-add" data-act="home-add" data-meal="${m}" aria-label="Añadir más a ${m}">+</button>` : `<button class="reg-btn" data-act="home-add" data-meal="${m}">Regístralo</button>`}</div>`; }).join("");
   const nutriCard = `<button class="card nutri-cta" data-act="open-nutri"><span class="chat-av" aria-hidden="true">✨</span><span><b>${S.aiplan?.plan ? "Tu plan a medida" : "Crea tu plan a medida"}</b><small>${isPremium() ? (S.aiplan?.plan ? esc(S.aiplan.plan.title) : "Tu entrenador personal te prepara el menú de la semana") : "Entrenador de nutrición · Premium"}</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
-  return `<div class="card today"><h2>Hoy</h2><div><span class="big">${fmt(Math.abs(remaining))}</span> <span class="note">kcal ${remaining<0?"de más":"restantes"} de ${fmt(g.kcal)}</span></div>
-      <div class="hm-mac">${[["Proteínas",tot.p,g.p],["Carbohidratos",tot.c,g.c],["Grasas",tot.f,g.f]].map(([l,v,o])=>`<div><span>${l}</span><b>${r0(v)} / ${r0(o)} g</b><i style="--w:${Math.min(100,o?v/o*100:0)}%"></i></div>`).join("")}</div>
-      ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(a=>`<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`).join("")}</div>` : ""}
-      <button class="btn soft" data-act="tab" data-tab="food">Abrir diario</button></div>
-    ${meals ? `<div class="card"><div class="top"><h2>${P._n ? "Hoy toca · día "+P._n : "Hoy toca"}</h2><button class="link" data-act="tab" data-tab="food">Ver diario</button></div><div class="hm-list">${meals}</div></div>`
-      : `<div class="card"><h2>Tu plan de comidas</h2><p class="note">Importa tu plan y aquí verás qué te toca comer cada día.</p><button class="btn" data-act="prof-sec" data-k="plan">Importar mi plan</button></div>`}
+  const pct = Math.min(100, kgoal ? tot.kcal/kgoal*100 : 0);
+  return `<button class="card hc" data-act="tab" data-tab="food"><span class="hc-l">Calorías</span>
+      <span class="hc-row"><span><b class="hc-big">${fmt(tot.kcal)} cal</b> <span class="note">/ ${fmt(kgoal)}</span></span><span><b class="${remaining<0?"neg":""}">${fmt(Math.abs(remaining))}</b> <span class="note">${remaining<0?"de más":"restan"}</span></span></span>
+      <span class="hc-bar"><i style="width:${pct}%" class="${remaining<0?"over":""}"></i></span>
+      ${ex ? `<span class="note">Incluye ${fmt(ex)} kcal de ejercicio</span>` : ""}</button>
+    <button class="card hc hm3" data-act="nutri-go" data-k="mac">${[["Carbohidratos",tot.c,g.c,"var(--carb)"],["Grasas",tot.f,g.f,"var(--fat)"],["Proteínas",tot.p,g.p,"var(--prot)"]].map(([l,v,o,c]) => `<span class="hm3-c"><span class="hc-l">${l}</span><b>${r0(v)} g</b> <span class="note">/ ${r0(o)}</span><span class="hc-bar"><i style="width:${Math.min(100,o?v/o*100:0)}%;background:${c}"></i></span></span>`).join("")}</button>
+    ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(a=>`<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`).join("")}</div>` : ""}
+    ${S.fast?.active ? `<button class="card nutri-cta" data-act="fast-open"><span class="chat-av" aria-hidden="true">⏳</span><span><b>Ayunando · <span data-fast="t"></span></b><small data-fast="left"></small></span><span class="prof-ch" aria-hidden="true">›</span></button>` : ""}
+    <div class="sec-h"><h3>Comidas</h3><button class="link" data-act="tab" data-tab="food">Mira el diario</button></div>
+    <div class="ml">${meals}</div>
+    ${hasPlanFor(t) ? "" : `<button class="card nutri-cta" data-act="prof-sec" data-k="plan"><span class="chat-av" aria-hidden="true">📋</span><span><b>Importa tu plan de comidas</b><small>Y cada día verás aquí lo que te toca comer</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`}
     ${nutriCard}`;
 }
 const WTYPES = {Running:"Correr",Walking:"Caminar",Cycling:"Ciclismo",TraditionalStrengthTraining:"Fuerza",FunctionalStrengthTraining:"Fuerza funcional",HighIntensityIntervalTraining:"HIIT",
@@ -562,6 +571,9 @@ function beep(){ try { audio ||= new (window.AudioContext||window.webkitAudioCon
   o.frequency.value = 880; g.gain.setValueAtTime(.2, audio.currentTime); g.gain.exponentialRampToValueAtTime(.001, audio.currentTime+.6);
   o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime+.6); } catch {} }
 function tick(){
+  if (S.fast?.active) document.querySelectorAll("[data-fast]").forEach(el => { const ms = Date.now() - S.fast.active.start, goal = S.fast.active.hours*3600e3;
+    el.textContent = el.dataset.fast === "left" ? (ms >= goal ? "¡Objetivo cumplido!" : "Quedan " + clock(goal - ms)) : clock(ms);
+    if (el.dataset.fast === "ring") el.textContent = ""; });
   if (S.active) document.querySelectorAll("[data-elapsed]").forEach(el => el.textContent = clock(Date.now()-S.active.start));
   if (rest){ const left = rest.end-Date.now();
     if (left<=0){ stopRest(); beep(); try { navigator.vibrate?.([200,100,200]); } catch {} }
@@ -637,6 +649,9 @@ function viewNutri(){
     const totK = D.tot.kcal || 1, cols = ["var(--accent)","var(--carb)","var(--prot)","var(--fat)"];
     body = `<div class="card"><div class="nu-big"><div><b>${fmt(D.tot.kcal)}</b><span>Total</span></div><div><b>${fmt(g.kcal)}</b><span>Objetivo</span></div><div><b class="${D.tot.kcal>g.kcal?"neg":""}">${fmt(g.kcal - D.tot.kcal)}</b><span>Restan</span></div></div>
       <div class="bar nu-main"><i style="width:${Math.min(100, D.tot.kcal/g.kcal*100)}%"></i></div></div>
+      <div class="card"><div class="top"><h3>Alimentos más ricos en calorías</h3>${isPremium() ? "" : `<span aria-hidden="true">👑</span>`}</div>
+        ${isPremium() ? (topFoods("kcal", nutriDays()).map(([n,v]) => `<div class="nu-row"><div class="nu-l"><span>${esc(n)}</span><b>${fmt(v/(D.n||1))} kcal</b></div><div class="bar"><i style="width:${v/(D.tot.kcal*(D.n||1)||1)*100}%"></i></div></div>`).join("") || `<p class="note">Apunta comidas para verlo.</p>`)
+          : `<p class="note">Pásate a Premium para saber qué alimentos que has registrado te aportan más calorías.</p><button class="btn soft" data-act="prof-sec" data-k="premium">Ver Premium</button>`}</div>
       <div class="card"><h3>Por comida</h3>${MEALS.map((m,i)=>`<div class="nu-row"><div class="nu-l"><span>${m}</span><span class="note">${fmt(D.meals[m])} kcal · ${r0(D.meals[m]/totK*100)} %</span></div><div class="bar"><i style="width:${D.meals[m]/totK*100}%;background:${cols[i]}"></i></div></div>`).join("")}</div>`;
   } else if (nutriSub === "mac"){
     const kp = D.tot.p*4, kc = D.tot.c*4, kf = D.tot.f*9, sum = kp+kc+kf || 1, gs = g.p*4 + g.c*4 + g.f*9 || 1;
@@ -657,6 +672,14 @@ function viewNutri(){
       <p class="note nu-foot">Fibra, azúcar, vitaminas y minerales son estimaciones a partir de tablas de composición de alimentos (o de la etiqueta, si le hiciste foto al código). Objetivos orientativos según las recomendaciones de la UE y la OMS para adultos; el azúcar, las saturadas, el colesterol y el sodio son límites que conviene no pasar.</p>`;
   }
   return head + body;
+}
+function premLock(title, text){
+  return `<div class="prem-lock"><span class="prem-badge">⭐ Premium</span><h3>${title}</h3><p class="note">${text}</p>
+    <button class="btn" data-act="prof-sec" data-k="premium" onclick="document.querySelector('#sheet').hidden=true">Pásate a Premium</button></div>`;
+}
+function topFoods(key, days, n = 5){
+  const agg = {}; for (const d of days) for (const e of (S.diary[d]||[])){ let v = ["kcal","p","c","f"].includes(key) ? +e[key]||0 : (entryMicros(e)?.[key] || 0); if (v > 0) agg[e.name] = (agg[e.name]||0) + v; }
+  return Object.entries(agg).sort((a,b) => b[1]-a[1]).slice(0, n);
 }
 function openNutriDetail(k){
   const r = NUTRI.find(x => x[0]===k); if (!r) return; const [, l, u] = r, D = nutriData();
@@ -744,6 +767,61 @@ async function coachApply(){
   tab = "food"; day = today(); render(); setBanner("✓ Plan cargado: cada día verás en el Diario lo que te toca, con sus gramos."); setTimeout(() => setBanner(""), 6000);
 }
 
+const FASTS = [[12,"12:12"],[14,"14:10"],[16,"16:8"],[18,"18:6"],[20,"20:4"]];
+function fastStart(){ if (!isPremium()) return openSheet("Ayuno intermitente", premLock("Ayuno intermitente", "Cronometra tus ayunos 16:8, 18:6… con un anillo de progreso y tu historial de la semana."));
+  S.fast = {...(S.fast||{log:[], plan:16}), active:{start:Date.now(), hours:S.fast?.plan||16}}; put("fast", S.fast); openFast(); render(); }
+function fastStop(){ const F = S.fast; if (!F?.active) return; const end = Date.now(), h = (end - F.active.start)/3600e3;
+  S.fast = {...F, active:null, log:[{start:F.active.start, end, goal:F.active.hours, hours:Math.round(h*10)/10}, ...(F.log||[])].slice(0, 60)}; put("fast", S.fast);
+  if (h >= F.active.hours) confetti(); openFast(); render(); }
+function openFast(){
+  if (!isPremium()) return openSheet("Ayuno intermitente", premLock("Ayuno intermitente", "Cronometra tus ayunos 16:8, 18:6… con un anillo de progreso y tu historial de la semana."));
+  const F = S.fast || {log:[], plan:16}, A = F.active, ms = A ? Date.now() - A.start : 0, goal = (A?.hours || F.plan || 16)*3600e3, pct = Math.min(1, ms/goal), C = 2*Math.PI*70;
+  const end = A ? new Date(A.start + goal) : null;
+  openSheet("Ayuno intermitente", `<div class="fast">
+    <div class="chips fast-plans">${FASTS.map(([h,l]) => `<button class="chip" data-act="fast-plan" data-h="${h}" aria-pressed="${(A?.hours||F.plan||16)===h}">${l}</button>`).join("")}</div>
+    <div class="fast-ring"><svg viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="70" class="fr-bg"/><circle cx="80" cy="80" r="70" class="fr-fg" style="stroke-dasharray:${C};stroke-dashoffset:${C*(1-pct)}"/></svg>
+      <div class="fast-c">${A ? `<span class="note">Llevas</span><b data-fast="t">${clock(ms)}</b><span class="note" data-fast="left"></span>` : `<span class="note">Ayuno</span><b>${(F.plan||16)} h</b><span class="note">sin empezar</span>`}</div></div>
+    ${A ? `<p class="note" style="text-align:center">Empezaste a las ${new Date(A.start).toTimeString().slice(0,5)} · terminas ${end.toDateString()===new Date().toDateString()?"hoy":"mañana"} a las ${end.toTimeString().slice(0,5)}</p><button class="btn danger" data-act="fast-stop">Terminar ayuno</button>`
+      : `<button class="btn" data-act="fast-start">Empezar ayuno ahora</button>`}
+    ${(F.log||[]).length ? `<div class="card fast-log"><h2>Últimos ayunos</h2>${F.log.slice(0,7).map(x => `<div class="nu-l"><span>${dayLabel(iso(new Date(x.end)))}</span><b class="${x.hours>=x.goal?"pos":""}">${String(x.hours).replace(".",",")} h ${x.hours>=x.goal?"✓":`/ ${x.goal} h`}</b></div>`).join("")}</div>` : ""}
+    <p class="note">Orientativo. Si tienes diabetes, estás embarazada, tomas medicación o has tenido problemas con la comida, consúltalo con tu médico antes de ayunar.</p></div>`);
+  tick();
+}
+// 3) informe semanal
+function openReport(){
+  if (!isPremium()) return openSheet("Informe semanal", premLock("Tu informe semanal", "Cada semana, un resumen de cómo has comido: media de calorías y proteína, días que cumpliste, tu mejor día, peso, ejercicio y lo que más has comido."));
+  const t = today(), days = Array.from({length:7}, (_,i) => addDays(t, i-6)), logged = days.filter(d => (S.diary[d]||[]).length);
+  const sum = d => (S.diary[d]||[]).reduce((a,e) => ({kcal:a.kcal+(+e.kcal||0), p:a.p+(+e.p||0)}), {kcal:0, p:0});
+  const vals = logged.map(d => ({d, ...sum(d), g:goalsFor(d)}));
+  const avgK = vals.reduce((a,x)=>a+x.kcal,0)/(vals.length||1), avgP = vals.reduce((a,x)=>a+x.p,0)/(vals.length||1);
+  const onT = vals.filter(x => Math.abs(x.kcal - x.g.kcal) <= x.g.kcal*.1).length, protOk = vals.filter(x => x.p >= x.g.p*.9).length;
+  const best = vals.slice().sort((a,b) => Math.abs(a.kcal-a.g.kcal) - Math.abs(b.kcal-b.g.kcal))[0];
+  const W = Object.entries(S.body||{}).filter(([d]) => d >= addDays(t,-13)).sort(([a],[b]) => a<b?-1:1), dw = W.length >= 2 ? W[W.length-1][1].kg - W[0][1].kg : null;
+  const acts = allActs().filter(a => a.day >= days[0]), exK = acts.reduce((a,x)=>a+(x.kcal||0),0);
+  const fasts = (S.fast?.log||[]).filter(x => iso(new Date(x.end)) >= days[0]);
+  const g = goalsFor(t), st = streak();
+  const tip = !vals.length ? "Esta semana no has apuntado nada. Empieza por una comida al día: lo importante es la constancia."
+    : protOk < vals.length/2 ? `Te ha faltado proteína ${vals.length-protOk} de ${vals.length} días. Añade un lácteo proteico o un poco más de carne, pescado, huevo o legumbre en la cena.`
+    : avgK > g.kcal*1.1 ? "Te has pasado de calorías de media. Revisa los snacks y el aceite: suelen ser lo que más suma sin darte cuenta."
+    : avgK < g.kcal*.85 ? "Has comido bastante por debajo de tu objetivo. Comer demasiado poco cansa y hace perder músculo: intenta acercarte más."
+    : "¡Buena semana! Has estado cerca de tu objetivo. Sigue así.";
+  openSheet("Informe semanal", `<div class="rep"><p class="note">${dayLabel(days[0])} – ${dayLabel(t).toLowerCase()}</p>
+    <div class="rep-grid">
+      <div><b>${logged.length}/7</b><span>días apuntados</span></div><div><b>${fmt(avgK)}</b><span>kcal de media (objetivo ${fmt(g.kcal)})</span></div>
+      <div><b>${r0(avgP)} g</b><span>proteína de media (objetivo ${g.p})</span></div><div><b>${onT}</b><span>días dentro de tu objetivo (±10 %)</span></div>
+      <div><b>${dw==null?"—":(dw>0?"+":"")+String(r1(dw)).replace(".",",")+" kg"}</b><span>cambio de peso (2 semanas)</span></div><div><b>🔥 ${st}</b><span>días de racha</span></div>
+      ${acts.length ? `<div><b>${acts.length}</b><span>actividades · ${fmt(exK)} kcal</span></div>` : ""}${fasts.length ? `<div><b>${fasts.length}</b><span>ayunos · ${fasts.filter(x=>x.hours>=x.goal).length} completados</span></div>` : ""}
+    </div>
+    ${best ? `<div class="conn-msg ok">🏆 Tu mejor día: ${dayLabel(best.d).toLowerCase()} (${fmt(best.kcal)} kcal)</div>` : ""}
+    <div class="card"><h2>Consejo de la semana</h2><p>${tip}</p></div>
+    ${vals.length ? `<div class="card"><h2>Lo que más has comido</h2>${topFoods("kcal", days, 5).map(([n,v]) => `<div class="nu-l"><span>${esc(n)}</span><b>${fmt(v)} kcal</b></div>`).join("")}</div>` : ""}</div>`);
+}
+function openFab(){
+  const T = (act, ico, l, sub, prem) => `<button class="fab-t" data-act="${act}"><span class="fab-i" aria-hidden="true">${ico}</span><b>${l}${prem && !isPremium() ? " ⭐" : ""}</b>${sub?`<small>${sub}</small>`:""}</button>`;
+  const R = (act, ico, l) => `<button class="fab-r" data-act="${act}"><span aria-hidden="true">${ico}</span>${l}<span class="prof-ch" aria-hidden="true">›</span></button>`;
+  openSheet("Registrar", `<div class="fab-grid">${T("fab-food","🔍","Registrar alimento",mealNow())}${T("fab-photo","📸","Foto del plato o código","",true)}</div>
+    <div class="fab-list">${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Strava o Garmin)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
+}
 /* ---------- Strava ---------- */
 let stravaMsg = "", stravaBusy = false, stravaSetup = false;
 const SPORTS = {Run:"Carrera",TrailRun:"Trail",VirtualRun:"Carrera (cinta)",Walk:"Caminata",Hike:"Senderismo",Ride:"Bici",MountainBikeRide:"Bici de montaña",GravelRide:"Gravel",EBikeRide:"Bici eléctrica",VirtualRide:"Bici (rodillo)",
@@ -994,6 +1072,7 @@ function viewProgress(){
     ${lineChart(pts,{color:"var(--accent)",label:"Progreso de "+progEx,empty:""})}${rec}`:`<p class="note">Cuando guardes entrenos verás aquí tu progreso por ejercicio.</p>`}</div>
   <div class="card"><h2>Series por músculo · esta semana</h2>${mus || `<p class="note">Sin series esta semana todavía.</p>`}</div>
 ` : ""}
+  <button class="card nutri-cta" data-act="week-report"><span class="chat-av" aria-hidden="true">📊</span><span><b>Informe semanal${isPremium()?"":" ⭐"}</b><small>Tu resumen de los últimos 7 días</small></span><span class="prof-ch" aria-hidden="true">›</span></button>
   ${stravaCard()}
   <div class="card"><div class="top"><h2>Peso corporal</h2>${bwDiff!=null?`<span class="note tnum">${bwDiff>0?"+":""}${bwDiff.toLocaleString("es-ES")} kg desde ${shortDay(bw[0][0])}</span>`:""}</div>
     <form id="fWeight" style="display:flex;gap:8px"><input id="bwIn" inputmode="decimal" placeholder="Peso de hoy (kg)" value="${S.body[today()]?.kg??""}" aria-label="Peso de hoy en kg"><button class="btn" type="submit">Guardar</button></form>
@@ -1360,9 +1439,12 @@ function premFeats(on){
   const F = [["plate","📸","Foto al plato con IA","Haz una foto a lo que vas a comer: la IA reconoce cada alimento y calcula gramos, calorías y macros. Tú solo revisas y añades."],
              ["code","▥","Foto al código de barras","Para lo envasado: foto al código y salen sus calorías, macros, fibra, azúcar y sal de la etiqueta."],
              ["nutri","✨","Plan de nutrición a medida","Como un entrenador personal: respondes unas preguntas y te crea al momento tu menú semanal con platos, gramos y calorías. Se carga en tu Diario y cambias los platos que quieras."],
+             ["fast","⏱️","Ayuno intermitente","Cronometra tus ayunos 16:8, 18:6… con anillo de progreso e historial."],
+             ["report","📊","Informe semanal","Media de calorías y proteína, días cumplidos, tu mejor día, peso y un consejo cada semana."],
+             ["top","👑","Alimentos más ricos","Descubre qué alimentos te aportan más calorías, azúcar, sal, proteína…"],
              ["conn","🔗","Strava o Garmin","Tus carreras, salidas en bici y entrenos llegan solos con sus calorías. Conecta el que uses."]];
   return `<div class="prem-feats">${F.map(([k,i,t,d]) => `<div class="prem-f"><span class="prem-fi" aria-hidden="true">${i}</span><div><b>${t}</b><p class="note">${d}</p>
-    ${on ? k==="nutri" ? `<button class="btn soft" data-act="open-nutri">Crear mi plan</button>` : k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
+    ${on ? k==="fast" ? `<button class="btn soft" data-act="fast-open">Abrir</button>` : k==="report" ? `<button class="btn soft" data-act="week-report">Ver informe</button>` : k==="top" ? `<button class="btn soft" data-act="nutri-go" data-k="cal">Ver</button>` : k==="nutri" ? `<button class="btn soft" data-act="open-nutri">Crear mi plan</button>` : k==="conn" ? `<button class="btn soft" data-act="prof-sec" data-k="conn">Conectar</button>` : `<button class="btn ${k==="plate"?"":"soft"}" data-act="prem-use" data-k="${k}">${k==="plate"?"📸 Hacer foto al plato":"Hacer foto al código"}</button>` : ""}</div></div>`).join("")}</div>`;
 }
 const mealNow = () => { const h = new Date().getHours() + new Date().getMinutes()/60; return h < 11 ? "Desayuno" : h < 16.5 ? "Comida" : h < 20 ? "Snacks" : "Cena"; };
 function premiumPitch(){
@@ -1898,6 +1980,15 @@ document.addEventListener("click", e => {
     case "day-today": day = today(); render(); break;
     case "nutri-sub": nutriSub = el.dataset.k; render(); break;
     case "open-nutri": tab = "nutri"; nutriSub = "ia"; render(); scrollTo(0,0); break;
+    case "nutri-go": tab = "nutri"; nutriSub = el.dataset.k; nutriRange = "dia"; day = today(); render(); scrollTo(0,0); break;
+    case "wk-day": day = el.dataset.d; tab = "food"; render(); scrollTo(0,0); break;
+    case "home-add": day = today(); tab = "food"; render(); openAddFood(el.dataset.meal); break;
+    case "fab": openFab(); break;
+    case "fab-food": closeSheet(); day = today(); tab = "food"; render(); openAddFood(mealNow()); break;
+    case "fab-photo": closeSheet(); if (!isPremium()){ profSec = "premium"; tab = "profile"; render(); break; } day = today(); tab = "food"; render(); openAddFood(mealNow()); sheetCtx.t = "scan"; drawFood(); document.querySelectorAll("#ftabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t==="scan")); break;
+    case "fab-weight": { closeSheet(); tab = "progress"; render(); setTimeout(() => { const i = $("bwIn"); if (i){ i.scrollIntoView({block:"center"}); i.focus(); } }, 80); break; }
+    case "fab-ex": closeSheet(); profSec = "conn"; tab = "profile"; render(); scrollTo(0,0); break;
+    case "fab-plan": closeSheet(); tab = "nutri"; nutriSub = "ia"; render(); scrollTo(0,0); break;
     case "coach-go": coachRun(); break;
     case "coach-again": coachRun(true); break;
     case "coach-swap": coachSwap(+el.dataset.d, el.dataset.m); break;
@@ -1906,7 +1997,12 @@ document.addEventListener("click", e => {
     case "coach-day": coach.day = +el.dataset.d; render(); break;
     case "coach-apply": el.disabled = true; coachApply(); break;
     case "nutri-range": nutriRange = el.dataset.k; render(); break;
-    case "nutri-detail": openNutriDetail(el.dataset.k); break;
+    case "nutri-detail": if (!isPremium()){ openSheet("Premium", premLock("Alimentos más ricos en cada nutriente", "Toca cualquier nutriente y descubre qué alimentos te lo están aportando: las calorías, el azúcar, la sal, la proteína…")); break; } openNutriDetail(el.dataset.k); break;
+    case "fast-start": fastStart(); break;
+    case "fast-stop": fastStop(); break;
+    case "fast-plan": S.fast = {...(S.fast||{log:[]}), plan:+el.dataset.h}; if (S.fast.active) S.fast.active.hours = +el.dataset.h; put("fast", S.fast); openFast(); break;
+    case "fast-open": closeSheet(); openFast(); break;
+    case "week-report": closeSheet(); openReport(); break;
     case "add-food": openAddFood(el.dataset.meal); break;
     case "plan-edit": openPlanEditor(+el.dataset.d || wdayOf(day)); break;
     case "plan-day": openPlanEditor(+el.dataset.d); break;
