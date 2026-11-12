@@ -128,7 +128,7 @@ export function makeCoachPlan(sport, req, todayISO) {
     let phase, list;
     if (S.kind === "end") {
       phase = tw ? "Puesta a punto" : w < (N - taper) * 0.4 ? "Base" : w < (N - taper) * 0.75 ? "Construcción" : "Específica";
-      const peak = (PEAK[goal] || FIT_PEAK[sport]) * LV[lvl], st = Math.max(25, peak * 0.45);
+      const peak = (PEAK[goal] || FIT_PEAK[sport]) * LV[lvl], st = Math.max(25, Math.min(peak * 0.85, +req.recentLong || peak * 0.45));
       const prog = st + (peak - st) * Math.min(1, w / Math.max(1, N - taper - 1));
       const L = r5((tw ? peak * (w === N - 1 ? 0.45 : 0.65) : prog) * (rec ? 0.7 : 1));
       const pat = { 2: ["Q", "L"], 3: ["E", "Q", "L"], 4: ["E", "Q", "S", "L"], 5: ["E", "Q", "E", "S", "L"], 6: ["E", "Q", "R", "Q", "S", "L"] }[days].slice();
@@ -152,3 +152,28 @@ export function makeCoachPlan(sport, req, todayISO) {
   return { sport, req: { ...req, goal, level: lvl, days }, start, weeks, created: Date.now() };
 }
 export const goalName = (sport, g) => COACH[sport]?.goals.find((x) => x[0] === g)?.[1] || "";
+
+// Ajuste según la carga: f = factor de volumen; easy = convertir la calidad en suave
+export function adaptWeek(plan, w, adj = {}) {
+  const S = COACH[plan.sport], W = plan.weeks[w]; if (!W) return [];
+  const f = adj.f || 1, phase = W.phase.replace(" · descarga", ""), { goal, level } = plan.req;
+  return W.sessions.map((x) => {
+    if (x.t === "RACE" || f === 1 && !adj.easy) return x;
+    if (S.kind === "end") {
+      const t = adj.easy && x.t === "Q" ? "E" : x.t, mins = x.t === "S" ? x.dur : r5(x.dur * (adj.easy && x.t === "Q" ? 0.8 : f));
+      const [title, desc] = endSession(plan.sport, t, phase, mins, goal, w, level);
+      return { ...x, t, title, desc, dur: mins, adj: true };
+    }
+    return { ...x, dur: r5(x.dur * f), desc: x.t !== "P" && f < 1 ? x.desc + " (Hoy más suave: llevas mucha carga.)" : x.desc, adj: true };
+  });
+}
+// objetivo del plan a partir de una carrera
+export function goalFromRace(sport, km) {
+  km = +km || 0;
+  if (sport === "run") return km <= 6 ? "5k" : km <= 12 ? "10k" : km <= 25 ? "21k" : "42k";
+  if (sport === "trail") return km <= 21 ? "t21" : km <= 50 ? "t50" : "ultra";
+  if (sport === "bike") return "fondo";
+  if (sport === "swim") return km >= 1.4 && km <= 4 ? "1500" : "tri";
+  if (sport === "hike") return "ruta";
+  return COACH[sport]?.kind === "team" ? (sport === "boxing" ? "comp" : "rend") : "fit";
+}

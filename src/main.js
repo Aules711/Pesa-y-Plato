@@ -4,7 +4,8 @@ import { microFor, microFromOFF, MICRO_KEYS } from "./micros.js";
 import { makePlan, swapMeal, PLANNER_FOODS } from "./planner.js";
 import { fileText, parsePlan, parseStudy, EXTRA_FOODS } from "./planparse.js";
 import { SPORT_LIST, SPORT, kcalFor, pace, speed, newTrack, elapsed, addPoint, markGap, packRoute, makeMap, drawRoute, hereMarker, fitRoute } from "./sport.js";
-import { COACH as SPC, DAY_N, TIPS as SP_TIPS, makeCoachPlan, goalName } from "./coach.js";
+import { COACH as SPC } from "./coach.js";
+import { spInit, spView, spAction, spEnter, spSubtitle, todayFor, isDone as spIsDone, setDone as spSetDone, SP_COLOR } from "./sportapp.js";
 import { TIERS, STD, tierOf, kgFor, repsFor, isBW, exerciseRanks, muscleRanks, GYM_MUSCLES, bodyMap, badge, suggest, makeGymPlan, NEW_LIB } from "./gym.js";
 
 let sb = null;
@@ -121,6 +122,8 @@ function applyDoc(id, v){
   else if (id==="aiplan") S.aiplan = v?.plan ? v : null;
   else if (id==="sports") S.sports = v?.list || [];
   else if (id==="sportcoach") S.scoach = v?.plans || {};
+  else if (id==="races") S.races = v?.list || [];
+  else if (id==="zones") S.zones = v?.map || {};
 }
 let q = Promise.resolve();
 function enqueue(fn){ const p = q.then(fn); q = p.catch(()=>{}); return p; }
@@ -192,7 +195,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {scoach:{}, sports:[], fast:null, strava:null, garmin:null, whoop:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {races:[], zones:{}, scoach:{}, sports:[], fast:null, strava:null, garmin:null, whoop:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -293,7 +296,7 @@ function landingHTML(card, mode){
     <section class="lf" id="sec-free"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
         ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida, cena y snacks. Solo escribes los gramos y marcas ✓.")}
-        ${feat("fire","Ejercicios: tu coach de cada deporte","Gym con rangos de Hierro a Élite y mapa de tus músculos, y un coach para correr, trail, ciclismo, natación, montaña, pádel, tenis, fútbol, baloncesto o boxeo que te prepara el plan de cada semana.")}
+        ${feat("fire","Deportes: cada uno, una app","Correr, trail, ciclismo, natación, montaña, pádel, tenis, fútbol, baloncesto, boxeo y gym. Cada uno con su plan que se ajusta a tu carga, calendario, carreras o partidos, resumen diario, semanal, mensual y anual, estadísticas y tus zonas.")}
         ${feat("ring","Calorías y macros del día","Tarjetas claras con lo que llevas y lo que te queda: calorías, proteínas, hidratos y grasas, y tu semana de un vistazo.")}
         ${feat("pie","Nutrientes como un profesional","Fibra, azúcar, grasas saturadas, sal, potasio, calcio, hierro y vitaminas de cada día o de la semana, con tu objetivo y lo que te falta.")}
         ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Si tu plan trae objetivo por día, se usa ese.")}
@@ -400,7 +403,7 @@ function render(){
   const tb = $("tabbar"); tb.classList.toggle("six", TRAIN_ON); tb.querySelector('[data-tab="train"]').hidden = !TRAIN_ON; tb.querySelector('[data-tab="profile"]').hidden = true;
   document.querySelectorAll("#tabbar button").forEach(b => { b.toggleAttribute("aria-current", b.dataset.tab===tab); if (b.dataset.tab===tab) b.setAttribute("aria-current","page");
     b.classList.toggle("live", b.dataset.tab==="train" && !!S.active); });
-  const TT = {home:"Hoy", train:"Ejercicios", food:"Diario", nutri:"Nutrición", progress:"Progreso"};
+  const TT = {home:"Hoy", train:"Deportes", food:"Diario", nutri:"Nutrición", progress:"Progreso"};
   const ini = ((user?.email || "?")[0] || "?").toUpperCase();
   const appbar = TT[tab] ? `<div class="appbar"><b class="ab-t">${TT[tab]}</b>${isPremium() ? "" : `<button class="prem-pill" data-act="prof-sec" data-k="premium">Pásate a Premium</button>`}<button class="ab-av" data-act="tab" data-tab="profile" aria-label="Perfil y ajustes">${esc(ini)}</button></div>` : "";
   const top = appbar + (trk ? `<button class="trk-pill" data-act="fab-sport"><i aria-hidden="true"></i>${esc(SPORT[trk.type]?.n||"Actividad")} · <span data-trk>${clock(elapsed(trk)*1000)}</span>${trk.status==="pause"?" · en pausa":""}<span class="prof-ch" aria-hidden="true">›</span></button>` : "") + `<div id="bannerBox" class="banner" ${banner?"":"hidden"}>${esc(banner)}</div>`;
@@ -411,6 +414,7 @@ function render(){
   if (fresh){ lastTab = tab; $("main").classList.remove("enter"); void $("main").offsetWidth; $("main").classList.add("enter");
     requestAnimationFrame(() => document.querySelectorAll("[data-ring]").forEach(el => el.style.strokeDashoffset = el.dataset.ring)); }
   else { $("main").classList.remove("enter"); document.querySelectorAll("[data-ring]").forEach(el => { el.style.transition = "none"; el.style.strokeDashoffset = el.dataset.ring; }); if (scrollY !== y) scrollTo(0, y); }
+  document.body.classList.toggle("sportapp", tab==="train" && !S.active && !!SPC[exSport]);
   if (tab==="profile" && profSec==="admin") drawAdmin();
   tick();
 }
@@ -518,66 +522,18 @@ function workoutCard(w){
 let exSport = null, scWeek = null, scEdit = null;
 function viewTrain(){
   if (S.active) return viewActive();
-  if (exSport === "gym") return `<button class="link ex-back" data-act="ex-back">‹ Ejercicios</button>` + viewGym();
-  if (exSport && SPC[exSport]) return `<button class="link ex-back" data-act="ex-back">‹ Ejercicios</button>` + viewSportCoach(exSport);
+  if (exSport === "gym") return `<button class="link ex-back" data-act="ex-back">‹ Deportes</button>` + viewGym();
+  if (exSport && SPC[exSport]) return spView(exSport);
   exSport = null;
   const D = gymData(), T = tierOf(D.overall), wi = k => { const P = S.scoach?.[k]; if (!P) return -1; return Math.floor((parseDay(today()) - parseDay(P.start)) / (7*864e5)); };
-  const card = (k, e, n, sub, on) => `<button class="ex-sp ${on?"on":""}" data-act="ex-sport" data-k="${k}"><span class="ex-e" aria-hidden="true">${e}</span><b>${esc(n)}</b><small>${sub}</small></button>`;
-  const todayS = Object.keys(S.scoach||{}).flatMap(k => { const P = S.scoach[k], w = wi(k), d = (parseDay(today()).getDay()+6)%7; return (P.weeks[w]?.sessions||[]).map((x,i)=>({k, x, i, w})).filter(o=>o.x.d===d); });
-  return `<p class="note" style="margin-top:0">Elige tu deporte: tu coach te prepara el plan de cada semana, te dice qué toca hoy y cómo hacerlo.</p>
-  ${todayS.length ? `<div class="card"><h2>Hoy te toca</h2>${todayS.map(o=>`<button class="li sc-today" data-act="ex-sport" data-k="${o.k}"><span aria-hidden="true">${SPC[o.k].e}</span><span class="n"><b>${esc(o.x.title)}</b><small>${esc(SPC[o.k].n)}${o.x.dur?" · "+fmtMin(o.x.dur*60):""}</small></span>${scIsDone(o.k,o.w,o.i)?`<span class="sc-ok">✓</span>`:`<span class="prof-ch" aria-hidden="true">›</span>`}</button>`).join("")}</div>` : ""}
+  const card = (k, e, n, sub, on) => `<button class="ex-sp ${on?"on":""}" data-act="ex-sport" data-k="${k}" style="--sp:${SP_COLOR[k]||"var(--accent)"}"><span class="ex-e" aria-hidden="true">${e}</span><b>${esc(n)}</b><small>${sub}</small></button>`;
+  const todayS = Object.keys(S.scoach||{}).filter(k=>SPC[k]).flatMap(k => todayFor(k).map(o=>({...o, k})));
+  return `<p class="note" style="margin-top:0">Elige tu deporte. Cada uno es como una app propia: tu plan, calendario, carreras, resumen, estadísticas y zonas.</p>
+  ${todayS.length ? `<div class="card"><h2>Hoy te toca</h2>${todayS.map(o=>`<button class="li sc-today" data-act="ex-sport" data-k="${o.k}"><span aria-hidden="true">${SPC[o.k].e}</span><span class="n"><b>${esc(o.x.title)}</b><small>${esc(SPC[o.k].n)}${o.x.dur?" · "+fmtMin(o.x.dur*60):""}</small></span>${spIsDone(o.k,o.w,o.i)?`<span class="sc-ok">✓</span>`:`<span class="prof-ch" aria-hidden="true">›</span>`}</button>`).join("")}</div>` : ""}
   <div class="ex-grid">
     ${card("gym", "🏋️", "Gym", S.active ? "Entreno en curso" : D.measured ? `${badge(T,16)} ${T.label}` : "Rangos, rutinas y plan", true)}
-    ${Object.entries(SPC).map(([k,c]) => { const P = S.scoach?.[k], w = wi(k); return card(k, c.e, c.n, P ? (w >= P.weeks.length ? "Plan terminado" : `Semana ${Math.max(1,w+1)} de ${P.weeks.length}`) : "Crear mi plan", !!P); }).join("")}
+    ${Object.entries(SPC).map(([k,c]) => card(k, c.e, c.n, spSubtitle(k), !!S.scoach?.[k] || (S.races||[]).some(r=>r.sport===k))).join("")}
   </div>`;
-}
-function scKey(k, w, i){ return `${k}|${w}|${i}`; }
-function scIsDone(k, w, i){ return !!S.scoach?.[k]?.done?.[scKey(k,w,i)]; }
-function scDone(k, w, i, force){ const P = S.scoach?.[k]; if (!P) return; const done = {...(P.done||{})}, key = scKey(k,w,i);
-  if (force || !done[key]) done[key] = Date.now(); else delete done[key];
-  put("sportcoach", {plans:{...S.scoach, [k]:{...P, done}}}); }
-function scForm(k){
-  const C = SPC[k], P = S.scoach?.[k]?.req || {}, o = (id, v, l, cur) => `<label class="seg-o"><input type="radio" name="${id}" value="${v}" ${String(cur)===String(v)?"checked":""}><span>${l}</span></label>`;
-  return `<div class="card sc-form"><h2>${C.e} Tu plan de ${esc(C.n)}</h2>
-    <div class="f"><span>¿Cuál es tu objetivo?</span><div class="seg-g">${C.goals.map(([v,l])=>o("scGoal", v, l, P.goal||C.goals[0][0])).join("")}</div></div>
-    <div class="f"><span>Tu nivel</span><div class="seg-g">${o("scLv","beg","Empiezo",P.level)}${o("scLv","mid","Intermedio",P.level||"mid")}${o("scLv","adv","Avanzado",P.level)}</div></div>
-    <div class="f"><span>¿Cuántos días a la semana puedes entrenar?</span><div class="seg-g">${[2,3,4,5,6].map(d=>o("scDays", d, d, P.days||3)).join("")}</div></div>
-    ${C.kind==="end" ? `<label class="f">Fecha de tu carrera u objetivo (opcional)<input type="date" id="scDate" min="${addDays(today(),14)}" value="${esc(P.date||"")}"></label>` : ""}
-    <span class="msg" id="scMsg" hidden></span>
-    <button class="btn" data-act="sc-make" data-k="${k}">${S.scoach?.[k] ? "Rehacer mi plan" : "Crear mi plan"}</button>
-    ${S.scoach?.[k] ? `<button class="btn ghost" data-act="sc-cancel">Cancelar</button>` : ""}</div>`;
-}
-function scMake(k){
-  const v = n => document.querySelector(`input[name=${n}]:checked`)?.value;
-  const req = {goal:v("scGoal"), level:v("scLv")||"mid", days:+v("scDays")||3, date:$("scDate")?.value||""};
-  const P = makeCoachPlan(k, req, today()); P.done = {};
-  scEdit = null; scWeek = null; put("sportcoach", {plans:{...(S.scoach||{}), [k]:P}}).then(() => { render(); scrollTo(0,0); });
-}
-function viewSportCoach(k){
-  const C = SPC[k], P = S.scoach?.[k];
-  if (!P || scEdit === k) return `<div class="card sc-hero"><span class="sc-e" aria-hidden="true">${C.e}</span><div><b>Tu coach de ${esc(C.n)}</b><span class="note">Responde 3 preguntas y te preparo un plan semana a semana: qué hacer cada día, cuánto tiempo y a qué intensidad.</span></div></div>${scForm(k)}`;
-  const cur = Math.floor((parseDay(today()) - parseDay(P.start)) / (7*864e5)), W = Math.max(0, Math.min(P.weeks.length-1, scWeek ?? cur)), wk = P.weeks[W];
-  const all = P.weeks.reduce((n,x)=>n+x.sessions.length,0), dn = Object.keys(P.done||{}).length;
-  const wDone = wk.sessions.filter((_,i)=>scIsDone(k,W,i)).length, mins = wk.sessions.reduce((a,x)=>a+(x.dur||0),0);
-  const todayD = (parseDay(today()).getDay()+6)%7;
-  const ses = wk.sessions.map((x,i) => { const day = addDays(P.start, W*7 + x.d), done = scIsDone(k,W,i), isT = day === today();
-    return `<div class="card sc-s ${done?"done":""} ${isT?"today":""}"><div class="sc-h"><span class="sc-d"><b>${DAY_N[x.d].slice(0,3)}</b><small>${parseDay(day).getDate()}</small></span>
-      <div class="sc-t"><b>${esc(x.title)}</b><small>${isT?"Hoy · ":""}${x.dur?fmtMin(x.dur*60):""}</small></div>
-      <button class="sc-chk" data-act="sc-done" data-k="${k}" data-w="${W}" data-i="${i}" aria-pressed="${done}" aria-label="Marcar como hecha">✓</button></div>
-      <p class="sc-desc">${esc(x.desc).replace(/ · /g,"<br>· ")}</p>
-      ${C.gps && x.t !== "S" && !done && day <= today() ? `<button class="btn soft sc-gps" data-act="sc-gps" data-k="${k}" data-w="${W}" data-i="${i}">▶ Grabar con GPS</button>` : ""}
-      ${(x.t === "S" || x.t === "F" || x.t === "F2") && !done ? `<button class="link" data-act="ex-sport" data-k="gym">Apuntar las series en Gym ›</button>` : ""}</div>`; }).join("");
-  return `<div class="card sc-hero"><span class="sc-e" aria-hidden="true">${C.e}</span><div><b>Tu coach de ${esc(C.n)}</b><span class="note">${esc(goalName(k, P.req.goal))}${P.req.date?` · ${dayLabel(P.req.date).toLowerCase()==="hoy"?"hoy":new Date(P.req.date+"T12:00").toLocaleDateString("es-ES",{day:"numeric",month:"long"})}`:""} · ${P.req.days} días/semana</span></div></div>
-  <div class="card"><div class="sc-wk"><button class="iconb" data-act="sc-week" data-w="${W-1}" ${W<=0?"disabled":""} aria-label="Semana anterior">‹</button>
-    <div><b>Semana ${W+1} de ${P.weeks.length}</b><small>${esc(wk.phase)}${W===cur?" · esta semana":""}</small></div>
-    <button class="iconb" data-act="sc-week" data-w="${W+1}" ${W>=P.weeks.length-1?"disabled":""} aria-label="Semana siguiente">›</button></div>
-    <div class="gh-bar" style="--tc:var(--accent)"><i style="width:${Math.round(wDone/Math.max(1,wk.sessions.length)*100)}%"></i></div>
-    <span class="note">${wDone} de ${wk.sessions.length} sesiones hechas · ${fmtMin(mins*60)} en total · plan completo: ${dn}/${all}</span></div>
-  ${cur >= P.weeks.length ? `<div class="card"><b>🎉 ¡Plan terminado!</b><p class="note">Crea uno nuevo para seguir mejorando.</p><button class="btn" data-act="sc-edit" data-k="${k}">Nuevo plan</button></div>` : ""}
-  ${ses}
-  <div class="card"><h2>Consejos de tu coach</h2>${(SP_TIPS[k]||[]).map(t=>`<p class="note" style="margin:0">• ${esc(t)}</p>`).join("")}</div>
-  <button class="btn ghost" data-act="sc-edit" data-k="${k}">Cambiar mi plan</button>
-  <button class="btn danger" data-act="sc-del" data-k="${k}">Borrar plan</button>`;
 }
 function gymBW(){ const lastW = Object.entries(S.body||{}).sort(([x],[y]) => x<y?1:-1)[0]?.[1]?.kg; return +lastW || +S.settings.profile?.w || 0; }
 function gymSex(){ return S.settings.profile?.sex || S.aiplan?.req?.sex || "m"; }
@@ -1174,6 +1130,7 @@ function trkFinish(){
   trkHide();
   openSheet("Actividad terminada", `${T.gps && trk.pts.length > 1 ? `<div class="sp-map" id="spMap"></div>` : `<div class="done-hero"><span style="font-size:44px" aria-hidden="true">${T.e}</span></div>`}
     <div class="sp-stats"><div><span>Tiempo</span><b>${clock(sec*1000)}</b></div>${T.gps ? `<div><span>Distancia</span><b>${km.toFixed(2).replace(".", ",")} km</b></div><div><span>${T.unit==="speed"?"Velocidad":"Ritmo"}</span><b>${T.unit==="speed"?speed(sec, km)+" km/h":pace(sec, km)+" /km"}</b></div>` : ""}<div><span>Calorías</span><b>${fmt(kcal)}</b></div>${trk.elev > 5 ? `<div><span>Desnivel +</span><b>${Math.round(trk.elev)} m</b></div>` : ""}</div>
+    <label class="f">¿Qué tal ha ido? Esfuerzo<select id="spRpe"><option value="">Sin indicar</option>${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}">${n} · ${["Muy suave","Suave","Suave","Moderado","Algo duro","Duro","Duro","Muy duro","Máximo","Máximo"][n-1]}</option>`).join("")}</select></label>
     <label class="f">Nombre<input id="spName" placeholder="${esc(T.n)} ${dayLabel(today()).toLowerCase()}"></label>
     ${sec < 30 ? `<p class="note">La actividad dura menos de 30 segundos.</p>` : ""}
     <button class="btn" data-act="trk-save">Guardar actividad</button>
@@ -1185,7 +1142,8 @@ function trkSave(){
   const sec = elapsed(trk), km = Math.round(trk.m/10)/100, d = new Date(trk.start);
   const a = {id:"a"+trk.start, type:trk.type, name:($("spName")?.value||"").trim(), start:trk.start, day:iso(d), dur:sec, km, elev:Math.round(trk.elev)||0,
     kcal:kcalFor(trk.type, sportKg(), sec, trk.m/1000), ...(trk.pts.length > 1 ? {route:packRoute(trk.pts)} : {})};
-  const ses = trk.ses; if (ses) scDone(ses.k, ses.w, ses.i, true);
+  const ses = trk.ses; if (ses?.k){ a.csport = ses.k; if (ses.w != null) spSetDone(ses.k, ses.w, ses.i, true); }
+  const rpe = +($("spRpe")?.value||0); if (rpe) a.rpe = rpe;
   put("sports", {list:[a, ...(S.sports||[]).filter(x=>x.id!==a.id)]}).then(ok => { if (!ok) return; trkEnd(); closeSheet(); confetti(); });
 }
 function openSport(id){
@@ -2263,6 +2221,7 @@ document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el || el.disabled) return;
   const act = el.dataset.act, row = el.closest("[data-ei]"), ei = row ? +row.dataset.ei : -1, si = row?.dataset.si!=null ? +row.dataset.si : -1;
   const a = S.active, c = sheetCtx;
+  if (act.startsWith("sp-") && act !== "sp-x" && exSport && SPC[exSport] && spAction(act, el, exSport)) return;
   switch (act){
     case "conn-on": { const sv = el.dataset.s; el.disabled = true; el.textContent = `Abriendo ${{garmin:"Garmin",whoop:"WHOOP"}[sv]||"Strava"}…`;
       stravaCall("start", sv).then(r => { location.href = r.url; }).catch(e => { if (sv==="strava" && e.code==="needs_app"){ stravaSetup = true; stravaMsg = ""; } else stravaMsg = stravaErr(e); render(); scrollTo({top:0, behavior:"smooth"}); }); break; }
@@ -2406,15 +2365,8 @@ document.addEventListener("click", e => {
     case "trk-back": closeSheet(); trkShow(); break;
     case "sport-open": openSport(el.dataset.id); break;
     case "sport-del": if (el.dataset.sure){ put("sports", {list:S.sports.filter(a=>a.id!==el.dataset.id)}).then(() => { closeSheet(); render(); }); } else { el.dataset.sure = 1; el.textContent = "Toca otra vez para borrarla"; } break;
-    case "ex-sport": exSport = el.dataset.k; scWeek = null; render(); scrollTo(0,0); break;
+    case "ex-sport": exSport = el.dataset.k; spEnter(); closeSheet(); render(); scrollTo(0,0); break;
     case "ex-back": exSport = null; render(); scrollTo(0,0); break;
-    case "sc-make": scMake(el.dataset.k); break;
-    case "sc-edit": scEdit = el.dataset.k; render(); scrollTo(0,0); break;
-    case "sc-cancel": scEdit = null; render(); break;
-    case "sc-week": scWeek = +el.dataset.w; render(); break;
-    case "sc-done": scDone(el.dataset.k, +el.dataset.w, +el.dataset.i); render(); break;
-    case "sc-gps": trkStart(SPC[el.dataset.k].gps, {k:el.dataset.k, w:+el.dataset.w, i:+el.dataset.i}); break;
-    case "sc-del": if (el.dataset.sure){ const P = {...S.scoach}; delete P[el.dataset.k]; put("sportcoach", {plans:P}).then(render); } else { el.dataset.sure = 1; el.textContent = "Toca otra vez para borrar el plan"; } break;
     case "gym-plan": openGymPlan(); break;
     case "gym-plan-make": el.disabled = true; makeGymRoutines(); break;
     case "gym-tiers": openTiers(); break;
@@ -2555,5 +2507,7 @@ function checkHash(){
   if (m[1]==="garmin" && m[2]==="ok") applyDoc("garmin", {connected:true, list:[], synced:Date.now()});
   if (m[2]==="ok") confetti(); render(); }
 window.addEventListener("hashchange", checkHash);
+spInit({ S, esc, fmt, fmtMin, clock, addDays, parseDay, today, iso, dayLabel, weekStart, put, render: () => render(), openSheet, closeSheet, $, allActs, trkStart, sportName, SPORT_ICO, actLine, kcalFor, sportKg: () => sportKg(), confetti });
 init();
 })();
+
