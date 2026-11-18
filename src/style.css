@@ -958,3 +958,4 @@ body.sportapp .appbar{display:none}
 .sp-addl{display:flex;flex-direction:column;gap:8px}.sp-addl .prof-row{width:100%}
 button.sp-inj-box{flex-direction:row!important;gap:8px;align-items:flex-start}
 .sp-pb summary{cursor:pointer;list-style:none}.sp-pb summary::-webkit-details-marker{display:none}.sp-lvl{padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--sp) 12%,transparent);display:flex;flex-direction:column;gap:6px}.sp-lvl-t{font-size:17px;color:var(--sp)}
+.sp-gt{display:flex;gap:8px;align-items:center;margin-top:6px}.sp-gt select{flex:1.4;min-width:0}.sp-gt input{flex:1;min-width:0}.sp-gt span{color:var(--muted);font-weight:600}

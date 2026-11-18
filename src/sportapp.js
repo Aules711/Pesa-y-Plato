@@ -239,11 +239,14 @@ function planForm(k) {
   const Cc = COACH[k], P = C.S.scoach?.[k]?.req || {}, nr = nextRace(k), o = (id, v, l, cur) => `<label class="seg-o"><input type="radio" name="${id}" value="${v}" ${String(cur) === String(v) ? "checked" : ""}><span>${l}</span></label>`;
   const g0 = P.goal || (nr ? goalFromRace(k, nr.km) : Cc.goals[0][0]);
   return `<div class="card sc-form"><h2>${Cc.e} Tu plan de ${C.esc(Cc.n)}</h2>
-    <div class="f"><span>¿Cuál es tu objetivo?</span><div class="seg-g">${Cc.goals.map(([v, l]) => o("scGoal", v, l, g0)).join("")}</div></div>
+    <div class="f"><span>¿Cuál es tu objetivo?</span><div class="seg-g" onchange="var s=document.getElementById('scTDist');if(s&&['5k','10k','21k','42k'].indexOf(event.target.value)>=0)s.value=event.target.value">${Cc.goals.map(([v, l]) => o("scGoal", v, l, g0)).join("")}</div></div>
     ${k === "run" ? pbForm(P) : ""}
     <div class="f"><span>Tu nivel</span><div class="seg-g">${o("scLv", "beg", "Empiezo", P.level)}${o("scLv", "mid", "Intermedio", P.level || "mid")}${o("scLv", "adv", "Avanzado", P.level)}</div></div>
     <div class="f"><span>¿Cuántos días a la semana puedes entrenar?</span><div class="seg-g">${[2, 3, 4, 5, 6].map((d) => o("scDays", d, d, P.days || 3)).join("")}</div></div>
-    ${k === "run" ? `<label class="f">Marca objetivo (opcional)<input id="scTime" placeholder="h:mm:ss · ej.: 1:40:00" value="${P.goalTime ? hms(P.goalTime) : ""}"><small class="note">Con tu marca objetivo te pongo el ritmo de cada entreno y evalúo cómo vas. Si tu carrera tiene tiempo objetivo, uso ese.</small></label>` : ""}
+    ${k === "run" ? `<div class="f"><span>Mi marca objetivo (opcional)</span>
+      <div class="sp-gt"><select id="scTDist" aria-label="Distancia del objetivo" onchange="var v=this.value;document.getElementsByName('scGoal').forEach(function(r){if(r.value===v)r.checked=true})">${[["5k", "5 km"], ["10k", "10 km"], ["21k", "Media maratón"], ["42k", "Maratón"]].map(([v, l]) => `<option value="${v}" ${(["5k", "10k", "21k", "42k"].includes(g0) ? g0 : "10k") === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <span>en</span><input id="scTime" placeholder="h:mm:ss" aria-label="Tiempo objetivo" value="${P.goalTime ? hms(P.goalTime) : ""}"></div>
+      <small class="note">Ej.: Media maratón en 1:40:00. Te pongo el ritmo de cada entreno y evalúo cómo vas. Si tu carrera tiene tiempo objetivo, uso ese.</small></div>` : ""}
     ${isEnd(k) && planTarget(k) ? `<p class="note sp-adj" style="margin:0">🏁 Tu plan se prepara para <b>${C.esc(planTarget(k).name)}</b> (tu carrera de más carga) y mete el resto de tus carreras. Cambia tus carreras en «Carreras».</p>` : isEnd(k) ? `<label class="f">Fecha de tu carrera u objetivo (opcional)<input type="date" id="scDate" min="${C.addDays(C.today(), 14)}" value="${C.esc(P.date || (nr && daysTo(nr.date) >= 14 ? nr.date : ""))}"></label>` : ""}
     ${actsOf(k).length ? `<p class="note" style="margin:0">Uso tus últimos entrenos para que el plan empiece a tu nivel actual.</p>` : ""}
     <button class="btn" data-act="sp-make">${C.S.scoach?.[k] ? "Rehacer mi plan" : "Crear mi plan"}</button>
@@ -508,7 +511,8 @@ export function spAction(act, el, k) {
     case "sp-make": { const r = (n) => document.querySelector(`input[name=${n}]:checked`)?.value;
       const pbs = k === "run" ? readPbs() : null, L = pbs ? levelFromPbs(pbs) : null;
       if (L && !zonesOf(k).thr) C.put("zones", { map: { ...(C.S.zones || {}), [k]: { ...zonesOf(k), thr: Math.round(L.thr) } } });
-      makePlanFor(k, { goal: r("scGoal"), level: L ? L.lv : r("scLv") || "mid", days: +r("scDays") || 3, date: C.$("scDate")?.value || "", goalTime: parseT(C.$("scTime")?.value || ""), ...(pbs ? { pbs } : {}) }).then(() => { st.edit = false; st.week = null; C.render(); scrollTo(0, 0); }); return true; }
+      const gT = parseT(C.$("scTime")?.value || ""), gD = C.$("scTDist")?.value;
+      makePlanFor(k, { goal: gT && gD ? gD : r("scGoal"), level: L ? L.lv : r("scLv") || "mid", days: +r("scDays") || 3, date: C.$("scDate")?.value || "", goalTime: parseT(C.$("scTime")?.value || ""), ...(pbs ? { pbs } : {}) }).then(() => { st.edit = false; st.week = null; C.render(); scrollTo(0, 0); }); return true; }
     case "sp-del-plan": if (d.sure) { const P = { ...C.S.scoach }; delete P[k]; C.put("sportcoach", { plans: P }).then(C.render); } else { d.sure = 1; el.textContent = "Toca otra vez para borrar el plan"; } return true;
     case "sp-done": setDone(k, +d.w, +d.i); if (C.$("sheet") && !C.$("sheet").hidden) C.closeSheet(); C.render(); return true;
     case "sp-ses": { const x = weekSessions(k, +d.w)[+d.i]; if (x) C.openSheet(DAY_N[x.d], sesCard(k, { x, w: +d.w, i: +d.i }, { noToday: true })); return true; }
