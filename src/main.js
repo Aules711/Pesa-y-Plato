@@ -1861,7 +1861,10 @@ function drawAdmin(){
 }
 async function admDo(action, body, btn){
   btn.disabled = true; btn.textContent = "…";
-  try { await callAdmin(action, body); const r = await callAdmin("list"); adm.users = r.users; drawAdmin();
+  try { const g = await callAdmin(action, body); const r = await callAdmin("list"); adm.users = r.users; drawAdmin();
+    if (action === "grant" && g?.mail){ const em = adm.users.find(u => u.id === body.user_id)?.email || "";
+      setBanner(g.mail.ok ? `✓ Premium activado y email enviado a ${em}` : g.mail.reason === "no_config" ? "✓ Premium activado. No se ha mandado email: falta poner GMAIL_USER y GMAIL_APP_PASSWORD en Vercel." : `✓ Premium activado, pero el email no se pudo enviar (${g.mail.detail || "error"}).`);
+      setTimeout(() => setBanner(""), 7000); }
     if (body.user_id === user.id) loadPremium(); }
   catch { btn.disabled = false; btn.textContent = "Error, reintenta"; }
 }

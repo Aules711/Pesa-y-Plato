@@ -3,6 +3,7 @@
 // - "list", "grant", "revoke": solo para administradores (ametsaule@gmail.com y los de ADMIN_EMAILS).
 // Variables en Vercel: SUPABASE_SERVICE_ROLE_KEY, BIZUM_PHONE, opcional ADMIN_EMAILS (separados por comas).
 import { sbAdmin } from "./_sb.js";
+import { sendMail, premiumEmail } from "./_mail.js";
 
 const addMonths = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
 const today = () => new Date().toISOString().slice(0, 10);
@@ -52,7 +53,13 @@ export default async function handler(req, res) {
       }
       await sb.call(`/rest/v1/premium`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify({ user_id: target.id, email: target.email, until, note, updated_at: new Date().toISOString() }) });
-      return res.status(200).json({ ok: true, until });
+      // avisa por email a la persona (desde tu Gmail)
+      let mail = { ok: false, reason: "skip" };
+      if (target.email && body.notify !== false) {
+        const appUrl = `https://${req.headers["x-forwarded-host"] || req.headers.host}`, m = premiumEmail({ gift: !!body.forever, until, appUrl });
+        mail = await sendMail(target.email, m.subject, m.html, m.text);
+      }
+      return res.status(200).json({ ok: true, until, mail });
     }
   } catch (e) {
     return res.status(502).json({ code: "supabase", detail: String(e.message || e).slice(0, 200), status: e.status || 0 });
