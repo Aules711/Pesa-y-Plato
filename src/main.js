@@ -297,7 +297,7 @@ function landingHTML(card, mode){
     <section class="lf" id="sec-free"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
         ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida, cena y snacks. Solo escribes los gramos y marcas ✓.")}
-        ${feat("fire","Deportes: cada uno, una app","Correr, trail, ciclismo, natación, montaña, pádel, tenis, fútbol, baloncesto, boxeo y gym. Cada uno con su plan que se ajusta a tu carga, calendario, carreras o partidos, resumen diario, semanal, mensual y anual, estadísticas y tus zonas.")}
+        ${feat("fire","Running y gym con tu preparador","Plan de running hacia tu marca objetivo que se ajusta a tu carga, tus carreras y tus lesiones, con análisis de cada entreno de tu Garmin. Y gym con rangos de Hierro a Élite y mapa de tus músculos.")}
         ${feat("ring","Calorías y macros del día","Tarjetas claras con lo que llevas y lo que te queda: calorías, proteínas, hidratos y grasas, y tu semana de un vistazo.")}
         ${feat("pie","Nutrientes como un profesional","Fibra, azúcar, grasas saturadas, sal, potasio, calcio, hierro y vitaminas de cada día o de la semana, con tu objetivo y lo que te falta.")}
         ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Si tu plan trae objetivo por día, se usa ese.")}
@@ -415,7 +415,7 @@ function render(){
   if (fresh){ lastTab = tab; $("main").classList.remove("enter"); void $("main").offsetWidth; $("main").classList.add("enter");
     requestAnimationFrame(() => document.querySelectorAll("[data-ring]").forEach(el => el.style.strokeDashoffset = el.dataset.ring)); }
   else { $("main").classList.remove("enter"); document.querySelectorAll("[data-ring]").forEach(el => { el.style.transition = "none"; el.style.strokeDashoffset = el.dataset.ring; }); if (scrollY !== y) scrollTo(0, y); }
-  document.body.classList.toggle("sportapp", tab==="train" && !S.active && !!SPC[exSport]);
+  document.body.classList.remove("sportapp");
   if (tab==="profile" && profSec==="admin") drawAdmin();
   tick();
 }
@@ -520,22 +520,13 @@ function workoutCard(w){
 }
 
 /* ---------- Entrenar ---------- */
-let exSport = null, scWeek = null, scEdit = null;
+let exSport = (() => { try { return localStorage.getItem("bh-sport") === "gym" ? "gym" : "run"; } catch { return "run"; } })(), scWeek = null, scEdit = null;
 function viewTrain(){
   if (S.active) return viewActive();
-  if (exSport === "gym") return `<button class="link ex-back" data-act="ex-back">‹ Deportes</button>` + viewGym();
-  if (exSport && SPC[exSport]) return spView(exSport);
-  exSport = null;
-  const D = gymData(), T = tierOf(D.overall), wi = k => { const P = S.scoach?.[k]; if (!P) return -1; return Math.floor((parseDay(today()) - parseDay(P.start)) / (7*864e5)); };
-  const card = (k, e, n, sub, on) => `<button class="ex-sp ${on?"on":""}" data-act="ex-sport" data-k="${k}" style="--sp:${SP_COLOR[k]||"var(--accent)"}"><span class="ex-e" aria-hidden="true">${e}</span><b>${esc(n)}</b><small>${sub}</small></button>`;
-  const todayS = Object.keys(S.scoach||{}).filter(k=>SPC[k]).flatMap(k => todayFor(k).map(o=>({...o, k})));
-  return `<p class="note" style="margin-top:0">Elige tu deporte. Cada uno es como una app propia: tu plan, calendario, carreras, resumen, estadísticas y zonas.</p>
-  ${todayS.length ? `<div class="card"><h2>Hoy te toca</h2>${todayS.map(o=>`<button class="li sc-today" data-act="ex-sport" data-k="${o.k}"><span aria-hidden="true">${SPC[o.k].e}</span><span class="n"><b>${esc(o.x.title)}</b><small>${esc(SPC[o.k].n)}${o.x.km?" · "+kmTxt(o.k,o.x.km):o.x.dur?" · "+fmtMin(o.x.dur*60):""}</small></span>${spIsDone(o.k,o.w,o.i)?`<span class="sc-ok">✓</span>`:`<span class="prof-ch" aria-hidden="true">›</span>`}</button>`).join("")}</div>` : ""}
-  <button class="card sp-inj-row" data-act="inj-open"><span aria-hidden="true">🩹</span><span class="n"><b>Historial de lesiones</b><small>${(S.injuries||[]).length ? `${S.injuries.length} apuntada${S.injuries.length>1?"s":""}${S.injuries.some(x=>x.status!=="ok")?" · alguna sin recuperar":""}` : "Apúntalas y tu preparador las tendrá en cuenta"}</small></span><span class="prof-ch" aria-hidden="true">›</span></button>
-  <div class="ex-grid">
-    ${card("gym", "🏋️", "Gym", S.active ? "Entreno en curso" : D.measured ? `${badge(T,16)} ${T.label}` : "Rangos, rutinas y plan", true)}
-    ${Object.entries(SPC).map(([k,c]) => card(k, c.e, c.n, spSubtitle(k), !!S.scoach?.[k] || (S.races||[]).some(r=>r.sport===k))).join("")}
-  </div>`;
+  if (exSport !== "gym") exSport = "run";
+  const pill = (k, e, n) => `<button data-act="ex-sport" data-k="${k}" aria-pressed="${exSport===k}">${e} ${n}</button>`;
+  return `<div class="dep-pills" role="tablist">${pill("run","🏃","Running")}${pill("gym","🏋️","Gym")}</div>
+  ${exSport === "gym" ? viewGym() : spView("run")}`;
 }
 function gymBW(){ const lastW = Object.entries(S.body||{}).sort(([x],[y]) => x<y?1:-1)[0]?.[1]?.kg; return +lastW || +S.settings.profile?.w || 0; }
 function gymSex(){ return S.settings.profile?.sex || S.aiplan?.req?.sex || "m"; }
@@ -1482,6 +1473,7 @@ function viewProfile(){
   </div>
   <div class="prof-group">
     ${row("conn","🔗","Conexiones", (() => { const on = [S.strava?"Strava":"", S.garmin?"Garmin":"", S.whoop?"WHOOP":""].filter(Boolean); return on.length ? on.join(", ") + (on.length>1?" conectados":" conectado") : "Garmin o WHOOP ⭐"; })())}
+    ${row("inj","🩹","Lesiones", (S.injuries||[]).length ? `${S.injuries.length} apuntada${S.injuries.length>1?"s":""}${S.injuries.some(x=>x.status!=="ok")?" · alguna sin recuperar":""}` : "Tu preparador las tiene en cuenta", "inj-open")}
     ${row("account","👤","Cuenta", "Email y contraseña")}
     ${row("io","📥","Importar y exportar", "Tu plan, copias de seguridad, MyFitnessPal")}
     ${row("privacy","🔒","Privacidad y datos", "Borrar datos, eliminar cuenta, términos")}
@@ -2374,7 +2366,7 @@ document.addEventListener("click", e => {
     case "trk-back": closeSheet(); trkShow(); break;
     case "sport-open": openSport(el.dataset.id); break;
     case "sport-del": if (el.dataset.sure){ put("sports", {list:S.sports.filter(a=>a.id!==el.dataset.id)}).then(() => { closeSheet(); render(); }); } else { el.dataset.sure = 1; el.textContent = "Toca otra vez para borrarla"; } break;
-    case "ex-sport": exSport = el.dataset.k; spEnter(); closeSheet(); render(); scrollTo(0,0); break;
+    case "ex-sport": exSport = el.dataset.k === "gym" ? "gym" : "run"; try { localStorage.setItem("bh-sport", exSport); } catch {} if (exSport === "run") spEnter(); closeSheet(); tab = "train"; render(); scrollTo(0,0); break;
     case "ex-back": exSport = null; render(); scrollTo(0,0); break;
     case "gym-plan": openGymPlan(); break;
     case "gym-plan-make": el.disabled = true; makeGymRoutines(); break;

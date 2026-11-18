@@ -174,15 +174,14 @@ export function spSubtitle(k) {
   const n = actsOf(k).length; return n ? `${n} entreno${n > 1 ? "s" : ""}` : "Empieza aquí";
 }
 export function spView(k) {
-  const Cc = COACH[k], tabs = [["hoy", "Hoy", "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"], ["plan", "Plan", "M9 5h11M9 12h11M9 19h11M4 5h.01M4 12h.01M4 19h.01"],
-    ["cal", "Calendario", "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4"], ["races", RACE_W(k).many, "M5 21V4h11l-2 4 2 4H5"], ["data", "Datos", "M4 20V10M10 20V4M16 20v-7M22 20H2"]];
+  const Cc = COACH[k], tabs = [["hoy", "Hoy"], ["plan", "Plan"], ["prog", "Progreso"]];
+  if (!["hoy", "plan", "prog"].includes(st.tab)) st.tab = "hoy";
   if (C.S.scoach?.[k] && !st.syncing) { const P = C.S.scoach[k]; if ((P.races ?? "") !== racesSig(k) || (P.req.raceId && P.req.date < C.today())) { st.syncing = true; Promise.resolve(syncPlan(k)).finally(() => { st.syncing = false; C.render(); }); } }
-  const body = (st.msg ? `<div class="sp-adj">🔄 ${C.esc(st.msg)}</div>` : "") + { hoy: vHoy, plan: vPlan, cal: vCal, races: vRaces, data: vData }[st.tab](k); st.msg = "";
+  const body = (st.msg ? `<div class="sp-adj">🔄 ${C.esc(st.msg)}</div>` : "") + { hoy: vHoy, plan: vPlanAll, prog: vProg }[st.tab](k); st.msg = "";
   return `<div class="spapp" style="--sp:${SP_COLOR[k]}">
-    <div class="sp-head"><button class="sp-back" data-act="ex-back" aria-label="Volver a Deportes">‹</button><span class="sp-ico" aria-hidden="true">${Cc.e}</span><b>${Cc.n}</b>
-      <button class="sp-reg" data-act="sp-reg">+ Registrar</button></div>
-    ${body}
-    <nav class="spbar" aria-label="Secciones de ${Cc.n}">${tabs.map(([t, l, d]) => `<button data-act="sp-tab" data-t="${t}" ${st.tab === t ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24"><path d="${d}"/></svg>${l}</button>`).join("")}</nav></div>`;
+    <div class="sp-head2"><div class="seg sp-seg">${tabs.map(([t, l]) => `<button data-act="sp-tab" data-t="${t}" aria-pressed="${st.tab === t}">${l}</button>`).join("")}</div>
+      <button class="sp-plus" data-act="sp-add" aria-label="Añadir">＋</button></div>
+    ${body}</div>`;
 }
 
 /* ---------- Hoy ---------- */
@@ -220,7 +219,7 @@ function vHoy(k) {
   <div class="card"><h2>Esta semana</h2><div class="sp-load"><div><b>${P ? `${wDone}/${wPlan}` : wActs.length}</b><span>${P ? "sesiones" : "entrenos"}</span></div><div><b>${fmtMin(wMin * 60)}</b><span>tiempo</span></div>${isEnd(k) ? `<div><b>${km2(wKm)}</b><span>km</span></div>` : `<div><b>${fmt(wActs.reduce((a, x) => a + (+x.kcal || 0), 0))}</b><span>kcal</span></div>`}</div></div>
   ${last.length ? `<div class="card"><div class="top"><h2>Últimos entrenos</h2><button class="link" data-act="sp-tab" data-t="data">Ver todo ›</button></div><div class="list">${last.map(actRow).join("")}</div></div>` : ""}
   <div class="card"><h2>Consejos de tu coach</h2>${(TIPS[k] || []).map((t) => `<p class="note" style="margin:0">• ${esc(t)}</p>`).join("")}${injFor(k).map((x) => RISK[x.part]).filter((t, i, a) => t && a.indexOf(t) === i).map((t) => `<p class="note" style="margin:0">• 🩹 ${esc(t)}</p>`).join("")}</div>
-  <button class="btn ghost" data-act="inj-open">🩹 Historial de lesiones${(C.S.injuries || []).length ? ` (${C.S.injuries.length})` : ""}</button>`;
+`;
 }
 function sparkLoad(h) {
   if (!h.length) return ""; const mx = Math.max(1, ...h.map((x) => Math.max(x.ctl, x.atl))), W = 300, H = 60;
@@ -494,7 +493,12 @@ export async function zSave(k) {
 export function spAction(act, el, k) {
   const d = el.dataset;
   switch (act) {
-    case "sp-tab": st.tab = d.t; st.week = null; C.render(); scrollTo(0, 0); return true;
+    case "sp-tab": { const t = d.t; st.tab = { cal: "plan", races: "plan", data: "prog" }[t] || t; if (t === "cal") st.month = true; st.week = null; C.render(); scrollTo(0, 0); return true; }
+    case "sp-month": st.month = d.v === "1"; C.render(); return true;
+    case "sp-add": C.openSheet("Añadir", `<div class="sp-addl">${COACH[k].gps ? `<button class="prof-row" data-act="sp-gps"><span class="prof-ic">▶️</span><span class="prof-t"><b>Grabar con GPS</b><small>Empieza ahora y te mide distancia y ritmo</small></span></button>` : ""}
+      <button class="prof-row" data-act="sp-reg"><span class="prof-ic">✍️</span><span class="prof-t"><b>Registrar entreno</b><small>Uno que ya hiciste sin reloj</small></span></button>
+      <button class="prof-row" data-act="sp-race-new"><span class="prof-ic">🏁</span><span class="prof-t"><b>Añadir carrera</b><small>Tu plan se adapta solo</small></span></button>
+      <button class="prof-row" data-act="inj-new"><span class="prof-ic">🩹</span><span class="prof-t"><b>Añadir lesión</b><small>Para que el plan la tenga en cuenta</small></span></button></div>`); return true;
     case "sp-week": st.week = +d.w; C.render(); return true;
     case "sp-edit": st.edit = d.v === "1"; C.render(); scrollTo(0, 0); return true;
     case "sp-make": { const r = (n) => document.querySelector(`input[name=${n}]:checked`)?.value;
@@ -770,4 +774,21 @@ export function openAnalysis(id) {
     ${R.info.length ? `<div class="card"><h2>Datos</h2><ul class="sp-ul">${li(R.info, "ℹ️")}</ul></div>` : ""}
     ${R.injTxt.length ? `<div class="card sp-inj-box"><b>🩹 Tus lesiones</b>${R.injTxt.map((t) => `<p class="note" style="margin:0">${esc(t)}</p>`).join("")}<button class="link" data-act="inj-open">Ver mi historial de lesiones ›</button></div>` : ""}
     ${a.src === "app" ? `<button class="btn ghost" data-act="sport-open" data-id="${esc(a.id)}">Ver mapa y datos</button>` : ""}</div>`, { kind: "ana" });
+}
+
+/* ---------- vistas simplificadas: Plan (semanas o mes + carreras) y Progreso (todo en una) ---------- */
+function vPlanAll(k) {
+  const up = racesOf(k).filter((r) => r.date >= C.today()).sort((a, b) => a.date < b.date ? -1 : 1);
+  const tg = (v, l) => `<button data-act="sp-month" data-v="${v}" aria-pressed="${!!st.month === (v === "1")}">${l}</button>`;
+  return `${up.length ? `<h2 class="sp-h2">Próximas carreras</h2>${up.map((r) => raceRow(k, r)).join("")}` : ""}
+    <button class="btn ghost" data-act="sp-race-new">+ ${RACE_W(k).add}</button>
+    ${C.S.scoach?.[k] && !st.edit ? `<div class="seg sp-seg sm">${tg("0", "Semanas")}${tg("1", "Mes")}</div>` : ""}
+    ${st.month && C.S.scoach?.[k] && !st.edit ? vCal(k) : vPlan(k)}`;
+}
+function vProg(k) {
+  const past = racesOf(k).filter((r) => r.date < C.today()).sort((a, b) => a.date < b.date ? 1 : -1);
+  return `<h2 class="sp-h2">Resumen</h2>${vRes(k)}
+    ${vStats(k)}
+    ${past.length ? `<h2 class="sp-h2">Carreras hechas</h2>${past.map((r) => raceRow(k, r)).join("")}` : ""}
+    <h2 class="sp-h2">Tus zonas</h2>${vZones(k)}`;
 }
