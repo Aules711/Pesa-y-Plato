@@ -240,6 +240,7 @@ function planForm(k) {
   const g0 = P.goal || (nr ? goalFromRace(k, nr.km) : Cc.goals[0][0]);
   return `<div class="card sc-form"><h2>${Cc.e} Tu plan de ${C.esc(Cc.n)}</h2>
     <div class="f"><span>¿Cuál es tu objetivo?</span><div class="seg-g">${Cc.goals.map(([v, l]) => o("scGoal", v, l, g0)).join("")}</div></div>
+    ${k === "run" ? pbForm(P) : ""}
     <div class="f"><span>Tu nivel</span><div class="seg-g">${o("scLv", "beg", "Empiezo", P.level)}${o("scLv", "mid", "Intermedio", P.level || "mid")}${o("scLv", "adv", "Avanzado", P.level)}</div></div>
     <div class="f"><span>¿Cuántos días a la semana puedes entrenar?</span><div class="seg-g">${[2, 3, 4, 5, 6].map((d) => o("scDays", d, d, P.days || 3)).join("")}</div></div>
     ${k === "run" ? `<label class="f">Marca objetivo (opcional)<input id="scTime" placeholder="h:mm:ss · ej.: 1:40:00" value="${P.goalTime ? hms(P.goalTime) : ""}"><small class="note">Con tu marca objetivo te pongo el ritmo de cada entreno y evalúo cómo vas. Si tu carrera tiene tiempo objetivo, uso ese.</small></label>` : ""}
@@ -493,6 +494,9 @@ export async function zSave(k) {
 export function spAction(act, el, k) {
   const d = el.dataset;
   switch (act) {
+    case "sp-lvl": { const pbs = readPbs(), box = C.$("pbOut"); if (!pbs) { box.innerHTML = "Pon al menos una marca (por ejemplo 10 km en 48:30)."; box.hidden = false; return true; }
+      const L = levelFromPbs(pbs); box.innerHTML = levelHtml(L, k); box.hidden = false;
+      const rb = document.querySelector(`input[name=scLv][value=${L.lv}]`); if (rb) rb.checked = true; return true; }
     case "sp-tab": { const t = d.t; st.tab = { cal: "plan", races: "plan", data: "prog" }[t] || t; if (t === "cal") st.month = true; st.week = null; C.render(); scrollTo(0, 0); return true; }
     case "sp-month": st.month = d.v === "1"; C.render(); return true;
     case "sp-add": C.openSheet("Añadir", `<div class="sp-addl">${COACH[k].gps ? `<button class="prof-row" data-act="sp-gps"><span class="prof-ic">▶️</span><span class="prof-t"><b>Grabar con GPS</b><small>Empieza ahora y te mide distancia y ritmo</small></span></button>` : ""}
@@ -502,7 +506,9 @@ export function spAction(act, el, k) {
     case "sp-week": st.week = +d.w; C.render(); return true;
     case "sp-edit": st.edit = d.v === "1"; C.render(); scrollTo(0, 0); return true;
     case "sp-make": { const r = (n) => document.querySelector(`input[name=${n}]:checked`)?.value;
-      makePlanFor(k, { goal: r("scGoal"), level: r("scLv") || "mid", days: +r("scDays") || 3, date: C.$("scDate")?.value || "", goalTime: parseT(C.$("scTime")?.value || "") }).then(() => { st.edit = false; st.week = null; C.render(); scrollTo(0, 0); }); return true; }
+      const pbs = k === "run" ? readPbs() : null, L = pbs ? levelFromPbs(pbs) : null;
+      if (L && !zonesOf(k).thr) C.put("zones", { map: { ...(C.S.zones || {}), [k]: { ...zonesOf(k), thr: Math.round(L.thr) } } });
+      makePlanFor(k, { goal: r("scGoal"), level: L ? L.lv : r("scLv") || "mid", days: +r("scDays") || 3, date: C.$("scDate")?.value || "", goalTime: parseT(C.$("scTime")?.value || ""), ...(pbs ? { pbs } : {}) }).then(() => { st.edit = false; st.week = null; C.render(); scrollTo(0, 0); }); return true; }
     case "sp-del-plan": if (d.sure) { const P = { ...C.S.scoach }; delete P[k]; C.put("sportcoach", { plans: P }).then(C.render); } else { d.sure = 1; el.textContent = "Toca otra vez para borrar el plan"; } return true;
     case "sp-done": setDone(k, +d.w, +d.i); if (C.$("sheet") && !C.$("sheet").hidden) C.closeSheet(); C.render(); return true;
     case "sp-ses": { const x = weekSessions(k, +d.w)[+d.i]; if (x) C.openSheet(DAY_N[x.d], sesCard(k, { x, w: +d.w, i: +d.i }, { noToday: true })); return true; }
@@ -540,6 +546,7 @@ function thrNow(k) {
   for (const r of racesOf(k)) if (r.time && r.km && r.date >= C.addDays(C.today(), -120) && r.date < C.today()) ests.push(riegel60(r.km, r.time));
   for (const a of actsOf(k)) if (a.day >= since && a.km >= 3 && a.dur > 0 && (+a.rpe >= 7 || (a.hr && hrMax(k) && a.hr / hrMax(k) >= 0.85))) ests.push(riegel60(a.km, a.dur) * (a.rpe >= 9 || (a.hr && a.hr / hrMax(k) >= 0.9) ? 1 : 1.03));
   if (ests.length) return { thr: Math.min(...ests), src: "tus entrenos duros y carreras" };
+  const pb = C.S.scoach?.[k]?.req?.pbs; if (pb) { const L = levelFromPbs(pb); if (L) return { thr: L.thr, src: "tus marcas" }; }
   if (zonesOf(k).thr) return { thr: zonesOf(k).thr, src: "tu ritmo umbral" };
   const easy = actsOf(k).filter((a) => a.day >= since && a.km >= 3 && a.dur > 0).map((a) => a.dur / a.km).sort((a, b) => a - b);
   if (easy.length >= 3) return { thr: easy[Math.floor(easy.length / 2)] / 1.27, src: "tus rodajes (aproximado)" };
@@ -791,4 +798,38 @@ function vProg(k) {
     ${vStats(k)}
     ${past.length ? `<h2 class="sp-h2">Carreras hechas</h2>${past.map((r) => raceRow(k, r)).join("")}` : ""}
     <h2 class="sp-h2">Tus zonas</h2>${vZones(k)}`;
+}
+
+/* ---------- tus marcas → tu nivel ---------- */
+const PB_D = [["5", "5 km", 5], ["10", "10 km", 10], ["21", "Media maratón", 21.0975], ["42", "Maratón", 42.195]];
+const LEVELS = [[35 * 60, "Élite", "adv", "Estás en un nivel muy alto: tu plan va con volumen y calidad de corredor avanzado."], [42 * 60, "Avanzado", "adv", "Eres un corredor avanzado: series exigentes y más volumen."],
+  [50 * 60, "Intermedio alto", "mid", "Buen nivel: con constancia y algo de calidad bajarás tus marcas."], [58 * 60, "Intermedio", "mid", "Nivel intermedio: base sólida con rodajes, una sesión de calidad y tirada larga."],
+  [Infinity, "Principiante", "beg", "Estás empezando: prioridad a sumar kilómetros suaves sin lesionarte."]];
+function pbForm(P) {
+  const pb = P.pbs || {};
+  return `<details class="card sp-pb" ${pb && Object.keys(pb).length ? "open" : ""}><summary><b>⏱️ Tus marcas</b> <span class="note">(opcional) · te digo tu nivel</span></summary>
+    <div class="grid2" style="margin-top:10px">${PB_D.map(([id, l]) => `<label class="f">${l}<input id="pb${id}" placeholder="${id === "5" || id === "10" ? "mm:ss" : "h:mm:ss"}" value="${pb[id] ? hms(pb[id]) : ""}"></label>`).join("")}</div>
+    <button class="btn soft" data-act="sp-lvl">Calcular mi nivel</button>
+    <div class="sp-lvl" id="pbOut" ${pb && Object.keys(pb).length ? "" : "hidden"}>${pb && Object.keys(pb).length ? levelHtml(levelFromPbs(pb), "run") : ""}</div></details>`;
+}
+function readPbs() {
+  const o = {}; for (const [id] of PB_D) { const v = (C.$("pb" + id)?.value || "").trim(); if (!v) continue; const t = parseT(/^\d+:\d+$/.test(v) && (id === "21" || id === "42") ? v + ":00" : v); if (t > 0) o[id] = t; }
+  return Object.keys(o).length ? o : null;
+}
+// la mejor marca, pasada a 10 km, decide el nivel
+export function levelFromPbs(pb) {
+  let best = null;
+  for (const [id, , km] of PB_D) if (pb[id]) { const t10 = pb[id] * Math.pow(10 / km, 1.06); if (!best || t10 < best.t10) best = { t10, id, km }; }
+  if (!best) return null;
+  const L = LEVELS.find((x) => best.t10 < x[0]), thr = riegel60(best.km, pb[best.id]);
+  return { name: L[1], lv: L[2], txt: L[3], t10: best.t10, thr, from: PB_D.find((x) => x[0] === best.id)[1], eq: PB_D.map(([id, l, km]) => [l, predict(thr, km)]) };
+}
+function levelHtml(L, k) {
+  if (!L) return "";
+  const G = (typeof document !== "undefined" && document.querySelector("input[name=scGoal]:checked")?.value) || C.S.scoach?.[k]?.req?.goal, gk = { "5k": "5", "10k": "10", "21k": "21", "42k": "42" }[G], gl = PB_D.find((x) => x[0] === gk);
+  const sug = gl ? predict(L.thr, gl[2]) * 0.97 : 0;
+  return `<b class="sp-lvl-t">Tu nivel: ${L.name}</b><p class="note" style="margin:0">${L.txt} (calculado con tu marca de ${L.from}).</p>
+    <p class="note" style="margin:0">Hoy equivales a: ${L.eq.map(([l, t]) => `<b>${l} ${hms(t)}</b>`).join(" · ")}.</p>
+    <p class="note" style="margin:0">Tus ritmos: suave ${paceS(L.thr * 1.2)}–${paceS(L.thr * 1.32)} · umbral ${paceS(L.thr * 0.98)}–${paceS(L.thr * 1.03)} · series ${paceS(L.thr * 0.92)}–${paceS(L.thr * 0.96)} /km.</p>
+    ${sug ? `<p class="note" style="margin:0">🎯 Objetivo realista para tu plan de ${gl[1].toLowerCase()}: <b>${hms(Math.round(sug / 5) * 5)}</b>.</p>` : ""}`;
 }
