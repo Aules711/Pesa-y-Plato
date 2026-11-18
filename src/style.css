@@ -926,3 +926,9 @@ body.sportapp .appbar{display:none}
 .pw-row.done .pw-t{opacity:.65}
 .pw-t{display:flex;flex-direction:column;font-size:15.5px;line-height:1.4}
 .pw-t small{color:var(--muted);font-size:13.5px;margin-top:2px}
+.sp-pace{color:var(--sp)!important;font-weight:700}
+.sp-eval{border-radius:14px;padding:10px 12px;background:color-mix(in srgb,var(--ev) 12%,transparent);border-left:4px solid var(--ev)}
+.sp-ev-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.sp-ev-h b{font-size:22px;color:var(--ev)}.sp-ev-h span{font-weight:700}.sp-ev-h small{color:var(--muted);margin-left:auto;font-size:12px}
+.sp-eval ul{margin:6px 0 0;padding-left:18px;font-size:14px;line-height:1.45}
+.sp-goal{gap:8px;background:linear-gradient(135deg,color-mix(in srgb,var(--sp) 20%,var(--surface)),var(--surface))!important}
+.sp-goal-t{font-size:20px;font-weight:800}.sp-paces b{color:inherit}

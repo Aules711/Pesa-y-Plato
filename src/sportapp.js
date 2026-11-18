@@ -87,6 +87,7 @@ const DEF_PACE = { run: { beg: 420, mid: 360, adv: 315 }, trail: { beg: 540, mid
   bike: { beg: 180, mid: 144, adv: 124 }, swim: { beg: 1650, mid: 1300, adv: 1050 } };   // s/km (bici: 20/25/29 km/h; natación: 2:45/2:10/1:45 por 100 m)
 // ritmo suave (segundos por km): tus últimos entrenos > tus zonas > tu nivel
 export function paceFor(k) {
+  const G = goalInfo(k); if (G) return { s: G.thr * 1.26, src: "tu marca objetivo" };
   const since = C.addDays(C.today(), -60), L = actsOf(k).filter((a) => a.day >= since && a.km > 0.3 && a.dur > 0).map((a) => a.dur / a.km).sort((a, b) => a - b);
   if (L.length >= 3) return { s: L[Math.floor(L.length / 2)], src: "tus últimos entrenos" };
   const Z = zonesOf(k);
@@ -115,7 +116,11 @@ function withKm(k, P, w, list) {
     const rate = { trail: { E: 25, R: 16, Q: 35, L: { t21: 32, t50: 40, ultra: 48, mont: 45 }[goal] || 38 }, hike: { E: 55, R: 40, Q: 70, L: 75 }, bike: { E: 7, R: 5, Q: 10, L: goal === "puertos" ? 20 : 12 } }[k]?.[x.t] || 0;
     const elev = rate && k !== "bike" ? Math.round(km * rate) : rate ? Math.round(km * rate / 10) * 10 : 0;
     const d2 = desc.replace(/^: /, "").replace(/unos \d+ m de desnivel positivo/, `unos ${elev} m de desnivel positivo`);
-    return { ...x, title, desc: d2, km, ...(elev ? { elev } : {}), zone: zoneOf(x), short: shortOf(k, { ...x, desc: d2 }) };
+    const y = { ...x, title, desc: d2, km, ...(elev ? { elev } : {}), zone: zoneOf(x) };
+    const pr = paceRange(k, y), G = goalInfo(k);
+    if (pr) { y.pace = pr; y.paceTxt = `${paceS(pr[0])}–${paceS(pr[1])} /km`; }
+    if (G && x.t === "L" && /ritmo de carrera/.test(d2)) y.desc = d2.replace(/a ritmo de carrera/, `a ritmo de carrera (${paceS(G.rp)} /km)`);
+    y.short = shortOf(k, y); return y;
   });
 }
 function zoneOf(x) {
@@ -183,9 +188,10 @@ export function spView(k) {
 function sesCard(k, o, opts = {}) {
   const { esc, fmtMin, today, addDays } = C, P = C.S.scoach[k], x = o.x, day = addDays(P.start, o.w * 7 + x.d), done = isDone(k, o.w, o.i), isT = day === today();
   return `<div class="card sc-s ${done ? "done" : ""} ${isT && !opts.noToday ? "is-today" : ""}"><div class="sc-h"><span class="sc-d"><b>${DAY_N[x.d].slice(0, 3)}</b><small>${C.parseDay(day).getDate()}</small></span>
-    <div class="sc-t"><b>${esc(x.title)}</b><small>${isT ? "Hoy · " : ""}${[amountOf(k, x), x.elev ? x.elev + " m+" : "", x.zone || ""].filter(Boolean).join(" · ")}${x.adj ? " · ajustada a tu carga" : ""}</small></div>
+    <div class="sc-t"><b>${esc(x.title)}</b><small>${isT ? "Hoy · " : ""}${[amountOf(k, x), x.elev ? x.elev + " m+" : "", x.zone || ""].filter(Boolean).join(" · ")}${x.adj ? " · ajustada a tu carga" : ""}</small>${x.paceTxt ? `<small class="sp-pace">🎯 Ritmo ${x.paceTxt}</small>` : ""}</div>
     ${x.t === "RACE" ? "" : `<button class="sc-chk" data-act="sp-done" data-w="${o.w}" data-i="${o.i}" aria-pressed="${done}" aria-label="Marcar como hecha">✓</button>`}</div>
     <p class="sc-desc">${esc(x.desc).replace(/ · /g, "<br>· ")}</p>
+    ${evalBox(k, o.w, o.i, x)}
     ${!done && day <= today() && x.t !== "RACE" ? `<div class="sc-acts">${COACH[k].gps && !["S", "F", "F2", "M"].includes(x.t) ? `<button class="btn soft" data-act="sp-gps" data-w="${o.w}" data-i="${o.i}">▶ Grabar con GPS</button>` : ""}<button class="btn ghost" data-act="sp-reg" data-w="${o.w}" data-i="${o.i}">Registrar</button></div>` : ""}
     ${["S", "F", "F2"].includes(x.t) && !done ? `<button class="link" data-act="ex-sport" data-k="gym">Apuntar las series en Gym ›</button>` : ""}</div>`;
 }
@@ -197,6 +203,7 @@ function vHoy(k) {
   const cw = P ? curWeek(P) : -1, wPlan = P?.weeks[cw]?.sessions.length || 0, wDone = P?.weeks[cw] ? P.weeks[cw].sessions.filter((_, i) => isDone(k, cw, i)).length : 0;
   const last = actsOf(k).slice(0, 4);
   return `${nr ? `<button class="card sp-race-cd" data-act="sp-tab" data-t="races"><span class="sp-cd"><b>${daysTo(nr.date)}</b><small>días</small></span><span><small class="note">Próxima ${RACE_W(k).one}</small><b>${esc(nr.name)}</b><small class="note">${C.dayLabel(nr.date)}${nr.km ? ` · ${km2(nr.km)} km` : ""}${nr.elev ? ` · ${nr.elev} m+` : ""}</small></span></button>` : ""}
+  ${goalCard(k)}
   ${!P ? `<div class="card sp-cta"><b>Crea tu plan de ${COACH[k].n.toLowerCase()}</b><p class="note">Te preparo los entrenos de cada semana según tu objetivo, y los ajusto a la carga que llevas.</p><button class="btn" data-act="sp-tab" data-t="plan">Crear mi plan</button></div>`
     : tod.length ? `<h2 class="sp-h2">Hoy te toca</h2>${tod.map((o) => sesCard(k, o, { noToday: true })).join("")}`
     : `<div class="card"><b>Hoy toca descanso 😌</b><p class="note" style="margin:0">${next ? `Siguiente: <b>${esc(next.x.title)}</b> ${next.in === 1 ? "mañana" : `el ${DAY_N[next.x.d].toLowerCase()}`}.` : "Descansar también es entrenar."}</p></div>`}
@@ -228,6 +235,7 @@ function planForm(k) {
     <div class="f"><span>¿Cuál es tu objetivo?</span><div class="seg-g">${Cc.goals.map(([v, l]) => o("scGoal", v, l, g0)).join("")}</div></div>
     <div class="f"><span>Tu nivel</span><div class="seg-g">${o("scLv", "beg", "Empiezo", P.level)}${o("scLv", "mid", "Intermedio", P.level || "mid")}${o("scLv", "adv", "Avanzado", P.level)}</div></div>
     <div class="f"><span>¿Cuántos días a la semana puedes entrenar?</span><div class="seg-g">${[2, 3, 4, 5, 6].map((d) => o("scDays", d, d, P.days || 3)).join("")}</div></div>
+    ${k === "run" ? `<label class="f">Marca objetivo (opcional)<input id="scTime" placeholder="h:mm:ss · ej.: 1:40:00" value="${P.goalTime ? hms(P.goalTime) : ""}"><small class="note">Con tu marca objetivo te pongo el ritmo de cada entreno y evalúo cómo vas. Si tu carrera tiene tiempo objetivo, uso ese.</small></label>` : ""}
     ${isEnd(k) && planTarget(k) ? `<p class="note sp-adj" style="margin:0">🏁 Tu plan se prepara para <b>${C.esc(planTarget(k).name)}</b> (tu carrera de más carga) y mete el resto de tus carreras. Cambia tus carreras en «Carreras».</p>` : isEnd(k) ? `<label class="f">Fecha de tu carrera u objetivo (opcional)<input type="date" id="scDate" min="${C.addDays(C.today(), 14)}" value="${C.esc(P.date || (nr && daysTo(nr.date) >= 14 ? nr.date : ""))}"></label>` : ""}
     ${actsOf(k).length ? `<p class="note" style="margin:0">Uso tus últimos entrenos para que el plan empiece a tu nivel actual.</p>` : ""}
     <button class="btn" data-act="sp-make">${C.S.scoach?.[k] ? "Rehacer mi plan" : "Crear mi plan"}</button>
@@ -257,7 +265,7 @@ export function syncPlan(k) {
   const P = C.S.scoach?.[k]; if (!P) return;
   const passed = P.req.raceId && P.req.date && P.req.date < C.today();
   if ((P.races ?? "") === racesSig(k) && !passed) return;
-  const { goal, level, days } = P.req; return makePlanFor(k, { goal, level, days, date: passed ? "" : P.req.date });
+  const { goal, level, days, goalTime } = P.req; return makePlanFor(k, { goal, level, days, goalTime, date: passed ? "" : P.req.date });
 }
 const DAY3 = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 function weekBlock(k, P, w, cur) {
@@ -269,7 +277,7 @@ function weekBlock(k, P, w, cur) {
   const phase = wk.phase.includes("descarga") ? "Recuperación" : wk.phase;
   const tot = isEnd(k) ? `Plan ${fk(pKm)}${el ? ` · ${Math.round(pEl)} m+` : ""} — Hecho ${fk(dKm)}${el ? ` · ${Math.round(dEl)} m+` : ""}` : `Plan ${fmtMin(pMin * 60)} — Hecho ${fmtMin(dMin * 60)}`;
   const rows = list.map((x, i) => { const dn = isDone(k, w, i), day = C.addDays(a0, x.d);
-    const meta = [x.km ? kmTxt(k, x.km) : x.t === "RACE" ? "" : x.dur ? fmtMin(x.dur * 60) : "", x.elev ? `${x.elev} m+` : "", x.zone || ""].filter(Boolean).join(" · ");
+    const ev = evalSes(k, w, i, x), meta = [x.km ? kmTxt(k, x.km) : x.t === "RACE" ? "" : x.dur ? fmtMin(x.dur * 60) : "", x.elev ? `${x.elev} m+` : "", x.paceTxt || x.zone || "", ev ? `⭐ ${ev.score}/10` : ""].filter(Boolean).join(" · ");
     return `<li><button class="pw-row ${dn ? "done" : ""} ${day === C.today() ? "hoy" : ""}" data-act="sp-ses" data-w="${w}" data-i="${i}"><span class="pw-dot" aria-hidden="true">${dn ? "✓" : ""}</span><span class="pw-t"><span>${DAY3[x.d]}: <b>${esc(x.title)}</b>${meta ? ` — ${meta}` : ""}</span><small>${esc(x.short || "")}</small></span></button></li>`; }).join("");
   return `<details class="card pw" ${w === cur ? "open" : ""}><summary><span class="pw-h"><b>Sem. ${w + 1}</b> · ${d0.getDate()} ${MON3[d0.getMonth()].toLowerCase()} ${String(d0.getFullYear()).slice(2)} <i class="pw-ph ${phase === "Recuperación" ? "rec" : ""}">${esc(phase)}</i>${w === cur ? `<i class="pw-now">Esta semana</i>` : ""}</span><small>${tot}</small></summary>
     <ul class="pw-list">${rows}</ul></details>`;
@@ -353,7 +361,7 @@ export async function saveRace(k, id) {
   let msg = "";
   if (r.date >= C.today()) {
     const old = C.S.scoach?.[k]?.req || {};
-    await makePlanFor(k, { goal: old.goal || (isEnd(k) ? goalFromRace(k, raceEffortKm(k, r)) : COACH[k].goals[0][0]), level: old.level || "mid", days: old.days || (isEnd(k) ? 4 : 3), date: "" });
+    await makePlanFor(k, { goalTime: old.goalTime, goal: old.goal || (isEnd(k) ? goalFromRace(k, raceEffortKm(k, r)) : COACH[k].goals[0][0]), level: old.level || "mid", days: old.days || (isEnd(k) ? 4 : 3), date: "" });
     const T = planTarget(k); msg = T ? `Plan rehecho: preparo ${T.name}${T.id !== r.id ? ` y meto ${r.name} con sus días suaves y de recuperación` : ""}.` : `Plan actualizado con ${r.name}.`;
     st.tab = "plan"; st.week = null;
   } else await syncPlan(k);
@@ -383,8 +391,10 @@ export async function saveReg(k, w, i) {
   const a = { id: "a" + Date.now(), type, csport: k, name: "", start, day, dur: Math.round(dur), km, elev: +v("regElev") || 0, hr: +v("regHr") || null, rpe: +v("regRpe") || 5, notes: v("regNotes"),
     kcal: C.kcalFor(type, C.sportKg(), dur, km) };
   await C.put("sports", { list: [a, ...(C.S.sports || [])] });
-  if (w != null && !isNaN(w)) await setDone(k, w, i, true); else autoMark(k, day);
+  if (w != null && !isNaN(w)) await setDone(k, w, i, true); else await autoMark(k, day);
   C.closeSheet(); C.render(); C.confetti();
+  const o = plannedOn(k, day).find((o) => evalSes(k, o.w, o.i, o.x));
+  if (o) C.openSheet("Evaluación de tu entreno", sesCard(k, o, { noToday: true }));
 }
 
 /* ---------- Datos: resumen, estadísticas y zonas ---------- */
@@ -480,7 +490,7 @@ export function spAction(act, el, k) {
     case "sp-week": st.week = +d.w; C.render(); return true;
     case "sp-edit": st.edit = d.v === "1"; C.render(); scrollTo(0, 0); return true;
     case "sp-make": { const r = (n) => document.querySelector(`input[name=${n}]:checked`)?.value;
-      makePlanFor(k, { goal: r("scGoal"), level: r("scLv") || "mid", days: +r("scDays") || 3, date: C.$("scDate")?.value || "" }).then(() => { st.edit = false; st.week = null; C.render(); scrollTo(0, 0); }); return true; }
+      makePlanFor(k, { goal: r("scGoal"), level: r("scLv") || "mid", days: +r("scDays") || 3, date: C.$("scDate")?.value || "", goalTime: parseT(C.$("scTime")?.value || "") }).then(() => { st.edit = false; st.week = null; C.render(); scrollTo(0, 0); }); return true; }
     case "sp-del-plan": if (d.sure) { const P = { ...C.S.scoach }; delete P[k]; C.put("sportcoach", { plans: P }).then(C.render); } else { d.sure = 1; el.textContent = "Toca otra vez para borrar el plan"; } return true;
     case "sp-done": setDone(k, +d.w, +d.i); if (C.$("sheet") && !C.$("sheet").hidden) C.closeSheet(); C.render(); return true;
     case "sp-ses": { const x = weekSessions(k, +d.w)[+d.i]; if (x) C.openSheet(DAY_N[x.d], sesCard(k, { x, w: +d.w, i: +d.i }, { noToday: true })); return true; }
@@ -500,4 +510,86 @@ export function spAction(act, el, k) {
     case "sp-z-save": zSave(k); return true;
   }
   return false;
+}
+
+/* ---------- Objetivo de marca, ritmos, predicción y evaluación ---------- */
+const GOAL_KM = { "5k": 5, "10k": 10, "21k": 21.0975, "42k": 42.195 };
+const riegel60 = (km, sec) => 3600 / (km * Math.pow(3600 / sec, 1 / 1.06));           // ritmo umbral (s/km) a partir de una marca
+const predict = (thr, km) => 3600 * Math.pow(km / (3600 / thr), 1.06);
+export function goalInfo(k) {
+  if (k !== "run") return null; const P = C.S.scoach?.[k]; if (!P) return null;
+  const T = planTarget(k), km = T?.km || GOAL_KM[P.req.goal], time = (T?.goal) || P.req.goalTime;
+  if (!(km > 0 && time > 0)) return null;
+  return { km, time, rp: time / km, thr: riegel60(km, time), name: T?.name || goalName(k, P.req.goal) };
+}
+// tu nivel actual (ritmo umbral estimado) con tus carreras y entrenos duros de las últimas 6 semanas
+function thrNow(k) {
+  const since = C.addDays(C.today(), -42), ests = [];
+  for (const r of racesOf(k)) if (r.time && r.km && r.date >= C.addDays(C.today(), -120) && r.date < C.today()) ests.push(riegel60(r.km, r.time));
+  for (const a of actsOf(k)) if (a.day >= since && a.km >= 3 && a.dur > 0 && (+a.rpe >= 7)) ests.push(riegel60(a.km, a.dur) * (a.rpe >= 9 ? 1 : 1.03));
+  if (ests.length) return { thr: Math.min(...ests), src: "tus entrenos duros y carreras" };
+  if (zonesOf(k).thr) return { thr: zonesOf(k).thr, src: "tu ritmo umbral" };
+  const easy = actsOf(k).filter((a) => a.day >= since && a.km >= 3 && a.dur > 0).map((a) => a.dur / a.km).sort((a, b) => a - b);
+  if (easy.length >= 3) return { thr: easy[Math.floor(easy.length / 2)] / 1.27, src: "tus rodajes (aproximado)" };
+  return null;
+}
+function paceRange(k, x) {
+  if (k !== "run") return null; const G = goalInfo(k), thr = G?.thr || zonesOf(k).thr; if (!thr) return null;
+  if (x.t === "E" || x.t === "L") return [thr * 1.2, thr * 1.32];
+  if (x.t === "R") return [thr * 1.3, thr * 1.45];
+  if (x.t !== "Q") return null; const t = x.title || "";
+  if (/Series/.test(t)) return [thr * 0.92, thr * 0.96];
+  if (/umbral/i.test(t)) return [thr * 0.98, thr * 1.03];
+  if (/cambios/.test(t)) return [thr * 1.2, thr * 1.32];
+  return null;
+}
+function actForSes(k, w, x) {
+  const P = C.S.scoach?.[k]; if (!P) return null; const day = C.addDays(P.start, w * 7 + x.d);
+  return actsOf(k).find((a) => a.day === day) || null;
+}
+const evCache = new Map();
+export function evalSes(k, w, i, x) {
+  if (!isEnd(k) || ["S", "RACE"].includes(x.t)) return null;
+  const a = actForSes(k, w, x); if (!a) return null;
+  const ck = `${k}|${w}|${i}|${a.id}|${a.km}|${a.dur}|${a.rpe}|${x.km}|${x.paceTxt}`; if (evCache.has(ck)) return evCache.get(ck);
+  const L = [], easy = x.t === "E" || x.t === "L" || x.t === "R"; let sc = 10;
+  if (x.km && a.km) { const r = a.km / x.km;
+    if (r < 0.8) { sc -= 2; L.push(`Te quedaste corto: ${km2(a.km)} de ${km2(x.km)} km.`); }
+    else if (r > 1.25) { sc -= 1; L.push(`Hiciste bastante más de lo previsto (${km2(a.km)} de ${km2(x.km)} km): cuidado con pasarte de carga.`); }
+    else L.push(`Distancia cumplida: ${km2(a.km)} km de ${km2(x.km)}.`); }
+  const p = a.km > 0 ? a.dur / a.km : 0;
+  if (x.pace && p && easy) {
+    if (p < x.pace[0] * 0.97) { sc -= 2; L.push(`Ritmo ${paceS(p)} /km: demasiado rápido para este entreno (objetivo ${x.paceTxt}). Los suaves tienen que ser suaves para recuperar y mejorar.`); }
+    else if (p > x.pace[1] * 1.08) { sc -= 0.5; L.push(`Ritmo ${paceS(p)} /km, algo más lento de lo previsto: bien si estabas cansado o había cuestas.`); }
+    else L.push(`Ritmo perfecto: ${paceS(p)} /km (objetivo ${x.paceTxt}).`);
+  } else if (x.t === "Q" && p) L.push(`Ritmo medio ${paceS(p)} /km (incluye calentamiento y vuelta a la calma)${x.paceTxt ? `; las series, a ${x.paceTxt}` : ""}.`);
+  if (x.t === "Q" && a.rpe) {
+    if (a.rpe < 6) { sc -= 1.5; L.push(`Esfuerzo ${a.rpe}/10: parece que no apretaste lo suficiente en la parte fuerte.`); }
+    else if (a.rpe >= 10) { sc -= 1; L.push("Esfuerzo máximo: las series deben ser duras pero controladas, hasta 8-9/10."); }
+    else L.push(`Esfuerzo ${a.rpe}/10: justo lo que pedía la sesión.`);
+  }
+  if (easy && a.rpe >= 7) { sc -= 1.5; L.push(`Esfuerzo ${a.rpe}/10, alto para un entreno suave. Duerme y come bien; si se repite, baja el ritmo.`); }
+  const mx = hrMax(k); if (easy && a.hr && mx && a.hr / mx > 0.8) { sc -= 1; L.push(`Pulso medio ${a.hr} ppm (${Math.round(a.hr / mx * 100)} % de tu máximo): alto para zona 2.`); }
+  const score = Math.max(1, Math.min(10, Math.round(sc * 2) / 2)), out = { score, verdict: score >= 8.5 ? "Muy bien" : score >= 6.5 ? "Bien" : "Mejorable", lines: L, a };
+  evCache.set(ck, out); return out;
+}
+function evalBox(k, w, i, x) {
+  const ev = evalSes(k, w, i, x); if (!ev) return "";
+  const c = ev.score >= 8.5 ? "#2BB673" : ev.score >= 6.5 ? "#E0A800" : "#E8364F";
+  return `<div class="sp-eval" style="--ev:${c}"><div class="sp-ev-h"><b>${String(ev.score).replace(".", ",")}/10</b><span>${ev.verdict}</span><small>Evaluación de tu entreno</small></div><ul>${ev.lines.map((l) => `<li>${C.esc(l)}</li>`).join("")}</ul></div>`;
+}
+const fmtT = (sec) => hms(Math.round(sec));
+function goalCard(k) {
+  const G = goalInfo(k); if (!G) return k === "run" && C.S.scoach?.[k] ? `<button class="card sp-cta" data-act="sp-edit" data-v="1" style="text-align:left;color:inherit;font:inherit;border:0;cursor:pointer;width:100%"><b>🎯 Ponte una marca objetivo</b><span class="note">Por ejemplo, media maratón en menos de 1:40. Te pongo el ritmo de cada entreno, evalúo cada uno y te digo si vas en camino.</span></button>` : "";
+  const N = thrNow(k), pred = N ? predict(N.thr, G.km) : 0, diff = pred - G.time;
+  const P = C.S.scoach[k], cw = curWeek(P), evs = []; for (const w of [cw, cw - 1]) if (P.weeks[w]) weekSessions(k, w).forEach((x, i) => { const e = evalSes(k, w, i, x); if (e) evs.push(e); });
+  const avg = evs.length ? evs.reduce((s, e) => s + e.score, 0) / evs.length : 0, fast = evs.filter((e) => e.lines.some((l) => /demasiado rápido/.test(l))).length;
+  const pct = pred ? Math.max(5, Math.min(100, Math.round(G.time / pred * 100))) : 0;
+  return `<div class="card sp-goal"><span class="note">Tu objetivo</span><b class="sp-goal-t">${C.esc(G.name)} en ${fmtT(G.time)}</b>
+    <div class="sp-load"><div><b>${paceS(G.rp)}</b><span>ritmo de carrera /km</span></div><div><b>${pred ? fmtT(pred) : "—"}</b><span>predicción hoy</span></div></div>
+    ${pred ? `<div class="gh-bar" style="--tc:${diff <= 0 ? "#2BB673" : "var(--sp)"}"><i style="width:${pct}%"></i></div>
+      <p class="note" style="margin:0">${diff <= 0 ? `✅ ¡Vas en camino! Hoy podrías hacer unos ${fmtT(pred)}, ${fmtT(-diff)} por debajo de tu objetivo.` : `Te faltan unos <b>${fmtT(diff)}</b> para tu objetivo. ${diff / G.time < 0.05 ? "Estás muy cerca: sigue el plan." : "Con el plan vas a ir recortando: la predicción se actualiza con tus series y carreras."}`} <small>(calculado con ${N.src})</small></p>`
+      : `<p class="note" style="margin:0">Registra entrenos con su esfuerzo (sobre todo las series) y te diré qué tiempo podrías hacer hoy.</p>`}
+    <p class="note sp-paces" style="margin:0">Tus ritmos: <b>suave ${paceS(G.thr * 1.2)}–${paceS(G.thr * 1.32)}</b> · <b>umbral ${paceS(G.thr * 0.98)}–${paceS(G.thr * 1.03)}</b> · <b>series ${paceS(G.thr * 0.92)}–${paceS(G.thr * 0.96)}</b> /km</p>
+    ${evs.length ? `<p class="note" style="margin:0">📋 Últimas 2 semanas: nota media <b>${String(Math.round(avg * 10) / 10).replace(".", ",")}/10</b> en ${evs.length} entreno${evs.length > 1 ? "s" : ""}.${fast ? ` ${fast} rodaje${fast > 1 ? "s" : ""} demasiado rápido${fast > 1 ? "s" : ""}: los suaves, suaves.` : ""}</p>` : ""}</div>`;
 }
