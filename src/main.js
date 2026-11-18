@@ -297,7 +297,6 @@ function landingHTML(card, mode){
     <section class="lf" id="sec-free"><h2 class="lsec">Todo lo que necesitas para comer bien</h2>
       <div class="lf-grid">
         ${feat("food","Tu plan, ya puesto","Mete tu plan semanal o de un mes y cada día aparece en su desayuno, comida, cena y snacks. Solo escribes los gramos y marcas ✓.")}
-        ${feat("fire","Running y gym con tu preparador","Plan de running hacia tu marca objetivo que se ajusta a tu carga, tus carreras y tus lesiones, con análisis de cada entreno de tu Garmin. Y gym con rangos de Hierro a Élite y mapa de tus músculos.")}
         ${feat("ring","Calorías y macros del día","Tarjetas claras con lo que llevas y lo que te queda: calorías, proteínas, hidratos y grasas, y tu semana de un vistazo.")}
         ${feat("pie","Nutrientes como un profesional","Fibra, azúcar, grasas saturadas, sal, potasio, calcio, hierro y vitaminas de cada día o de la semana, con tu objetivo y lo que te falta.")}
         ${feat("target","Tu objetivo, calculado","Con tu peso, altura, edad y actividad te proponemos calorías y proteína. Si tu plan trae objetivo por día, se usa ese.")}
@@ -401,7 +400,8 @@ function bestsBefore(name, beforeStart){ let kg=0, rm=0, has=false;
 /* ================= render principal ================= */
 function render(){
   if (!TRAIN_ON && tab==="train") tab = "home";
-  const tb = $("tabbar"); tb.classList.toggle("six", TRAIN_ON); tb.querySelector('[data-tab="train"]').hidden = !TRAIN_ON; tb.querySelector('[data-tab="profile"]').hidden = true;
+  const SP = sportsOn(); if (!SP && tab === "train") tab = "home";
+  const tb = $("tabbar"); tb.classList.toggle("six", SP); tb.querySelector('[data-tab="train"]').hidden = !SP; tb.querySelector('[data-tab="profile"]').hidden = true;
   document.querySelectorAll("#tabbar button").forEach(b => { b.toggleAttribute("aria-current", b.dataset.tab===tab); if (b.dataset.tab===tab) b.setAttribute("aria-current","page");
     b.classList.toggle("live", b.dataset.tab==="train" && !!S.active); });
   const TT = {home:"Hoy", train:"Deportes", food:"Diario", nutri:"Nutrición", progress:"Progreso"};
@@ -1030,7 +1030,7 @@ function openFab(){
   const T = (act, ico, l, sub, prem) => `<button class="fab-t" data-act="${act}"><span class="fab-i" aria-hidden="true">${ico}</span><b>${l}${prem && !isPremium() ? " ⭐" : ""}</b>${sub?`<small>${sub}</small>`:""}</button>`;
   const R = (act, ico, l) => `<button class="fab-r" data-act="${act}"><span aria-hidden="true">${ico}</span>${l}<span class="prof-ch" aria-hidden="true">›</span></button>`;
   openSheet("Registrar", `<div class="fab-grid">${T("fab-food","🔍","Registrar alimento",mealNow())}${T("fab-photo","▥","Foto al código de barras","",true)}</div>
-    <div class="fab-list">${trk ? R("fab-sport", "🔴", "Actividad en curso") : ""}${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${R("fab-gym","🏋️", S.active ? "Seguir entreno" : "Empezar entreno")}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
+    <div class="fab-list">${trk ? R("fab-sport", "🔴", "Actividad en curso") : ""}${R("fast-open", S.fast?.active ? "⏳" : "⏱️", S.fast?.active ? "Ayuno en curso" : "Ayuno intermitente ⭐")}${R("week-report","📊","Informe semanal ⭐")}${sportsOn() ? R("fab-gym","🏋️", S.active ? "Seguir entreno" : "Empezar entreno") : ""}${R("fab-weight","⚖️","Peso")}${R("fab-ex","🔥","Ejercicio (Garmin o WHOOP)")}${R("fab-plan","✨","Mi plan a medida")}</div>`);
 }
 /* ---------- Deportes y GPS ---------- */
 let trk = null, trkWatch = null, trkMap = null, trkLine = null, trkHere = null, trkLock = null, trkSaveT = 0, trkErr = "", detailMap = null;
@@ -1821,6 +1821,9 @@ function premiumPitch(){
     <p class="note">Sin Premium puedes seguir usando el diario, tu plan, los nutrientes y el progreso, buscar alimentos y crear los tuyos con los datos de la etiqueta.</p></div>`;
 }
 const isOwner = () => adminInfo.admin || isFreePremium();
+// Deportes solo para las cuentas creadas antes de esta fecha (y para el administrador); a los nuevos usuarios no les aparece
+const SPORTS_CUTOFF = "2026-11-18T19:00:00Z";
+const sportsOn = () => TRAIN_ON && !!user && (isOwner() || (user.created_at || "9999") < SPORTS_CUTOFF);
 const adm = {users:null, q:"", f:"all", err:null, loading:false};
 const premOn = P => P && (!P.until || P.until >= today());
 function adminSection(){
