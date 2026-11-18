@@ -5,7 +5,7 @@ import { makePlan, swapMeal, PLANNER_FOODS, planConflicts, avoidLabels } from ".
 import { fileText, parsePlan, parseStudy, EXTRA_FOODS } from "./planparse.js";
 import { SPORT_LIST, SPORT, kcalFor, pace, speed, newTrack, elapsed, addPoint, markGap, packRoute, makeMap, drawRoute, hereMarker, fitRoute } from "./sport.js";
 import { COACH as SPC } from "./coach.js";
-import { spInit, spView, spAction, spEnter, spSubtitle, todayFor, kmTxt, isDone as spIsDone, setDone as spSetDone, SP_COLOR } from "./sportapp.js";
+import { spInit, spView, spAction, spEnter, spSubtitle, todayFor, kmTxt, injAction, openAnalysis, openInjuries, isDone as spIsDone, setDone as spSetDone, SP_COLOR } from "./sportapp.js";
 import { TIERS, STD, tierOf, kgFor, repsFor, isBW, exerciseRanks, muscleRanks, GYM_MUSCLES, bodyMap, badge, suggest, makeGymPlan, NEW_LIB } from "./gym.js";
 
 let sb = null;
@@ -123,6 +123,7 @@ function applyDoc(id, v){
   else if (id==="sports") S.sports = v?.list || [];
   else if (id==="sportcoach") S.scoach = v?.plans || {};
   else if (id==="races") S.races = v?.list || [];
+  else if (id==="injuries"){ S.injuries = v?.list || []; S.injConsent = !!v?.consent; }
   else if (id==="zones") S.zones = v?.map || {};
 }
 let q = Promise.resolve();
@@ -195,7 +196,7 @@ async function loadAll(){
   const rows = []; for (let from = 0;; from += 1000){
     const { data, error } = await sb.from("docs").select("id,data").order("id").range(from, from+999);
     if (error) throw error; rows.push(...data); if (data.length < 1000) break; }
-  Object.assign(S, {races:[], zones:{}, scoach:{}, sports:[], fast:null, strava:null, garmin:null, whoop:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
+  Object.assign(S, {injuries:[], injConsent:false, races:[], zones:{}, scoach:{}, sports:[], fast:null, strava:null, garmin:null, whoop:null, aiplan:null, plan:{}, planDates:null, workouts:[], diary:{}, foods:[], routines:[], exlib:[], body:{}, media:{}, health:{days:{}, wos:[]}, settings:{kcal:2200,p:140,c:230,f:70,days:4,rest:90,stepGoal:10000,addEx:false}, active:null});
   for (const r of rows) applyDoc(r.id, r.data);
   activeLoaded = true;
 }
@@ -530,6 +531,7 @@ function viewTrain(){
   const todayS = Object.keys(S.scoach||{}).filter(k=>SPC[k]).flatMap(k => todayFor(k).map(o=>({...o, k})));
   return `<p class="note" style="margin-top:0">Elige tu deporte. Cada uno es como una app propia: tu plan, calendario, carreras, resumen, estadísticas y zonas.</p>
   ${todayS.length ? `<div class="card"><h2>Hoy te toca</h2>${todayS.map(o=>`<button class="li sc-today" data-act="ex-sport" data-k="${o.k}"><span aria-hidden="true">${SPC[o.k].e}</span><span class="n"><b>${esc(o.x.title)}</b><small>${esc(SPC[o.k].n)}${o.x.km?" · "+kmTxt(o.k,o.x.km):o.x.dur?" · "+fmtMin(o.x.dur*60):""}</small></span>${spIsDone(o.k,o.w,o.i)?`<span class="sc-ok">✓</span>`:`<span class="prof-ch" aria-hidden="true">›</span>`}</button>`).join("")}</div>` : ""}
+  <button class="card sp-inj-row" data-act="inj-open"><span aria-hidden="true">🩹</span><span class="n"><b>Historial de lesiones</b><small>${(S.injuries||[]).length ? `${S.injuries.length} apuntada${S.injuries.length>1?"s":""}${S.injuries.some(x=>x.status!=="ok")?" · alguna sin recuperar":""}` : "Apúntalas y tu preparador las tendrá en cuenta"}</small></span><span class="prof-ch" aria-hidden="true">›</span></button>
   <div class="ex-grid">
     ${card("gym", "🏋️", "Gym", S.active ? "Entreno en curso" : D.measured ? `${badge(T,16)} ${T.label}` : "Rangos, rutinas y plan", true)}
     ${Object.entries(SPC).map(([k,c]) => card(k, c.e, c.n, spSubtitle(k), !!S.scoach?.[k] || (S.races||[]).some(r=>r.sport===k))).join("")}
@@ -1177,7 +1179,7 @@ const actLink = a => a.src==="whoop" || a.src==="app" ? "" : a.src==="garmin" ? 
 const exKcal = d => actsOn(d).reduce((a,x) => a + (+x.kcal||0), 0);
 const exAdd = d => S.settings.addEx ? exKcal(d) : 0;
 const fmtMin = sec => { const m = Math.round(sec/60); return m >= 60 ? `${Math.floor(m/60)} h ${m%60 ? (m%60)+" min" : ""}`.trim() : `${m} min`; };
-const actChip = a => a.src==="app" ? `<button class="st-chip" data-act="sport-open" data-id="${esc(a.id)}">${SPORT_ICO(a.type)} ${esc(a.name || sportName(a.type))} · ${actLine(a)} ›</button>` : `<span>${SPORT_ICO(a.type)} ${esc(sportName(a.type))} · ${actLine(a)}</span>`;
+const actChip = a => `<button class="st-chip" data-act="ana-open" data-id="${esc(a.id)}">${SPORT_ICO(a.type)} ${esc(a.name || sportName(a.type))} · ${actLine(a)} ›</button>`;
 const actLine = a => [fmtMin(a.dur), a.km ? String(r1(a.km)).replace(".",",")+" km" : "", a.kcal ? fmt(a.kcal)+" kcal" : ""].filter(Boolean).join(" · ");
 async function stravaCall(action, svc = "strava", extra){
   const { data:{ session } } = await sb.auth.getSession();
@@ -2226,6 +2228,8 @@ document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el || el.disabled) return;
   const act = el.dataset.act, row = el.closest("[data-ei]"), ei = row ? +row.dataset.ei : -1, si = row?.dataset.si!=null ? +row.dataset.si : -1;
   const a = S.active, c = sheetCtx;
+  if (act.startsWith("inj-") && injAction(act, el)) return;
+  if (act === "ana-open"){ openAnalysis(el.dataset.id); return; }
   if (act.startsWith("sp-") && act !== "sp-x" && exSport && SPC[exSport] && spAction(act, el, exSport)) return;
   switch (act){
     case "conn-on": { const sv = el.dataset.s; el.disabled = true; el.textContent = `Abriendo ${{garmin:"Garmin",whoop:"WHOOP"}[sv]||"Strava"}…`;

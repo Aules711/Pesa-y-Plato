@@ -101,11 +101,10 @@ async function handlePush(sb, body) {
       await sb.call(`/rest/v1/docs?user_id=eq.${r.user_id}&id=eq.garmin`, { method: "DELETE" });
     }
   }
-  // actividades nuevas, agrupadas por persona
-  const byUser = new Map();
-  for (const a of [...(body.activities || []), ...(body.manuallyUpdatedActivities || [])]) {
-    if (!a?.userId) continue; (byUser.get(a.userId) || byUser.set(a.userId, []).get(a.userId)).push(a);
-  }
+  // actividades nuevas (resumen) y sus detalles segundo a segundo, agrupadas por persona
+  const byUser = new Map(), add = (a) => { if (a?.userId) (byUser.get(a.userId) || byUser.set(a.userId, []).get(a.userId)).push(a); };
+  for (const a of [...(body.activities || []), ...(body.manuallyUpdatedActivities || [])]) add(a);
+  for (const d of body.activityDetails || []) add({ ...(d.summary || {}), userId: d.userId, activityId: d.activityId || d.summary?.activityId, summaryId: d.summaryId, _det: d });
   for (const [gid, acts] of byUser) {
     const row = (await sb.call(`/rest/v1/garmin?select=user_id&garmin_user_id=eq.${encodeURIComponent(gid)}`).catch(() => []))?.[0];
     if (!row || !(await hasPremiumById(sb, row.user_id))) continue;
@@ -114,8 +113,51 @@ async function handlePush(sb, body) {
       return { id: "g" + (a.activityId || a.summaryId), gid: a.activityId || null, name: a.activityName || "", type: a.activityType || "OTHER", src: "garmin",
         start, day: local.toISOString().slice(0, 10), dur: a.durationInSeconds || 0, km: Math.round((a.distanceInMeters || 0) / 10) / 100,
         hr: a.averageHeartRateInBeatsPerMinute || null, kcal: a.activeKilocalories != null ? Math.round(a.activeKilocalories) : null,
-        device: a.deviceName || "" };
+        device: a.deviceName || "", ...extra(a), ...(a._det ? { det: details(a._det) } : {}) };
     });
+    // los detalles no deben borrar datos del resumen que ya teníamos
+    for (const [i, it] of items.entries()) if (acts[i]._det) for (const k of Object.keys(it)) if (it[k] == null || it[k] === "" || (it[k] === 0 && k !== "start") || (k === "type" && it[k] === "OTHER")) delete it[k];
     await mergeActivities(sb, row.user_id, "garmin", {}, items);
   }
+}
+
+// datos extra del resumen (si el reloj los da)
+function extra(a) {
+  const o = {}, put = (k, v) => { if (v != null && v !== 0 && !Number.isNaN(v)) o[k] = v; };
+  put("maxHr", a.maxHeartRateInBeatsPerMinute);
+  put("cad", a.averageRunCadenceInStepsPerMinute ? Math.round(a.averageRunCadenceInStepsPerMinute) : a.averageBikeCadenceInRoundsPerMinute ? Math.round(a.averageBikeCadenceInRoundsPerMinute) : null);
+  put("maxCad", a.maxRunCadenceInStepsPerMinute ? Math.round(a.maxRunCadenceInStepsPerMinute) : null);
+  put("elev", a.totalElevationGainInMeters != null ? Math.round(a.totalElevationGainInMeters) : null);
+  put("elevDown", a.totalElevationLossInMeters != null ? Math.round(a.totalElevationLossInMeters) : null);
+  put("pow", a.averagePowerInWatts ? Math.round(a.averagePowerInWatts) : null);
+  put("steps", a.steps);
+  return o;
+}
+// resumen compacto de las muestras: parciales por km, tiempo por pulsaciones, desacople del pulso y cadencia
+function details(d) {
+  const S = (d.samples || []).filter((x) => x.startTimeInSeconds).sort((a, b) => a.startTimeInSeconds - b.startTimeInSeconds);
+  if (S.length < 10) return null;
+  const hh = {}, splits = []; let lastKmT = S[0].startTimeInSeconds, kmIdx = 1, hrS = 0, hrN = 0, cadS = 0, cadN = 0, up = 0, prevEl = null;
+  const half = [{ t: 0, d: 0, hr: 0, n: 0 }, { t: 0, d: 0, hr: 0, n: 0 }], dEnd = S[S.length - 1].totalDistanceInMeters || 0;
+  for (let i = 1; i < S.length; i++) {
+    const a = S[i - 1], b = S[i], dt = Math.min(10, Math.max(0, b.startTimeInSeconds - a.startTimeInSeconds));
+    if (b.heartRate) { const k = Math.floor(b.heartRate / 5) * 5; hh[k] = (hh[k] || 0) + dt; hrS += b.heartRate; hrN++; }
+    const cad = b.stepsPerMinute || b.bikeCadenceInRPM; if (cad) { cadS += cad; cadN++; }
+    if (b.elevationInMeters != null && prevEl != null && b.elevationInMeters > prevEl) up += b.elevationInMeters - prevEl;
+    if (b.elevationInMeters != null) prevEl = b.elevationInMeters;
+    const dist = b.totalDistanceInMeters || 0, h = dEnd && dist > dEnd / 2 ? 1 : 0;
+    if (b.heartRate && b.speedMetersPerSecond > 0.5) { half[h].hr += b.heartRate; half[h].n++; half[h].t += dt; half[h].d += b.speedMetersPerSecond * dt; }
+    if (dist >= kmIdx * 1000) {
+      splits.push({ k: kmIdx, s: b.startTimeInSeconds - lastKmT, hr: hrN ? Math.round(hrS / hrN) : null, cad: cadN ? Math.round(cadS / cadN) : null, up: Math.round(up) });
+      lastKmT = b.startTimeInSeconds; kmIdx++; hrS = hrN = cadS = cadN = 0; up = 0;
+    }
+  }
+  const rest = dEnd - (kmIdx - 1) * 1000; if (rest > 150) splits.push({ k: Math.round((kmIdx - 1 + rest / 1000) * 100) / 100, s: S[S.length - 1].startTimeInSeconds - lastKmT, hr: hrN ? Math.round(hrS / hrN) : null, cad: cadN ? Math.round(cadS / cadN) : null, up: Math.round(up), part: 1 });
+  let dec = null;
+  if (half[0].n > 30 && half[1].n > 30 && half[0].d > 0 && half[1].d > 0) {
+    const ef = (x) => (x.d / x.t) / (x.hr / x.n);          // velocidad por pulsación
+    dec = Math.round((ef(half[0]) / ef(half[1]) - 1) * 1000) / 10;
+  }
+  const allCad = S.map((x) => x.stepsPerMinute || x.bikeCadenceInRPM).filter(Boolean);
+  return { splits: splits.slice(0, 120), hh, dec, cad: allCad.length ? Math.round(allCad.reduce((a, b) => a + b, 0) / allCad.length) : null };
 }

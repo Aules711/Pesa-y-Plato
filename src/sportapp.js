@@ -64,6 +64,7 @@ function compliance(k) {
   const n = P.weeks[w].sessions.length; return n ? P.weeks[w].sessions.filter((_, i) => isDone(k, w, i)).length / n : null;
 }
 export function adjFor(k) {
+  const J = injAdj(k); if (J) return J;
   const L = loadState(k), cp = compliance(k);
   if (L.s.k === "risk") return { f: 0.75, easy: true, why: L.s.msg };
   if (L.s.k === "high") return { f: 0.85, why: L.s.msg };
@@ -193,7 +194,9 @@ function sesCard(k, o, opts = {}) {
     <p class="sc-desc">${esc(x.desc).replace(/ · /g, "<br>· ")}</p>
     ${evalBox(k, o.w, o.i, x)}
     ${!done && day <= today() && x.t !== "RACE" ? `<div class="sc-acts">${COACH[k].gps && !["S", "F", "F2", "M"].includes(x.t) ? `<button class="btn soft" data-act="sp-gps" data-w="${o.w}" data-i="${o.i}">▶ Grabar con GPS</button>` : ""}<button class="btn ghost" data-act="sp-reg" data-w="${o.w}" data-i="${o.i}">Registrar</button></div>` : ""}
-    ${["S", "F", "F2"].includes(x.t) && !done ? `<button class="link" data-act="ex-sport" data-k="gym">Apuntar las series en Gym ›</button>` : ""}</div>`;
+    ${["S", "F", "F2"].includes(x.t) ? prevBox(k) : ""}
+    ${["S", "F", "F2"].includes(x.t) && !done ? `<button class="link" data-act="ex-sport" data-k="gym">Apuntar las series en Gym ›</button>` : ""}
+    ${(() => { const a = done || day <= today() ? actForSes(k, o.w, x) : null; return a ? `<button class="link" data-act="ana-open" data-id="${esc(a.id)}">Ver análisis completo ›</button>` : ""; })()}</div>`;
 }
 function vHoy(k) {
   const { esc, fmt, fmtMin, today, addDays } = C, P = C.S.scoach?.[k], L = loadState(k), nr = nextRace(k), A = adjFor(k);
@@ -203,7 +206,10 @@ function vHoy(k) {
   const cw = P ? curWeek(P) : -1, wPlan = P?.weeks[cw]?.sessions.length || 0, wDone = P?.weeks[cw] ? P.weeks[cw].sessions.filter((_, i) => isDone(k, cw, i)).length : 0;
   const last = actsOf(k).slice(0, 4);
   return `${nr ? `<button class="card sp-race-cd" data-act="sp-tab" data-t="races"><span class="sp-cd"><b>${daysTo(nr.date)}</b><small>días</small></span><span><small class="note">Próxima ${RACE_W(k).one}</small><b>${esc(nr.name)}</b><small class="note">${C.dayLabel(nr.date)}${nr.km ? ` · ${km2(nr.km)} km` : ""}${nr.elev ? ` · ${nr.elev} m+` : ""}</small></span></button>` : ""}
+  ${(() => { const la = actsOf(k)[0]; if (!la || la.day < addDays(today(), -3)) return ""; const R = analyze(la); if (!R) return "";
+    return `<button class="card sp-last" data-act="ana-open" data-id="${esc(la.id)}"><span class="sp-sc big">${String(R.score).replace(".", ",")}</span><span class="n"><small class="note">Último entreno${la.src === "garmin" ? " · Garmin" : ""} · ${C.dayLabel(la.day)}</small><b>${esc(la.name || C.sportName(la.type))} · ${la.km ? kmTxt(k, la.km) : fmtMin(la.dur)}</b><small class="note">${R.good.length} cosa${R.good.length === 1 ? "" : "s"} bien · ${R.imp.length} a mejorar · Ver análisis completo</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`; })()}
   ${goalCard(k)}
+  ${injFor(k, true).length ? `<button class="card sp-inj-box" data-act="inj-open" style="text-align:left;color:inherit;font:inherit;border:0;cursor:pointer;width:100%">🩹 <b>${esc(injAdj(k).why)}</b></button>` : ""}
   ${!P ? `<div class="card sp-cta"><b>Crea tu plan de ${COACH[k].n.toLowerCase()}</b><p class="note">Te preparo los entrenos de cada semana según tu objetivo, y los ajusto a la carga que llevas.</p><button class="btn" data-act="sp-tab" data-t="plan">Crear mi plan</button></div>`
     : tod.length ? `<h2 class="sp-h2">Hoy te toca</h2>${tod.map((o) => sesCard(k, o, { noToday: true })).join("")}`
     : `<div class="card"><b>Hoy toca descanso 😌</b><p class="note" style="margin:0">${next ? `Siguiente: <b>${esc(next.x.title)}</b> ${next.in === 1 ? "mañana" : `el ${DAY_N[next.x.d].toLowerCase()}`}.` : "Descansar también es entrenar."}</p></div>`}
@@ -213,7 +219,8 @@ function vHoy(k) {
     <p class="note" style="margin:0">${esc(A.why || L.s.msg)}</p></div>
   <div class="card"><h2>Esta semana</h2><div class="sp-load"><div><b>${P ? `${wDone}/${wPlan}` : wActs.length}</b><span>${P ? "sesiones" : "entrenos"}</span></div><div><b>${fmtMin(wMin * 60)}</b><span>tiempo</span></div>${isEnd(k) ? `<div><b>${km2(wKm)}</b><span>km</span></div>` : `<div><b>${fmt(wActs.reduce((a, x) => a + (+x.kcal || 0), 0))}</b><span>kcal</span></div>`}</div></div>
   ${last.length ? `<div class="card"><div class="top"><h2>Últimos entrenos</h2><button class="link" data-act="sp-tab" data-t="data">Ver todo ›</button></div><div class="list">${last.map(actRow).join("")}</div></div>` : ""}
-  <div class="card"><h2>Consejos de tu coach</h2>${(TIPS[k] || []).map((t) => `<p class="note" style="margin:0">• ${esc(t)}</p>`).join("")}</div>`;
+  <div class="card"><h2>Consejos de tu coach</h2>${(TIPS[k] || []).map((t) => `<p class="note" style="margin:0">• ${esc(t)}</p>`).join("")}${injFor(k).map((x) => RISK[x.part]).filter((t, i, a) => t && a.indexOf(t) === i).map((t) => `<p class="note" style="margin:0">• 🩹 ${esc(t)}</p>`).join("")}</div>
+  <button class="btn ghost" data-act="inj-open">🩹 Historial de lesiones${(C.S.injuries || []).length ? ` (${C.S.injuries.length})` : ""}</button>`;
 }
 function sparkLoad(h) {
   if (!h.length) return ""; const mx = Math.max(1, ...h.map((x) => Math.max(x.ctl, x.atl))), W = 300, H = 60;
@@ -223,8 +230,9 @@ function sparkLoad(h) {
 }
 function actRow(a) {
   const { esc, SPORT_ICO, sportName, actLine, dayLabel } = C;
-  const inner = `<span class="st-i" aria-hidden="true">${SPORT_ICO(a.type)}</span><span class="n"><b>${esc(a.name || sportName(a.type))}</b><small>${dayLabel(a.day)} · ${actLine(a)}${a.rpe ? ` · esfuerzo ${a.rpe}/10` : ""}</small></span>`;
-  return a.src === "app" ? `<button class="li st-act" data-act="sport-open" data-id="${esc(a.id)}">${inner}<span class="prof-ch" aria-hidden="true">›</span></button>` : `<div class="li st-act">${inner}<small class="note">${a.src === "garmin" ? "Garmin" : a.src === "whoop" ? "WHOOP" : "Strava"}</small></div>`;
+  const R = analyze(a), src = a.src === "garmin" ? " · Garmin" : a.src === "whoop" ? " · WHOOP" : a.src === "strava" ? " · Strava" : "";
+  const inner = `<span class="st-i" aria-hidden="true">${SPORT_ICO(a.type)}</span><span class="n"><b>${esc(a.name || sportName(a.type))}</b><small>${dayLabel(a.day)} · ${actLine(a)}${a.rpe ? ` · esfuerzo ${a.rpe}/10` : ""}${src}</small></span>`;
+  return `<button class="li st-act" data-act="ana-open" data-id="${esc(a.id)}">${inner}${R ? `<span class="sp-sc">${String(R.score).replace(".", ",")}</span>` : ""}<span class="prof-ch" aria-hidden="true">›</span></button>`;
 }
 
 /* ---------- Plan ---------- */
@@ -526,7 +534,7 @@ export function goalInfo(k) {
 function thrNow(k) {
   const since = C.addDays(C.today(), -42), ests = [];
   for (const r of racesOf(k)) if (r.time && r.km && r.date >= C.addDays(C.today(), -120) && r.date < C.today()) ests.push(riegel60(r.km, r.time));
-  for (const a of actsOf(k)) if (a.day >= since && a.km >= 3 && a.dur > 0 && (+a.rpe >= 7)) ests.push(riegel60(a.km, a.dur) * (a.rpe >= 9 ? 1 : 1.03));
+  for (const a of actsOf(k)) if (a.day >= since && a.km >= 3 && a.dur > 0 && (+a.rpe >= 7 || (a.hr && hrMax(k) && a.hr / hrMax(k) >= 0.85))) ests.push(riegel60(a.km, a.dur) * (a.rpe >= 9 || (a.hr && a.hr / hrMax(k) >= 0.9) ? 1 : 1.03));
   if (ests.length) return { thr: Math.min(...ests), src: "tus entrenos duros y carreras" };
   if (zonesOf(k).thr) return { thr: zonesOf(k).thr, src: "tu ritmo umbral" };
   const easy = actsOf(k).filter((a) => a.day >= since && a.km >= 3 && a.dur > 0).map((a) => a.dur / a.km).sort((a, b) => a - b);
@@ -592,4 +600,174 @@ function goalCard(k) {
       : `<p class="note" style="margin:0">Registra entrenos con su esfuerzo (sobre todo las series) y te diré qué tiempo podrías hacer hoy.</p>`}
     <p class="note sp-paces" style="margin:0">Tus ritmos: <b>suave ${paceS(G.thr * 1.2)}–${paceS(G.thr * 1.32)}</b> · <b>umbral ${paceS(G.thr * 0.98)}–${paceS(G.thr * 1.03)}</b> · <b>series ${paceS(G.thr * 0.92)}–${paceS(G.thr * 0.96)}</b> /km</p>
     ${evs.length ? `<p class="note" style="margin:0">📋 Últimas 2 semanas: nota media <b>${String(Math.round(avg * 10) / 10).replace(".", ",")}/10</b> en ${evs.length} entreno${evs.length > 1 ? "s" : ""}.${fast ? ` ${fast} rodaje${fast > 1 ? "s" : ""} demasiado rápido${fast > 1 ? "s" : ""}: los suaves, suaves.` : ""}</p>` : ""}</div>`;
+}
+
+/* ========== LESIONES ========== */
+export const INJ_PARTS = [["rodilla", "Rodilla"], ["tobillo", "Tobillo"], ["aquiles", "Tendón de Aquiles"], ["gemelo", "Gemelo / sóleo"], ["espinilla", "Espinilla (periostitis)"],
+  ["pie", "Pie / fascia plantar"], ["isquio", "Isquiotibiales"], ["cuadriceps", "Cuádriceps"], ["cadera", "Cadera / glúteo"], ["ingle", "Ingle / aductores"],
+  ["cintilla", "Cintilla iliotibial"], ["lumbar", "Espalda baja"], ["hombro", "Hombro"], ["codo", "Codo"], ["muneca", "Muñeca"], ["cuello", "Cuello"], ["otra", "Otra zona"]];
+const INJ_TYPES = ["Sobrecarga o tendinitis", "Rotura fibrilar", "Esguince", "Fractura por estrés", "Contractura", "Fascitis", "Operación", "Otra"];
+const INJ_ST = { act: ["Activa", "#E8364F"], rec: ["Recuperándome", "#F08A24"], ok: ["Recuperada", "#2BB673"] };
+const LOWER = ["rodilla", "tobillo", "aquiles", "gemelo", "espinilla", "pie", "isquio", "cuadriceps", "cadera", "ingle", "cintilla", "lumbar"];
+const RELEV = { run: LOWER, trail: LOWER, hike: LOWER, football: LOWER, basket: LOWER, bike: ["rodilla", "cadera", "lumbar", "cuello", "cintilla"], swim: ["hombro", "cuello", "lumbar"],
+  padel: [...LOWER, "hombro", "codo", "muneca"], tennis: [...LOWER, "hombro", "codo", "muneca"], boxing: ["hombro", "codo", "muneca", "cuello", "lumbar"] };
+const PREV = {
+  rodilla: "Sentadilla isométrica en pared 3×40 s · Step-down excéntrico 3×10 por pierna", tobillo: "Equilibrio a una pierna 3×30 s · Saltos pequeños controlados 3×10",
+  aquiles: "Elevación de talón excéntrica (bajar lento) 3×15", gemelo: "Elevación de gemelos con rodilla doblada (sóleo) 3×15", espinilla: "Caminar de talones 3×30 m · Tibial con goma 3×15",
+  pie: "Recoger una toalla con los dedos 3×30 s · Rodar el pie con una pelota 2 min", isquio: "Curl nórdico 3×5 · Puente de isquios a una pierna 3×10", cuadriceps: "Extensión de cuádriceps excéntrica 3×10",
+  cadera: "Puente de glúteo a una pierna 3×12 · Monster walk con goma 3×15 pasos", ingle: "Plancha Copenhague 3×20 s · Aducción con goma 3×12", cintilla: "Abducción de cadera tumbado 3×15 · Monster walk con goma 3×15",
+  lumbar: "Bird-dog 3×10 · Plancha lateral 3×30 s · Puente de glúteo 3×12", hombro: "Rotación externa con goma 3×15 · Face pull 3×12", codo: "Extensión de muñeca excéntrica 3×15",
+  muneca: "Flexo-extensión de muñeca con mancuerna ligera 3×15", cuello: "Retracciones de cuello 3×10 · Estiramiento suave de trapecio",
+};
+const RISK = {
+  rodilla: "Con historial de rodilla: cadencia alta (pasos cortos) y sin subir más de un 10 % el volumen a la semana.", aquiles: "Con historial de Aquiles: cuidado con meter muchas cuestas o series de golpe.",
+  espinilla: "Con historial de periostitis: mejor tierra que asfalto y subidas de volumen muy graduales.", pie: "Con historial de fascia: revisa el desgaste de las zapatillas y trabaja gemelo y pie.",
+  cintilla: "Con historial de cintilla: refuerza el glúteo medio y evita muchas bajadas seguidas.", isquio: "Con historial de isquios: calienta bien antes de series y sprints.",
+  gemelo: "Con historial de gemelo: calienta progresivo y cuidado con cambios bruscos de ritmo.", tobillo: "Con historial de tobillo: ojo en terreno técnico; trabaja el equilibrio.",
+  lumbar: "Con historial lumbar: core fuerte y no te encorves en las tiradas largas.", hombro: "Con historial de hombro: calienta el hombro antes de jugar.",
+};
+const injList = () => (C.S.injuries || []).slice().sort((a, b) => (a.status === "ok") - (b.status === "ok") || (a.date < b.date ? 1 : -1));
+const partName = (p) => INJ_PARTS.find((x) => x[0] === p)?.[1] || "Otra zona";
+export function injFor(k, onlyOpen) {
+  const since = C.addDays(C.today(), -730);
+  return injList().filter((x) => (RELEV[k] || LOWER).includes(x.part) && (onlyOpen ? x.status !== "ok" : (x.status !== "ok" || x.date >= since)));
+}
+export function injAdj(k) {
+  const act = injFor(k, true); if (!act.length) return null;
+  const hard = act.some((x) => x.status === "act"), names = [...new Set(act.map((x) => partName(x.part).toLowerCase()))].join(", ");
+  return hard ? { f: 0.6, easy: true, why: `Tienes una lesión activa (${names}): plan muy suave y sin series. Si duele al entrenar, para y consulta a tu fisio.` }
+    : { f: 0.85, easy: true, why: `Te estás recuperando (${names}): volumen algo más bajo y sin series hasta que estés recuperado.` };
+}
+function prevBox(k) {
+  const L = [...new Set(injFor(k).map((x) => x.part))].filter((p) => PREV[p]); if (!L.length) return "";
+  return `<div class="sp-inj-box">🩹 <b>Prevención por tus lesiones</b>${L.map((p) => `<br>· ${partName(p)}: ${C.esc(PREV[p])}`).join("")}</div>`;
+}
+export function openInjuries() {
+  const { esc } = C, L = injList();
+  C.openSheet("Historial de lesiones", `<p class="note" style="margin:0">Tu preparador lo tiene en cuenta: si tienes una lesión activa, el plan baja la carga y quita las series; si ya estás recuperado, añade ejercicios de prevención a tus sesiones de fuerza y te avisa en los análisis.</p>
+    ${L.map((x) => `<button class="card sp-inj" data-act="inj-edit" data-id="${esc(x.id)}"><span class="sp-inj-dot" style="background:${INJ_ST[x.status]?.[1] || "#8A93A6"}"></span><span class="n"><b>${esc(partName(x.part))}${x.side && x.side !== "na" ? ` (${x.side === "i" ? "izquierda" : x.side === "d" ? "derecha" : "ambas"})` : ""}</b><small>${esc(x.type || "")} · ${x.date ? C.dayLabel(x.date) : ""} · <span style="color:${INJ_ST[x.status]?.[1]}">${INJ_ST[x.status]?.[0] || ""}</span></small>${x.notes ? `<small>${esc(x.notes)}</small>` : ""}</span><span class="prof-ch" aria-hidden="true">›</span></button>`).join("") || `<p class="note">Aún no has apuntado ninguna lesión.</p>`}
+    <button class="btn" data-act="inj-new">+ Añadir lesión</button>
+    <p class="note" style="margin:0">No sustituye a un fisioterapeuta o médico: ante dolor que no se va, consulta a un profesional.</p>`, { kind: "inj" });
+}
+function injForm(id) {
+  const { esc } = C, x = (C.S.injuries || []).find((y) => y.id === id) || { status: "act", date: C.today(), side: "na" };
+  const ro = (n, v, l, cur) => `<label class="seg-o"><input type="radio" name="${n}" value="${v}" ${cur === v ? "checked" : ""}><span>${l}</span></label>`;
+  C.openSheet(id ? "Editar lesión" : "Añadir lesión", `<label class="f">Zona<select id="injPart">${INJ_PARTS.map(([v, l]) => `<option value="${v}" ${x.part === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <div class="f"><span>Lado</span><div class="seg-g">${ro("injSide", "i", "Izquierdo", x.side)}${ro("injSide", "d", "Derecho", x.side)}${ro("injSide", "b", "Ambos", x.side)}${ro("injSide", "na", "No aplica", x.side)}</div></div>
+    <label class="f">Tipo<select id="injType">${INJ_TYPES.map((t) => `<option ${x.type === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+    <label class="f">¿Cuándo empezó?<input type="date" id="injDate" value="${esc(x.date || "")}" max="${C.today()}"></label>
+    <div class="f"><span>Estado</span><div class="seg-g">${ro("injSt", "act", "Activa (me duele)", x.status)}${ro("injSt", "rec", "Recuperándome", x.status)}${ro("injSt", "ok", "Recuperada", x.status)}</div></div>
+    <label class="f">Notas (opcional)<input id="injNotes" value="${esc(x.notes || "")}" placeholder="Qué la provocó, qué te dijo el fisio…"></label>
+    ${C.S.injConsent ? "" : `<label class="tgl"><input type="checkbox" id="injOk"><span>Acepto que la app guarde mis lesiones (datos de salud) para adaptar mi entrenamiento. Solo las veo yo y puedo borrarlas cuando quiera.</span></label>`}
+    <span class="msg" id="injMsg" hidden></span>
+    <button class="btn" data-act="inj-save" data-id="${esc(id || "")}">Guardar</button>
+    ${id ? `<button class="btn danger" data-act="inj-del" data-id="${esc(id)}">Borrar</button>` : ""}
+    <button class="btn ghost" data-act="inj-open">Volver</button>`, { kind: "inj" });
+}
+async function injSave(id) {
+  const $ = C.$; if (!C.S.injConsent && !$("injOk")?.checked) { const m = $("injMsg"); m.textContent = "Para guardar tus lesiones tienes que aceptar la casilla."; m.hidden = false; return; }
+  const r = (n) => document.querySelector(`input[name=${n}]:checked`)?.value;
+  const x = { id: id || "i" + Date.now(), part: $("injPart").value, side: r("injSide") || "na", type: $("injType").value, date: $("injDate").value || C.today(), status: r("injSt") || "act", notes: $("injNotes").value.trim() };
+  await C.put("injuries", { consent: true, list: [x, ...(C.S.injuries || []).filter((y) => y.id !== x.id)] });
+  openInjuries(); C.render();
+}
+export function injAction(act, el) {
+  const d = el.dataset;
+  switch (act) {
+    case "inj-open": openInjuries(); return true;
+    case "inj-new": injForm(null); return true;
+    case "inj-edit": injForm(d.id); return true;
+    case "inj-save": injSave(d.id || null); return true;
+    case "inj-del": if (d.sure) C.put("injuries", { consent: true, list: (C.S.injuries || []).filter((y) => y.id !== d.id) }).then(() => { openInjuries(); C.render(); }); else { d.sure = 1; el.textContent = "Toca otra vez para borrar"; } return true;
+  }
+  return false;
+}
+
+/* ========== ANÁLISIS COMPLETO DE UN ENTRENO ========== */
+function hrZonesOf(k) { const mx = hrMax(k); if (!mx) return null; const rs = +zonesOf(k).hrrest || 0; return [0.6, 0.7, 0.8, 0.9].map((p) => Math.round(rs ? rs + (mx - rs) * p : mx * p)); }
+export function analyze(a) {
+  const k = sportOf(a); if (!k) return null;
+  const good = [], imp = [], info = [], run = k === "run" || k === "trail", p = a.km > 0 ? a.dur / a.km : 0;
+  // contra el plan
+  let ses = null, ev = null; const P = C.S.scoach?.[k];
+  if (P) { const o = plannedOn(k, a.day).find((o) => o.x.t !== "RACE"); if (o) { ses = o; ev = evalSes(k, o.w, o.i, o.x); } }
+  const easy = ses ? ["E", "L", "R"].includes(ses.x.t) : (a.rpe ? a.rpe <= 5 : true);
+  if (ev) for (const l of ev.lines) (/perfecto|cumplida|justo lo que/.test(l) ? good : /^Ritmo medio/.test(l) ? info : imp).push(l);
+  else if (!P) info.push("No tienes plan en este deporte: crea uno en «Plan» y podré compararlo con lo que te tocaba.");
+  else info.push("Hoy no tenías ningún entreno en el plan: cuenta como extra para tu carga.");
+  const g0 = good.length, i0 = imp.length;
+  // pulso por zonas
+  const Z = hrZonesOf(k), hh = a.det?.hh; let zp = null;
+  if (Z && hh) {
+    const sec = [0, 0, 0, 0, 0]; for (const [b, s] of Object.entries(hh)) { const bpm = +b + 2; const z = bpm < Z[0] ? 0 : bpm < Z[1] ? 1 : bpm < Z[2] ? 2 : bpm < Z[3] ? 3 : 4; sec[z] += s; }
+    const tot = sec.reduce((x, y) => x + y, 0) || 1; zp = sec.map((s) => Math.round(s / tot * 100));
+    const hard = zp[3] + zp[4], lowZ = zp[0] + zp[1];
+    if (easy) { if (zp[2] + hard > 25) imp.push(`El ${zp[2] + hard} % del tiempo fuiste en zona 3 o más: para un entreno suave, lo ideal es más del 80 % en zonas 1-2.`); else good.push(`Buen control del pulso: ${lowZ} % del tiempo en zonas 1-2, justo lo que pide un entreno suave.`); }
+    else { if (hard >= 15) good.push(`Trabajaste de verdad la intensidad: ${hard} % del tiempo en zonas 4-5.`); else imp.push(`Solo un ${hard} % en zonas 4-5: en las series puedes apretar algo más.`); }
+  } else if (a.hr && hrMax(k)) {
+    const pc = Math.round(a.hr / hrMax(k) * 100); info.push(`Pulso medio ${a.hr} ppm (${pc} % de tu máximo)${a.maxHr ? `, máximo ${a.maxHr} ppm` : ""}.`);
+    if (easy && pc > 80) imp.push("Pulso medio alto para un entreno suave: baja un poco el ritmo para quedarte en zona 2.");
+  } else if (a.hr && !hrMax(k)) info.push("Pon tu FC máxima en Datos › Zonas para que analice tu pulso por zonas.");
+  // desacople del pulso (fondo aeróbico)
+  if (a.det?.dec != null && a.dur >= 1800 && easy) {
+    if (a.det.dec <= 5) good.push(`Desacople del pulso ${String(a.det.dec).replace(".", ",")} %: tu pulso se mantuvo estable con el ritmo. Buena base aeróbica.`);
+    else imp.push(`Desacople del pulso ${String(a.det.dec).replace(".", ",")} %: al final necesitaste más pulsaciones para el mismo ritmo. Falta fondo aeróbico, o influyó el calor o la hidratación. Más rodajes suaves y largos lo mejoran.`);
+  }
+  // cadencia
+  const cad = a.det?.cad || a.cad;
+  if (cad && run) {
+    if (cad >= 170) good.push(`Cadencia ${cad} pasos/min: muy buena, pasos cortos y eficientes.`);
+    else if (cad >= 162) info.push(`Cadencia ${cad} pasos/min: correcta. Subirla un 5 % (a ${Math.round(cad * 1.05)}) reduce el impacto en rodillas y tibias.`);
+    else imp.push(`Cadencia ${cad} pasos/min: baja. Prueba pasos más cortos y rápidos (objetivo ${Math.round(cad * 1.05)}-${Math.round(cad * 1.08)}): menos impacto y menos riesgo de lesión.`);
+  } else if (cad && k === "bike") (cad >= 80 && cad <= 95 ? good : info).push(`Cadencia media ${cad} rpm${cad < 80 ? ": algo baja, sube a 85-95 para cargar menos las rodillas" : cad > 95 ? ": alta, bien para piernas frescas" : ", en el rango ideal"}.`);
+  // parciales
+  const S = (a.det?.splits || []).filter((x) => !x.part && x.s > 0);
+  if (S.length >= 4 && run) {
+    const h = Math.floor(S.length / 2), f1 = S.slice(0, h).reduce((x, y) => x + y.s, 0) / h, f2 = S.slice(-h).reduce((x, y) => x + y.s, 0) / h;
+    if (f2 < f1 * 0.99) good.push(`Parcial negativo: la segunda mitad (${paceS(f2)} /km) más rápida que la primera (${paceS(f1)} /km). Muy bien gestionado.`);
+    else if (f2 > f1 * 1.05 && !hasElev(k)) imp.push(`Te fuiste apagando: la segunda mitad a ${paceS(f2)} /km frente a ${paceS(f1)} /km al principio. Sal un poco más suave.`);
+    else good.push(`Ritmo regular de principio a fin (${paceS(f1)} → ${paceS(f2)} /km).`);
+  }
+  // de cara al objetivo
+  const G = goalInfo(k), goalTxt = [];
+  if (G && p) {
+    goalTxt.push(`Tu objetivo: ${C.esc(G.name)} en ${hms(G.time)} (ritmo ${paceS(G.rp)} /km).`);
+    if (!easy && a.km >= 3) { const eq = predict(riegel60(a.km, a.dur) * (a.rpe >= 9 ? 1 : 1.03), G.km), d = eq - G.time;
+      goalTxt.push(d <= 0 ? `Con un esfuerzo así, hoy podrías hacer unos ${hms(eq)}: ¡ya estás por debajo del objetivo! ✅` : `Este entreno equivale a unos ${hms(eq)} en tu carrera: te faltan ${hms(d)}.`); }
+    else if (easy && ses?.x?.pace) goalTxt.push("Los rodajes suaves no sirven para predecir tu marca, pero son la base para llegar a ella.");
+    const nr = nextRace(k); if (nr) goalTxt.push(`Quedan ${daysTo(nr.date)} días para ${C.esc(nr.name)}.`);
+  }
+  // carga semanal y lesiones
+  const ws = C.weekStart(a.day), wk = actsOf(k).filter((x) => x.day >= ws && x.day <= C.addDays(ws, 6)).reduce((s, x) => s + (+x.km || 0), 0), pw = actsOf(k).filter((x) => x.day >= C.addDays(ws, -7) && x.day < ws).reduce((s, x) => s + (+x.km || 0), 0);
+  const inj = injFor(k), jump = pw > 5 && wk > pw * 1.15;
+  if (isEnd(k) && jump) imp.push(`Llevas ${km2(wk)} km esta semana, un ${Math.round((wk / pw - 1) * 100)} % más que la anterior (${km2(pw)} km). Subir más de un 10 % de golpe aumenta el riesgo de lesión.`);
+  const injTxt = [...new Set(inj.map((x) => x.part))].map((pt) => RISK[pt]).filter(Boolean);
+  if (inj.some((x) => x.status !== "ok")) injTxt.unshift("Tienes una lesión sin recuperar del todo: si notas dolor durante el entreno, para. Mejor perder un día que un mes.");
+  if (cad && run && cad < 168 && inj.some((x) => ["rodilla", "espinilla", "cadera", "cintilla"].includes(x.part))) injTxt.push("Con tu historial de lesiones, subir un poco la cadencia es de lo que más te puede ayudar.");
+  const gO = good.length - g0, iO = imp.length - i0;
+  if (ses?.x?.t === "Q" && !a.rpe && !zp) info.push("Apunta el esfuerzo (1-10) o pon tu FC máxima para que pueda valorar bien la parte fuerte.");
+  const score = Math.max(1, Math.min(10, ev ? ev.score - iO * 1.25 + gO * 0.25 : 8 + good.length * 0.5 - imp.length));
+  return { k, a, ses, ev, score: Math.round(score * 2) / 2, good, imp, info, zp, Z, splits: a.det?.splits || [], goalTxt, injTxt, p, cad, easy };
+}
+export function openAnalysis(id) {
+  const a = C.allActs().find((x) => String(x.id) === String(id)); if (!a) return;
+  const R = analyze(a); if (!R) { C.openSheet(a.name || "Entreno", `<p class="note">Este deporte todavía no tiene análisis.</p>`); return; }
+  const { esc, fmtMin, fmt } = C, k = R.k, c = R.score >= 8.5 ? "#2BB673" : R.score >= 6.5 ? "#E0A800" : "#E8364F";
+  const st = (l, v) => v ? `<div><span>${l}</span><b>${v}</b></div>` : "";
+  const zc = ["#9FB4CC", "#4FD1A5", "#F2C14E", "#F08A24", "#E8364F"];
+  const li = (arr, ic) => arr.map((t) => `<li><span aria-hidden="true">${ic}</span>${t}</li>`).join("");
+  C.openSheet(a.name || C.sportName(a.type), `<div class="sp-ana" style="--sp:${SP_COLOR[k]}">
+    <span class="note">${COACH[k].e} ${esc(COACH[k].n)} · ${C.dayLabel(a.day)}${a.src === "garmin" ? " · desde Garmin" : a.src === "whoop" ? " · desde WHOOP" : a.src === "strava" ? " · desde Strava" : ""}${R.ses ? ` · plan: ${esc(R.ses.x.title)}` : ""}</span>
+    <div class="sp-stats">${st("Distancia", a.km ? kmTxt(k, a.km) : "")}${st("Tiempo", fmtMin(a.dur))}${st(k === "bike" ? "Velocidad" : "Ritmo", R.p ? (k === "bike" ? km2(a.km / (a.dur / 3600)) + " km/h" : paceS(R.p) + " /km") : "")}${st("Pulso medio", a.hr ? a.hr + " ppm" : "")}${st("Pulso máx.", a.maxHr ? a.maxHr + " ppm" : "")}${st("Cadencia", R.cad ? R.cad + (k === "bike" ? " rpm" : " ppm") : "")}${st("Desnivel +", a.elev ? fmt(a.elev) + " m" : "")}${st("Calorías", a.kcal ? fmt(a.kcal) : "")}</div>
+    <div class="sp-eval" style="--ev:${c}"><div class="sp-ev-h"><b>${String(R.score).replace(".", ",")}/10</b><span>${R.score >= 8.5 ? "Muy bien" : R.score >= 6.5 ? "Bien" : "Mejorable"}</span><small>Nota del entreno</small></div></div>
+    ${R.goalTxt.length ? `<div class="card sp-goal"><b>🎯 De cara a tu objetivo</b>${R.goalTxt.map((t) => `<p class="note" style="margin:0">${t}</p>`).join("")}</div>` : ""}
+    ${R.good.length ? `<div class="card"><h2>Lo que has hecho bien</h2><ul class="sp-ul">${li(R.good, "✅")}</ul></div>` : ""}
+    ${R.imp.length ? `<div class="card"><h2>Qué puedes mejorar</h2><ul class="sp-ul">${li(R.imp, "↗️")}</ul></div>` : ""}
+    ${R.zp ? `<div class="card"><h2>Pulso por zonas</h2><div class="sp-zbar">${R.zp.map((v, i) => v ? `<i style="width:${v}%;background:${zc[i]}" title="Z${i + 1}: ${v} %"></i>` : "").join("")}</div>
+      <div class="sp-zleg">${R.zp.map((v, i) => `<span><i style="background:${zc[i]}"></i>Z${i + 1} ${v} %<small>${i === 0 ? `<${R.Z[0]}` : i === 4 ? `>${R.Z[3]}` : `${R.Z[i - 1]}-${R.Z[i]}`}</small></span>`).join("")}</div></div>` : ""}
+    ${R.splits.length ? `<div class="card"><h2>Parciales</h2><div class="sp-spl"><span>Km</span><span>${k === "bike" ? "km/h" : "Ritmo"}</span><span>Pulso</span><span>Cad.</span><span>m+</span>
+      ${R.splits.map((x) => { const len = x.part ? (x.k % 1 || 1) : 1, pv = x.s / len; return `<b>${x.part ? String(x.k).replace(".", ",") : x.k}</b><span>${k === "bike" ? km2(3600 / pv) : paceS(pv)}</span><span>${x.hr || "—"}</span><span>${x.cad || "—"}</span><span>${x.up || 0}</span>`; }).join("")}</div></div>` : a.src === "garmin" ? `<p class="note">Los parciales, el pulso por zonas y la cadencia llegan cuando Garmin manda los detalles del entreno (unos minutos después).</p>` : ""}
+    ${R.info.length ? `<div class="card"><h2>Datos</h2><ul class="sp-ul">${li(R.info, "ℹ️")}</ul></div>` : ""}
+    ${R.injTxt.length ? `<div class="card sp-inj-box"><b>🩹 Tus lesiones</b>${R.injTxt.map((t) => `<p class="note" style="margin:0">${esc(t)}</p>`).join("")}<button class="link" data-act="inj-open">Ver mi historial de lesiones ›</button></div>` : ""}
+    ${a.src === "app" ? `<button class="btn ghost" data-act="sport-open" data-id="${esc(a.id)}">Ver mapa y datos</button>` : ""}</div>`, { kind: "ana" });
 }
