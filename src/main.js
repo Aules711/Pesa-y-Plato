@@ -582,7 +582,8 @@ function openGymPlan(){
     <div class="f"><span>¿Dónde entrenas?</span><div class="seg-g">${o("gpEq","gym","Gimnasio",G.equip||"gym")}${o("gpEq","db","Mancuernas",G.equip)}${o("gpEq","home","Casa sin material",G.equip)}</div></div>
     <div class="f"><span>Experiencia</span><div class="seg-g">${o("gpLv","beg","Empiezo",G.level)}${o("gpLv","mid","Algo de experiencia",G.level||"mid")}${o("gpLv","adv","Avanzado",G.level)}</div></div>
     <button class="btn" data-act="gym-plan-make">${G.ids?.length?"Rehacer mi plan":"Crear mi plan"}</button>
-    ${G.ids?.length?`<p class="note" style="margin:0">Se cambian las rutinas de tu plan actual. Tus otras rutinas y tu historial no se tocan.</p>`:""}`);
+    ${G.ids?.length?`<p class="note" style="margin:0">Se cambian las rutinas de tu plan actual. Tus otras rutinas y tu historial no se tocan.</p>
+    <button class="btn danger-soft" data-act="gym-plan-del">🗑️ Borrar mi plan de gym</button>`:""}`);
 }
 async function makeGymRoutines(){
   const v = n => document.querySelector(`input[name=${n}]:checked`)?.value;
@@ -947,7 +948,8 @@ function coachView(A){
     ${P.tips.length ? `<div class="card"><h2>Consejos de tu entrenador</h2><ul class="coach-tips">${P.tips.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
     <div class="card"><h2>¿Quieres cambiar algo?</h2><p class="note">Pulsa «↻ Cambiar» en cualquier plato para cambiarlo por otro, o pide una propuesta nueva entera.</p>
       <button class="btn soft" data-act="coach-again">🔀 Otra propuesta</button>
-      <button class="btn ghost" data-act="coach-new">Cambiar mis respuestas</button></div>
+      <button class="btn ghost" data-act="coach-new">Cambiar mis respuestas</button>
+      <button class="btn danger-soft" data-act="coach-del">🗑️ Borrar este plan</button></div>
     <p class="note chat-foot">Orientativo: no sustituye a un médico ni a un dietista-nutricionista colegiado.</p>`;
 }
 function coachRun(reuse){
@@ -1278,7 +1280,8 @@ function planSection(){
     <p class="note">${P?.days ? `Tienes el plan mensual <b>${esc(P.title||"")}</b>: el día ${parseDay(today()).getDate()} del mes toca el día ${Math.min(parseDay(today()).getDate(), P.days.length)} del plan.` : weekly ? "Tienes un plan semanal: cada día de la semana aparece ya puesto en el Diario." : "Aún no tienes plan. Impórtalo (semanal o de un mes) y cada día aparecerá ya puesto en el Diario: solo tendrás que escribir los gramos."}</p>
     <label class="btn" style="cursor:pointer;text-align:center">${P?.days||weekly ? "Importar otro plan" : "Importar mi plan"} (.json)<input type="file" id="impPlan" accept=".json,application/json" hidden></label>
     <button class="btn ghost" data-act="plan-edit" data-d="${wdayOf(today())}">${weekly ? "Editar plan semanal" : "Crear plan semanal a mano"}</button>
-    ${P?.days ? `<span class="note"><button class="link" data-act="plan30-off">Quitar plan mensual</button></span>` : ""}</div>`;
+    ${P?.days ? `<span class="note"><button class="link" data-act="plan30-off">Quitar plan mensual</button></span>` : ""}
+    ${P?.days || weekly ? `<button class="btn danger-soft" data-act="mealplan-del">🗑️ Borrar mi plan de comidas</button>` : ""}</div>`;
 }
 function planEmpty(){
   const n = wdayOf(day); if (hasPlanFor(day)) return "";
@@ -2380,6 +2383,9 @@ document.addEventListener("click", e => {
     case "fab-plan": closeSheet(); tab = "nutri"; nutriSub = "ia"; render(); scrollTo(0,0); break;
     case "coach-go": coachRun(); break;
     case "coach-again": coachRun(true); break;
+    case "coach-del": if (el.dataset.sure){ del("aiplan").then(() => { S.aiplan = null; render(); scrollTo(0,0); }); } else { el.dataset.sure = 1; el.textContent = "Toca otra vez para borrar"; el.classList.add("danger"); } break;
+    case "mealplan-del": if (el.dataset.sure){ Promise.all([put("plan", {days:{}}), del("plandates")]).then(() => { S.plan = {}; S.planDates = null; render(); }); } else { el.dataset.sure = 1; el.textContent = "Toca otra vez para borrar"; el.classList.add("danger"); } break;
+    case "gym-plan-del": if (el.dataset.sure){ { const ids = S.settings.gym?.ids || []; put("routines", {list:S.routines.filter(r=>!ids.includes(r.id))}).then(() => { const st = {...S.settings}; delete st.gym; return put("settings", st); }).then(() => { closeSheet(); render(); }); } } else { el.dataset.sure = 1; el.textContent = "Toca otra vez para borrar"; el.classList.add("danger"); } break;
     case "study-menu": el.disabled = true; applyMenu(); break;
     case "coach-swap": coachSwap(+el.dataset.d, el.dataset.m); break;
     case "coach-new": coach.step = "form"; coach.err = ""; render(); scrollTo(0,0); break;

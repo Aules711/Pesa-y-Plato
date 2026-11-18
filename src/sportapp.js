@@ -297,7 +297,7 @@ function vPlan(k) {
   const { esc } = C, P = C.S.scoach?.[k];
   if (!P || st.edit) return planForm(k);
   const cur = curWeek(P), all = P.weeks.reduce((n, x) => n + x.sessions.length, 0), dn = Object.keys(P.done || {}).length, A = adjFor(k), src = paceFor(k).src;
-  return `<div class="card sc-hero"><span class="sc-e" aria-hidden="true">${COACH[k].e}</span><div><b>${esc(goalName(k, P.req.goal))}</b><span class="note">${P.req.date ? `Para el ${C.parseDay(P.req.date).getDate()} de ${MONTHS[C.parseDay(P.req.date).getMonth()]} · ` : ""}${P.req.days} días/semana · ${P.weeks.length} semanas · ${dn}/${all} hechas</span></div></div>
+  return `<div class="card sc-hero"><span class="sc-e" aria-hidden="true">${COACH[k].e}</span><div style="flex:1"><b>${esc(goalName(k, P.req.goal))}</b><span class="note">${P.req.date ? `Para el ${C.parseDay(P.req.date).getDate()} de ${MONTHS[C.parseDay(P.req.date).getMonth()]} · ` : ""}${P.req.days} días/semana · ${P.weeks.length} semanas · ${dn}/${all} hechas</span></div><button class="iconb" data-act="sp-del-plan" aria-label="Borrar plan" title="Borrar plan">🗑️</button></div>
   ${A.f !== 1 || A.easy ? `<div class="sp-adj">⚙️ ${esc(A.why)}</div>` : ""}
   ${cur >= P.weeks.length ? `<div class="card"><b>🎉 ¡Plan terminado!</b><p class="note">Crea uno nuevo para seguir mejorando.</p><button class="btn" data-act="sp-edit" data-v="1">Nuevo plan</button></div>` : ""}
   ${P.weeks.map((_, w) => weekBlock(k, P, w, cur)).join("")}
@@ -513,7 +513,7 @@ export function spAction(act, el, k) {
       if (L && !zonesOf(k).thr) C.put("zones", { map: { ...(C.S.zones || {}), [k]: { ...zonesOf(k), thr: Math.round(L.thr) } } });
       const gT = parseT(C.$("scTime")?.value || ""), gD = C.$("scTDist")?.value;
       makePlanFor(k, { goal: gT && gD ? gD : r("scGoal"), level: L ? L.lv : r("scLv") || "mid", days: +r("scDays") || 3, date: C.$("scDate")?.value || "", goalTime: parseT(C.$("scTime")?.value || ""), ...(pbs ? { pbs } : {}) }).then(() => { st.edit = false; st.week = null; C.render(); scrollTo(0, 0); }); return true; }
-    case "sp-del-plan": if (d.sure) { const P = { ...C.S.scoach }; delete P[k]; C.put("sportcoach", { plans: P }).then(C.render); } else { d.sure = 1; el.textContent = "Toca otra vez para borrar el plan"; } return true;
+    case "sp-del-plan": if (d.sure) { const P = { ...C.S.scoach }; delete P[k]; C.put("sportcoach", { plans: P }).then(C.render); } else { d.sure = 1; el.textContent = el.classList.contains("iconb") ? "¿Borrar?" : "Toca otra vez para borrar el plan"; el.classList.add("sure"); } return true;
     case "sp-done": setDone(k, +d.w, +d.i); if (C.$("sheet") && !C.$("sheet").hidden) C.closeSheet(); C.render(); return true;
     case "sp-ses": { const x = weekSessions(k, +d.w)[+d.i]; if (x) C.openSheet(DAY_N[x.d], sesCard(k, { x, w: +d.w, i: +d.i }, { noToday: true })); return true; }
     case "sp-gps": C.closeSheet(); C.trkStart(COACH[k].gps, d.w != null ? { k, w: +d.w, i: +d.i } : { k }); return true;
@@ -784,7 +784,8 @@ export function openAnalysis(id) {
       ${R.splits.map((x) => { const len = x.part ? (x.k % 1 || 1) : 1, pv = x.s / len; return `<b>${x.part ? String(x.k).replace(".", ",") : x.k}</b><span>${k === "bike" ? km2(3600 / pv) : paceS(pv)}</span><span>${x.hr || "—"}</span><span>${x.cad || "—"}</span><span>${x.up || 0}</span>`; }).join("")}</div></div>` : a.src === "garmin" ? `<p class="note">Los parciales, el pulso por zonas y la cadencia llegan cuando Garmin manda los detalles del entreno (unos minutos después).</p>` : ""}
     ${R.info.length ? `<div class="card"><h2>Datos</h2><ul class="sp-ul">${li(R.info, "ℹ️")}</ul></div>` : ""}
     ${R.injTxt.length ? `<div class="card sp-inj-box"><b>🩹 Tus lesiones</b>${R.injTxt.map((t) => `<p class="note" style="margin:0">${esc(t)}</p>`).join("")}<button class="link" data-act="inj-open">Ver mi historial de lesiones ›</button></div>` : ""}
-    ${a.src === "app" ? `<button class="btn ghost" data-act="sport-open" data-id="${esc(a.id)}">Ver mapa y datos</button>` : ""}</div>`, { kind: "ana" });
+    ${a.src === "app" ? `${a.route?.length ? `<button class="btn ghost" data-act="sport-open" data-id="${esc(a.id)}">Ver mapa</button>` : ""}<button class="btn danger-soft" data-act="sport-del" data-id="${esc(a.id)}">🗑️ Borrar entreno</button>`
+      : `<p class="note" style="margin:0">Este entreno viene de ${a.src === "garmin" ? "Garmin" : a.src === "whoop" ? "WHOOP" : "Strava"}: si lo borras allí, desaparece también de aquí.</p>`}</div>`, { kind: "ana" });
 }
 
 /* ---------- vistas simplificadas: Plan (semanas o mes + carreras) y Progreso (todo en una) ---------- */
