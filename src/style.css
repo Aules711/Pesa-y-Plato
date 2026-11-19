@@ -960,3 +960,85 @@ button.sp-inj-box{flex-direction:row!important;gap:8px;align-items:flex-start}
 .sp-pb summary{cursor:pointer;list-style:none}.sp-pb summary::-webkit-details-marker{display:none}.sp-lvl{padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--sp) 12%,transparent);display:flex;flex-direction:column;gap:6px}.sp-lvl-t{font-size:17px;color:var(--sp)}
 .sp-gt{display:flex;gap:8px;align-items:center;margin-top:6px}.sp-gt select{flex:1.4;min-width:0}.sp-gt input{flex:1;min-width:0}.sp-gt span{color:var(--muted);font-weight:600}
 .btn.danger-soft{background:rgba(232,54,79,.12)!important;color:#E8364F!important;border:0}.btn.danger-soft.danger{background:#E8364F!important;color:#fff!important}.iconb.sure{width:auto;padding:0 10px;background:#E8364F;color:#fff;font-weight:700;font-size:13px;border-radius:12px}
+
+/* ================= diseño «Fresco» (lila y pastel) + modo noche ================= */
+:root{
+  --bg:#F1EFFA; --surface:#FFFFFF; --surface2:#ECE8FB; --line:#E0DBF5; --ink:#1D1640; --muted:#5C5679;
+  --accent:#5B3FD9; --accent-soft:#E4DEFF; --accent-strong:#5B3FD9; --done:#D3F3E6; --ok:#17855F; --warn:#C2410C; --danger:#D42A1E;
+  --prot:#5B3FD9; --carb:#E0702E; --fat:#17936A;
+  --chip-p:#E4DEFF; --chip-c:#FFE3D2; --chip-f:#D3F3E6; --peach:#FFB48A; --nav:#1D1640; --nav-ink:#C9C1F2;
+  --display:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --body:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --radius:24px; --shadow:0 1px 2px rgba(29,22,64,.05),0 10px 28px -16px rgba(29,22,64,.22); color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#120F24; --surface:#1D1838; --surface2:#2A2450; --line:#332C5C; --ink:#F1EEFF; --muted:#ADA6D2;
+  --accent:#8069F7; --accent-soft:#2E2660; --accent-strong:#6A52E8; --done:#173D33; --ok:#5ED3A4; --warn:#F59E62; --danger:#F7726A;
+  --prot:#A897FF; --carb:#FFA36E; --fat:#5ED3A4;
+  --chip-p:#2E2660; --chip-c:#4A2E22; --chip-f:#173D33; --peach:#FFB48A; --nav:#0B0918; --nav-ink:#A9A0D8;
+  --shadow:0 10px 28px -16px rgba(0,0,0,.7); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#120F24; --surface:#1D1838; --surface2:#2A2450; --line:#332C5C; --ink:#F1EEFF; --muted:#ADA6D2;
+  --accent:#8069F7; --accent-soft:#2E2660; --accent-strong:#6A52E8; --done:#173D33; --ok:#5ED3A4; --warn:#F59E62; --danger:#F7726A;
+  --prot:#A897FF; --carb:#FFA36E; --fat:#5ED3A4;
+  --chip-p:#2E2660; --chip-c:#4A2E22; --chip-f:#173D33; --peach:#FFB48A; --nav:#0B0918; --nav-ink:#A9A0D8;
+  --shadow:0 10px 28px -16px rgba(0,0,0,.7); color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
+body{font-family:var(--body)}
+.card{border-radius:24px;box-shadow:var(--shadow)}
+.btn{border-radius:14px}
+.btn:not(.soft):not(.ghost):not(.danger-soft){background:var(--accent-strong)}
+#main > h1, #main > .top > h1, .meal-h h3, .ex-head h3, .sheet-head h3, .daynav .lbl, .title-in, .pl-dish, .hello h1, .prem h3, .hero h1, .lsec{
+  text-transform:none;letter-spacing:-.02em;font-weight:800}
+.ab-t{font-weight:800}
+.ab-av{background:var(--peach);color:#1D1640;border:0}
+/* semana: día de hoy en pastilla */
+.wk-d{border-radius:16px;padding:6px 0}
+.wk-d.today{background:var(--accent-strong);color:#E4DEFF}
+.wk-d.today i{border:2px solid rgba(255,255,255,.7);border-style:solid}
+.wk-d.on i{background:var(--fat);border-color:var(--fat)}
+.wk-d.today.on i{background:#fff;color:var(--accent-strong);border-color:#fff}
+/* tarjeta de calorías con medio arco */
+.arc-card{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 16px 16px}
+.arc-b{position:relative;width:240px;max-width:100%;aspect-ratio:240/132;border:0;background:none;padding:0;cursor:pointer;color:inherit;font:inherit}
+.arc{width:100%;height:100%;display:block}
+.arc path{fill:none;stroke-width:18;stroke-linecap:round}
+.arc-bg{stroke:var(--surface2)}
+.arc-fg{stroke:var(--accent);transition:stroke-dasharray .9s cubic-bezier(.2,.7,.2,1)}
+.arc-fg.over{stroke:var(--danger)}
+.arc-c{position:absolute;left:0;right:0;bottom:2px;display:flex;flex-direction:column;align-items:center}
+.arc-c b{font-size:40px;font-weight:800;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.arc-c b.neg{color:var(--danger)}
+.arc-c small{font-size:13px;color:var(--muted)}
+.arc-sub{font-size:12.5px;color:var(--muted);text-align:center}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;border:0;background:none;padding:0;cursor:pointer;font:inherit;color:var(--ink)}
+.chip-m{padding:8px 12px;border-radius:999px;font-size:12.5px;font-weight:600}
+.chip-m b{font-weight:800;font-variant-numeric:tabular-nums}
+.chip-m.p{background:var(--chip-p)}.chip-m.c{background:var(--chip-c)}.chip-m.f{background:var(--chip-f)}
+@media (prefers-reduced-motion:reduce){.arc-fg{transition:none}}
+/* comidas en tarjetas de 2 columnas */
+.ml{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ml-row{flex-direction:column;align-items:flex-start;gap:8px;min-height:112px;border-radius:22px;padding:14px;background:var(--surface);border:2px dashed var(--line)}
+.ml-row .ml-n{width:100%}
+.ml-row .ml-n b{font-size:15px;font-weight:800}
+.ml-row .ml-n small{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ml-row .reg-btn{margin-top:auto;padding:8px 14px;font-size:13px}
+.ml-row.done{border:0}
+.ml-row.done:nth-child(4n+1){background:var(--chip-c)}
+.ml-row.done:nth-child(4n+2){background:var(--chip-f)}
+.ml-row.done:nth-child(4n+3){background:var(--chip-p)}
+.ml-row.done:nth-child(4n+4){background:var(--surface2)}
+.ml-row.done .ml-n small{color:var(--ink);opacity:.8}
+.ml-row.done .ml-ok{display:none}
+.ml-row.done .ml-add{margin-top:auto;align-self:flex-end;background:rgba(255,255,255,.55);color:var(--ink)}
+:root[data-theme="dark"] .ml-row.done .ml-add{background:rgba(255,255,255,.12)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .ml-row.done .ml-add{background:rgba(255,255,255,.12)}}
+/* barra de abajo oscura y flotante + botón melocotón */
+nav.tabbar{background:var(--nav);border:0;border-radius:24px;padding:8px;box-shadow:0 14px 30px -14px rgba(29,22,64,.6)}
+.tabbar button{color:var(--nav-ink);border-radius:16px}
+.tabbar button[aria-current="page"]{background:#FFFFFF;color:#1D1640}
+.fab{border-radius:22px;background:var(--peach);color:#1D1640;box-shadow:0 12px 26px -10px rgba(255,140,90,.7)}
+.reg-btn,.ml-add{background:var(--accent-soft);color:var(--accent)}
+:root[data-theme="dark"] .reg-btn{color:#CFC4FF}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .reg-btn{color:#CFC4FF}}
+:root[data-theme="dark"] nav.tabbar{border:1px solid var(--line)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) nav.tabbar{border:1px solid var(--line)}}

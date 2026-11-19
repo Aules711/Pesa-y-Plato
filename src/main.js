@@ -404,6 +404,11 @@ function bestsBefore(name, beforeStart){ let kg=0, rm=0, has=false;
   return {kg,rm,has}; }
 
 /* ================= render principal ================= */
+function themePref(){ try { return localStorage.getItem("bh-theme") || "auto"; } catch { return "auto"; } }
+function setTheme(v){ try { localStorage.setItem("bh-theme", v); } catch {} applyTheme(); }
+function applyTheme(){ const v = themePref(), r = document.documentElement; if (v === "auto") delete r.dataset.theme; else r.dataset.theme = v;
+  const dark = v === "dark" || (v === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute("content", dark ? "#120F24" : "#F1EFFA")); }
 function render(){
   if (!TRAIN_ON && tab==="train") tab = "home";
   const SP = sportsOn(); if (!SP && tab === "train") tab = "home";
@@ -481,11 +486,14 @@ function homeFood(t, tot, remaining){
         ${logged.length ? `<span class="ml-ok" aria-label="Apuntado">✓</span><button class="ml-add" data-act="home-add" data-meal="${m}" aria-label="Añadir más a ${m}">+</button>` : `<button class="reg-btn" data-act="home-add" data-meal="${m}">Regístralo</button>`}</div>`; }).join("");
   const nutriCard = `<button class="card nutri-cta" data-act="open-nutri"><span class="chat-av" aria-hidden="true">✨</span><span><b>${S.aiplan?.plan ? "Tu plan a medida" : "Crea tu plan a medida"}</b><small>${isPremium() ? (S.aiplan?.plan ? esc(S.aiplan.plan.title) : "Tu entrenador personal te prepara el menú de la semana") : "Entrenador de nutrición · Premium"}</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
   const pct = Math.min(100, kgoal ? tot.kcal/kgoal*100 : 0);
-  return `<button class="card hc" data-act="tab" data-tab="food"><span class="hc-l">Calorías</span>
-      <span class="hc-row"><span><b class="hc-big">${fmt(tot.kcal)} cal</b> <span class="note">/ ${fmt(kgoal)}</span></span><span><b class="${remaining<0?"neg":""}">${fmt(Math.abs(remaining))}</b> <span class="note">${remaining<0?"de más":"restan"}</span></span></span>
-      <span class="hc-bar"><i style="width:${pct}%" class="${remaining<0?"over":""}"></i></span>
-      ${ex ? `<span class="note">Incluye ${fmt(ex)} kcal de ejercicio</span>` : ""}</button>
-    <button class="card hc hm3" data-act="nutri-go" data-k="mac">${[["Carbohidratos",tot.c,g.c,"var(--carb)"],["Grasas",tot.f,g.f,"var(--fat)"],["Proteínas",tot.p,g.p,"var(--prot)"]].map(([l,v,o,c]) => `<span class="hm3-c"><span class="hc-l">${l}</span><b>${r0(v)} g</b> <span class="note">/ ${r0(o)}</span><span class="hc-bar"><i style="width:${Math.min(100,o?v/o*100:0)}%;background:${c}"></i></span></span>`).join("")}</button>
+  return `<div class="card arc-card">
+      <button class="arc-b" data-act="tab" data-tab="food" aria-label="${fmt(tot.kcal)} de ${fmt(kgoal)} kcal">
+        <svg class="arc" viewBox="0 0 240 132" aria-hidden="true"><path class="arc-bg" d="M20 120 A100 100 0 0 1 220 120" pathLength="100"/><path class="arc-fg ${remaining<0?"over":""}" d="M20 120 A100 100 0 0 1 220 120" pathLength="100" style="stroke-dasharray:${pct} 100"/></svg>
+        <span class="arc-c"><b class="${remaining<0?"neg":""}">${fmt(Math.abs(remaining))}</b><small>${remaining<0?"kcal de más":"kcal por comer"}</small></span>
+      </button>
+      <span class="arc-sub">${fmt(tot.kcal)} comidas · objetivo ${fmt(kgoal)}${ex ? ` · +${fmt(ex)} ejercicio` : ""}</span>
+      <button class="chips" data-act="nutri-go" data-k="mac">${[["Proteína",tot.p,g.p,"p"],["Carbos",tot.c,g.c,"c"],["Grasa",tot.f,g.f,"f"]].map(([l,v,o,k]) => `<span class="chip-m ${k}">${l} <b>${r0(v)}/${r0(o)} g</b></span>`).join("")}</button>
+    </div>
     ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(actChip).join("")}</div>` : ""}
     ${S.fast?.active ? `<button class="card nutri-cta" data-act="fast-open"><span class="chat-av" aria-hidden="true">⏳</span><span><b>Ayunando · <span data-fast="t"></span></b><small data-fast="left"></small></span><span class="prof-ch" aria-hidden="true">›</span></button>` : ""}
     <div class="sec-h"><h3>Comidas</h3><button class="link" data-act="tab" data-tab="food">Mira el diario</button></div>
@@ -1483,6 +1491,7 @@ function viewProfile(){
   <div class="prof-group">
     ${row("conn","🔗","Conexiones", (() => { const on = [S.strava?"Strava":"", S.garmin?"Garmin":"", S.whoop?"WHOOP":""].filter(Boolean); return on.length ? on.join(", ") + (on.length>1?" conectados":" conectado") : "Garmin o WHOOP ⭐"; })())}
     ${row("inj","🩹","Lesiones", (S.injuries||[]).length ? `${S.injuries.length} apuntada${S.injuries.length>1?"s":""}${S.injuries.some(x=>x.status!=="ok")?" · alguna sin recuperar":""}` : "Tu preparador las tiene en cuenta", "inj-open")}
+    ${row("theme","🌙","Modo noche", ({auto:"Automático (como tu móvil)", light:"Apagado", dark:"Encendido"})[themePref()], "theme-cycle")}
     ${row("account","👤","Cuenta", "Email y contraseña")}
     ${row("io","📥","Importar y exportar", "Tu plan, copias de seguridad, MyFitnessPal")}
     ${row("privacy","🔒","Privacidad y datos", "Borrar datos, eliminar cuenta, términos")}
@@ -2283,6 +2292,7 @@ document.addEventListener("click", e => {
       if (v.w && !S.body[today()]) put("body", {log:{...S.body, [today()]:{kg:r1(v.w)}}});
       closeSheet(); tab = "food"; render(); setBanner(`Objetivo guardado: ${fmt(g.kcal)} kcal y ${g.p} g de proteína al día.`); setTimeout(() => setBanner(""), 5000); break; }
     case "logout": sb.auth.signOut(); break;
+    case "theme-cycle": { const order = ["auto","dark","light"]; setTheme(order[(order.indexOf(themePref())+1)%3]); render(); break; }
     case "wipe": $("wipeBox").innerHTML = `<div class="confirm"><span style="flex:1">Se borrarán todos tus entrenos, comidas, rutinas y vídeos. No se puede deshacer.</span><button class="btn danger" data-act="wipe-yes">Borrar todo</button><button class="btn ghost" data-act="tab" data-tab="profile">Cancelar</button></div>`; break;
     case "delacc": $("wipeBox").innerHTML = `<div class="confirm"><span style="flex:1">Se eliminará tu cuenta con todos tus entrenos, comidas, rutinas y vídeos. No se puede deshacer.</span><button class="btn danger" data-act="delacc-yes">Eliminar cuenta</button><button class="btn ghost" data-act="tab" data-tab="profile">Cancelar</button></div>`; break;
     case "delacc-yes": el.disabled = true; deleteAccount().then(r => { if (r.ok){ localStorage.clear(); location.reload(); } else setBanner(r.code==="disabled" ? "El borrado de cuenta aún no está configurado. Escribe al contacto de la política de privacidad." : "No se pudo eliminar la cuenta. Inténtalo otra vez."); }); break;
