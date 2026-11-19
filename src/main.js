@@ -4,6 +4,7 @@ import { microFor, microFromOFF, MICRO_KEYS } from "./micros.js";
 import { makePlan, swapMeal, PLANNER_FOODS, planConflicts, avoidLabels } from "./planner.js";
 import { fileText, parsePlan, parseStudy, EXTRA_FOODS } from "./planparse.js";
 import { SPORT_LIST, SPORT, kcalFor, pace, speed, newTrack, elapsed, addPoint, markGap, packRoute, makeMap, drawRoute, hereMarker, fitRoute } from "./sport.js";
+import { MORE_FOODS } from "./foods.js";
 import { COACH as SPC } from "./coach.js";
 import { spInit, spView, spAction, spEnter, spSubtitle, todayFor, kmTxt, injAction, openAnalysis, openInjuries, isDone as spIsDone, setDone as spSetDone, SP_COLOR } from "./sportapp.js";
 import { TIERS, STD, tierOf, kgFor, repsFor, isBW, exerciseRanks, muscleRanks, GYM_MUSCLES, bodyMap, badge, suggest, makeGymPlan, NEW_LIB } from "./gym.js";
@@ -85,7 +86,12 @@ const FOODS = [
 ["Hummus",166,8,14,9.6,"ración",50],["Chocolate negro 85%",600,10,20,50,"onza",10],["Miel",304,0.3,82,0,"cucharada",20],["Galletas",480,7,68,20,"unidad",8],
 ["Tortilla de patata",196,6.5,14,13,"pincho",120],["Pizza",266,11,33,10,"porción",110],["Hamburguesa completa",250,13,24,11,"unidad",220],["Patatas fritas de bolsa",536,7,53,35,"bolsa",40],
 ["Café con leche",30,1.9,2.8,1.2,"taza",200],["Zumo de naranja",45,0.7,10,0.2,"vaso",200],["Refresco de cola",42,0,10.6,0,"lata",330],["Cerveza",43,0.5,3.6,0,"caña",200]
-].map(([name,kcal,p,c,f,sn,sg]) => ({name,kcal,p,c,f,servings:[{n:sn,g:sg}]}));
+];
+for (const r of MORE_FOODS) if (!FOODS.some(x => x[0].toLowerCase() === r[0].toLowerCase())) FOODS.push(r);
+FOODS.splice(0, FOODS.length, ...FOODS.map(([name,kcal,p,c,f,sn,sg]) => ({name,kcal,p,c,f,servings:[{n:sn,g:sg}]})));
+// búsqueda sin tildes y por varias palabras ("pollo asado", "platano")
+const fnorm = s => String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+function foodMatch(name, q){ const n = fnorm(name), w = fnorm(q).split(/\s+/).filter(Boolean); if (!w.length) return 1; if (!w.every(x => n.includes(x))) return 0; return n.startsWith(w[0]) ? 3 : n.split(/[^a-z0-9ñ]+/).some(t => t.startsWith(w[0])) ? 2 : 1; }
 const MEALS = ["Desayuno","Comida","Cena","Snacks"];
 
 /* ================= estado y almacenamiento ================= */
@@ -1362,7 +1368,7 @@ function openPlanPicker(n, m){
 }
 function drawPlanPicker(){
   const c = sheetCtx, f = c.q.trim().toLowerCase(), seen = new Set();
-  c.list = [...S.foods, ...recentFoods(), ...FOODS].filter(x => { if (seen.has(x.name)) return false; seen.add(x.name); return !f || x.name.toLowerCase().includes(f); }).slice(0,30);
+  c.list = [...S.foods, ...recentFoods(), ...FOODS].filter(x => { if (seen.has(x.name)) return false; seen.add(x.name); return !f || foodMatch(x.name, f) > 0; }).slice(0,30);
   $("ppres").innerHTML = `<div class="list">${c.list.map((x,i)=>`<button class="li" data-act="plan-pick-food" data-i="${i}"><span class="n">${esc(x.name)}<small>${fmt(x.kcal)} kcal · P ${r1(x.p)} · C ${r1(x.c)} · G ${r1(x.f)} por 100 g</small></span><span>+</span></button>`).join("") || `<div class="li note" style="cursor:default">Sin resultados</div>`}</div>`;
 }
 function planAddFood(n, m, x, g){
@@ -1688,7 +1694,8 @@ const parseNum = s => { s = String(s??"").trim().replace(/\s/g,""); if (/^-?\d{1
 function drawFoodResults(){
   const c = sheetCtx, f = c.q.trim().toLowerCase();
   const pool = [...recentFoods().map(x=>({...x, tag:"Reciente"})), ...S.foods.map(x=>({...x, tag:"Mis alimentos"})), ...FOODS];
-  const seen = new Set(); const list = pool.filter(x=>{ if (seen.has(x.name)) return false; seen.add(x.name); return !f || x.name.toLowerCase().includes(f); }).slice(0,40);
+  const seen = new Set(); const list = pool.map((x, i) => ({x, i, sc: foodMatch(x.name, f)})).filter(({x, sc}) => { if (!sc || seen.has(x.name)) return false; seen.add(x.name); return true; })
+    .sort((a, b) => f ? (b.sc - a.sc) || (a.x.tag ? -1 : 0) - (b.x.tag ? -1 : 0) || a.x.name.length - b.x.name.length : a.i - b.i).slice(0, 50).map(o => o.x);
   c.list = list;
   $("fres").innerHTML = `<div class="list">${list.map((x,i)=>{ const sv = x.servings?.[0]; const kc = sv ? x.kcal*sv.g/100 : x.kcal;
     return `<button class="li" data-act="pick-food" data-i="${i}"><span class="n">${esc(x.name)}<small>${x.tag?esc(x.tag)+" · ":""}${sv?`1 ${esc(sv.n)} (${sv.g} g)`:"100 g"}</small></span><span class="tnum">${fmt(kc)} kcal</span></button>`; }).join("") ||
