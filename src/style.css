@@ -1069,3 +1069,13 @@ nav.tabbar{background:var(--nav);border:0;border-radius:24px;padding:8px;box-sha
 .alg-c input:checked + span{background:var(--chip-c);border-color:var(--carb)}
 .alg-c input:checked + span::before{content:"🚫 ";margin-right:4px}
 .alg-c input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+.in-sec{margin:4px 0 0;font-size:15px;font-weight:800}
+.in-opt{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:18px;padding:12px 14px;cursor:pointer;color:var(--ink);font:inherit}
+.in-opt.on{border-color:var(--accent);background:var(--accent-soft)}
+.in-opt-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.in-hr{display:grid;grid-template-columns:86px 1fr;gap:8px;font-size:13.5px}
+.in-hr > span:first-child{color:var(--muted);font-variant-numeric:tabular-nums}
+.in-add .btn{flex:1;min-width:140px}
+.chip.on{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff}
+.card-in{background:var(--surface2);border-radius:18px;padding:14px;display:flex;flex-direction:column}
+.seg button:disabled{opacity:.45;cursor:not-allowed}

@@ -1322,59 +1322,123 @@ function weightCard(){
   return "";
 }
 
-/* ---------- Intra: lo que comes durante el entreno ---------- */
-const IN_SP = [["run","Correr"],["bike","Bici"],["gym","Gym / fuerza"],["other","Otro deporte"]];
-const IN_INT = [["baja","Suave"],["media","Media"],["alta","Fuerte"]];
-const IN_MET = {run:{baja:8.5,media:10,alta:12}, bike:{baja:6,media:8,alta:10.5}, gym:{baja:3.5,media:5,alta:6}, other:{baja:5,media:7,alta:9}};
+/* ---------- Intra: lo que comes durante el entreno ----------
+   Datos reales: el entreno de TrainingPeaks (o el que metes tú) → kJ de trabajo ≈ kcal gastadas.
+   Tú eliges los hidratos por hora (CH/h) o reponer las kcal del entreno repartidas por horas,
+   y la app te da varias opciones de comida hora a hora. */
+const IN_GPH = [30, 45, 60, 75, 90, 120];
+// [singular, plural, paso, máximo por hora]
+const IN_U = {"Gel energético":["gel","geles",1,4], "Bebida isotónica":["bidón de isotónica (500 ml)","bidones de isotónica (500 ml)",.5,1.5], "Plátano":["plátano","plátanos",.5,1],
+  "Dátiles":["dátil","dátiles",1,6], "Dulce de membrillo":["porción de membrillo (30 g)","porciones de membrillo (30 g)",1,3], "Barrita energética":["barrita","barritas",.5,2],
+  "Gominolas":["puñado de gominolas (30 g)","puñados de gominolas (30 g)",.5,3], "Pasas":["puñado de pasas (30 g)","puñados de pasas (30 g)",.5,2]};
+const flash = t => { setBanner(t); setTimeout(() => setBanner(""), 4000); };
+const IN_OPTS = [
+  {id:"gel",   t:"Geles + agua",          it:["Gel energético"]},
+  {id:"iso",   t:"Isotónica + geles",     it:["Bebida isotónica","Gel energético"], base:["Bebida isotónica", 1]},
+  {id:"real",  t:"Comida real",           it:["Plátano","Dátiles","Dulce de membrillo"]},
+  {id:"bar",   t:"Barritas + isotónica",  it:["Barrita energética","Bebida isotónica"], base:["Bebida isotónica", .5]},
+  {id:"sweet", t:"Gominolas y pasas",     it:["Gominolas","Pasas"]},
+];
+const inFood = n => FOODS.find(x => x.name === n);
+const inCh = n => { const F = inFood(n); return F ? F.c * (F.servings?.[0]?.g || 100) / 100 : 0; };   // g de hidratos por unidad (de la base de alimentos)
+const fr = q => { const w = Math.floor(q), h = q - w >= .5; return w ? `${w}${h ? "½" : ""}` : h ? "½" : "0"; };
+const inTxt = (n, q) => { const u = IN_U[n] || [n, n]; return `${fr(q)} ${q > 1 ? u[1] : u[0]}`; };
+// mejor combinación de unidades para llegar a g hidratos (pocas unidades y cerca del objetivo)
+function inSolve(o, g, len = 1){
+  if (g <= 0) return [];
+  const steps = o.it.map(n => (IN_U[n] || [,,1])[2]), ch = o.it.map(inCh), base = o.base ? Math.min(o.base[1] * len, Math.round(g / inCh(o.base[0]) * 2) / 2) : 0;
+  let best = null;
+  const rec = (i, acc) => {
+    if (i === o.it.length){ const tot = acc.reduce((a, q, j) => a + q * ch[j], 0), n = acc.reduce((a, q) => a + q, 0);
+      if (!tot) return; const sc = Math.abs(tot - g) + n * 1.5 + (tot < g * .85 ? 15 : 0); if (!best || sc < best.sc) best = {sc, acc:[...acc]}; return; }
+    const lo = o.base && o.it[i] === o.base[0] ? base : 0;
+    for (let q = lo; q <= (IN_U[o.it[i]]?.[3] ?? 6) * len + 1e-9; q += steps[i]){ acc.push(q); rec(i + 1, acc); acc.pop(); if (q * ch[i] > g * 1.3) break; }
+  };
+  rec(0, []);
+  return best ? o.it.map((n, j) => [n, best.acc[j]]).filter(([, q]) => q > 0) : [];
+}
 function intraSes(d){
-  const m = S.settings.intra?.[d]; if (m?.dur) return {...m, manual:true};
+  const m = S.settings.intra?.[d]; if (m?.dur) return m;
   if (d === today() && sportsOn()){ try {
-    const L = todayFor("run").map(o => o.x).filter(x => x.t !== "S");
-    const x = L.find(x => x.dur || x.km); if (x){ const dur = Math.round(x.dur || x.km * 6);
-      return {dur, km:x.km || 0, sport:"run", int:x.t === "Q" || x.t === "RACE" ? "alta" : x.t === "L" ? "media" : "baja", plan:true, name:x.t === "RACE" ? "Carrera de hoy" : "Entreno de hoy del plan"}; }
+    const x = todayFor("run").map(o => o.x).find(x => x.t !== "S" && x.dur);
+    if (x) return {dur:Math.round(x.dur), name:"Entreno de hoy de tu plan de running", src:"plan"};
   } catch {} }
   return null;
 }
-function intraCalc(s){
-  const kg = lastKg() || sportKg(), h = s.dur / 60, sp = IN_MET[s.sport] ? s.sport : "other", it = IN_MET[sp][s.int] ? s.int : "media";
-  const kcal = Math.round(sp === "run" && s.km ? kg * s.km * (it === "alta" ? 1.05 : 1) : IN_MET[sp][it] * kg * h);
-  let gph = s.dur < 60 ? 0 : s.dur < 90 ? 30 : s.dur < 150 ? 60 : 90;
-  if (sp === "gym") gph = s.dur >= 90 ? 30 : 0;
-  if (it === "alta" && gph && gph < 90) gph += 15;
-  if (it === "baja" && gph > 30) gph -= 15;
-  const carbs = Math.round(gph * h / 5) * 5, ml = s.dur >= 45 ? Math.round(h * 500 / 50) * 50 : 0, na = s.dur >= 90 ? Math.round(h * 400 / 50) * 50 : 0;
-  let iso = 0, gels = 0;
-  if (carbs){ iso = Math.max(0.5, Math.min(Math.round(ml / 500 * 2) / 2, Math.floor(carbs / 30 * 2) / 2)); gels = Math.max(0, Math.round((carbs - iso * 30) / 27)); }
-  const parts = [];
-  if (iso) parts.push(`${String(iso).replace(".", ",")} botella${iso > 1 ? "s" : ""} de isotónica (${fmt(iso * 500)} ml)`);
-  if (gels) parts.push(`${gels} gel${gels > 1 ? "es" : ""} (o ${gels} plátano${gels > 1 ? "s" : ""})`);
-  if (!carbs && ml) parts.push(`agua (≈ ${fmt(ml)} ml)`);
-  return {kcal, kj:Math.round(kcal * 4.184), gph, carbs, ml, na, iso, gels, eat:carbs * 4, txt:parts.length ? parts.join(" + ") : "Nada: con lo que comas antes te sobra. Solo agua si tienes sed."};
+const inKcal = s => +s.kcal || +s.kj || 0;    // kJ de trabajo ≈ kcal gastadas (rendimiento ~24 % × 4,184)
+function intraPlan(s){
+  const P = S.settings.intraPref || {}, h = s.dur / 60, kc = inKcal(s);
+  const mode = P.mode === "kcal" && kc ? "kcal" : "ch";
+  let gph = mode === "kcal" ? Math.round(kc / h / 4) : (+P.gph || 60), capped = false;
+  if (mode === "kcal" && gph > 120){ gph = 120; capped = true; }
+  const hours = []; for (let m = 0; m < s.dur; m += 60){ const len = Math.min(60, s.dur - m); if (len >= 10) hours.push({from:m, to:m + len, g:Math.round(gph * len / 60)}); }
+  const opts = IN_OPTS.map(o => { const per = hours.map(H => inSolve(o, H.g, (H.to - H.from) / 60)), tot = {};
+    per.forEach(L => L.forEach(([n, q]) => tot[n] = (tot[n] || 0) + q));
+    const g = Object.entries(tot).reduce((a, [n, q]) => a + q * inCh(n), 0);
+    return {...o, per, tot:Object.entries(tot), g:Math.round(g)}; });
+  return {mode, gph, capped, h, kc, total:Math.round(gph * h), hours, opts, opt:opts.find(o => o.id === P.opt) || opts[1]};
 }
-const inLabel = s => `${s.name ? s.name + " · " : ""}${fmt(s.dur)} min${s.km ? ` · ${String(s.km).replace(".", ",")} km` : ""} · ${(IN_SP.find(x => x[0] === s.sport) || IN_SP[3])[1].toLowerCase()} · ${(IN_INT.find(x => x[0] === s.int) || IN_INT[1])[1].toLowerCase()}`;
+const hm = m => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+const inSrc = s => s.src === "tp" ? "TrainingPeaks" : s.src === "plan" ? "tu plan" : "metido por ti";
 function intraCard(d, inDiary){
-  const s = intraSes(d), got = (S.diary[d] || []).filter(e => e.meal === INTRA), gotC = got.reduce((a, e) => a + (+e.c || 0), 0), gotK = got.reduce((a, e) => a + (+e.kcal || 0), 0);
-  if (!s) return inDiary ? `<div class="intra-q"><span class="note">¿Entrenas este día? Dime cuánto y te digo qué tomar durante el entreno.</span><button class="link" data-act="intra-edit" data-d="${d}">⚡ Calcular</button></div>`
-    : `<button class="card nutri-cta" data-act="intra-edit" data-d="${d}"><span class="chat-av" aria-hidden="true">⚡</span><span><b>Intra · comida durante el entreno</b><small>¿Entrenas hoy? Calculo lo que vas a quemar y qué tomar</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
-  const C = intraCalc(s);
-  const body = `<div class="in-k"><div><b>${fmt(C.kcal)}</b><span>kcal a quemar</span></div><div><b>${fmt(C.kj)}</b><span>kJ</span></div><div><b>${fmt(C.carbs)} g</b><span>hidratos a tomar</span></div></div>
-    <p class="in-txt"><b>Tómate:</b> ${C.txt}</p>
-    ${C.carbs ? `<p class="note" style="margin:0">${C.gph} g de hidratos por hora: empieza a los 20-30 min y luego cada 20-30 min.${C.gph > 60 ? " Más de 60 g/h: pruébalo antes en entrenos, no el día de la carrera." : ""}${C.na ? ` Con sales: unos ${fmt(C.na)} mg de sodio.` : ""}</p>` : ""}
-    ${C.carbs ? `<div class="in-bar"><span class="hc-bar"><i style="width:${Math.min(100, gotC / C.carbs * 100)}%"></i></span><span class="note">${fmt(gotC)} / ${fmt(C.carbs)} g apuntados${gotK ? ` · ${fmt(gotK)} kcal` : ""}</span></div>
-    <div class="in-add"><button class="chip" data-act="intra-log" data-d="${d}" data-f="Gel energético">+ Gel</button><button class="chip" data-act="intra-log" data-d="${d}" data-f="Bebida isotónica">+ Isotónica</button><button class="chip" data-act="intra-log" data-d="${d}" data-f="Plátano">+ Plátano</button><button class="chip" data-act="intra-log" data-d="${d}" data-f="Dátiles" data-n="3">+ 3 dátiles</button></div>` : ""}`;
-  if (inDiary) return `<div class="intra-in"><p class="note" style="margin:0">⚡ ${esc(inLabel(s))} <button class="link" data-act="intra-edit" data-d="${d}">Cambiar</button></p>${body}</div>`;
-  return `<div class="card intra"><div class="in-h"><span class="chat-av" aria-hidden="true">⚡</span><div><b>Intra · durante el entreno</b><small>${esc(inLabel(s))}</small></div><button class="link" data-act="intra-edit" data-d="${d}">Cambiar</button></div>${body}</div>`;
+  const s = intraSes(d), got = (S.diary[d] || []).filter(e => e.meal === INTRA), gotC = got.reduce((a, e) => a + (+e.c || 0), 0);
+  if (!s) return inDiary ? `<div class="intra-q"><span class="note">¿Entrenas este día? Trae el entreno de TrainingPeaks y te digo qué tomar durante.</span><button class="link" data-act="intra-edit" data-d="${d}">⚡ Calcular</button></div>`
+    : `<button class="card nutri-cta" data-act="intra-edit" data-d="${d}"><span class="chat-av" aria-hidden="true">⚡</span><span><b>Intra · comida durante el entreno</b><small>Trae tu entreno de TrainingPeaks y te digo cuántos hidratos tomar y en qué</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
+  const P = intraPlan(s), kc = P.kc, o = P.opt;
+  const body = `<div class="in-k"><div><b>${hm(s.dur)}</b><span>duración</span></div><div><b>${kc ? "≈ " + fmt(kc) : "—"}</b><span>${kc ? (s.kcal ? "kcal gastadas" : `kcal (de ${fmt(s.kj)} kJ)`) : "falta el kJ"}</span></div><div><b>${fmt(P.total)} g</b><span>hidratos (${P.gph} g/h)</span></div></div>
+    ${!kc ? `<p class="note" style="margin:0">Para calcular el gasto mete los kJ del entreno (salen en TrainingPeaks). <button class="link" data-act="intra-edit" data-d="${d}">Meter kJ</button></p>` : ""}
+    <p class="in-txt"><b>${o.t}:</b> ${o.tot.length ? o.tot.map(([n, q]) => inTxt(n, q)).join(" + ") : "nada"}${P.hours.length > 1 && o.per[0]?.length ? ` <span class="note">(cada hora: ${o.per[0].map(([n, q]) => inTxt(n, q)).join(" + ")})</span>` : ""}</p>
+    ${P.total ? `<div class="in-bar"><span class="hc-bar"><i style="width:${Math.min(100, gotC / P.total * 100)}%"></i></span><span class="note">${fmt(gotC)} / ${fmt(P.total)} g apuntados</span></div>` : ""}
+    <div class="in-add"><button class="btn soft" data-act="intra-open" data-d="${d}">Opciones y horas</button>${o.tot.length ? `<button class="btn" data-act="intra-logall" data-d="${d}">Apuntar en Intra</button>` : ""}</div>`;
+  if (inDiary) return `<div class="intra-in"><p class="note" style="margin:0">⚡ ${esc(s.name || "Entreno")} · ${inSrc(s)} <button class="link" data-act="intra-edit" data-d="${d}">Cambiar</button></p>${body}</div>`;
+  return `<div class="card intra"><div class="in-h"><span class="chat-av" aria-hidden="true">⚡</span><div><b>Intra · durante el entreno</b><small>${esc(s.name || "Entreno")} · ${inSrc(s)}</small></div><button class="link" data-act="intra-edit" data-d="${d}">Cambiar</button></div>${body}</div>`;
+}
+// hoja con los modos (CH/h o reponer kcal), las variedades y el reparto por horas
+function openIntraOpts(d){
+  const s = intraSes(d); if (!s) return openIntra(d);
+  const P = intraPlan(s), pref = S.settings.intraPref || {};
+  openSheet("⚡ Qué tomar durante el entreno", `<div class="stack">
+    <div class="seg"><button aria-pressed="${P.mode === "ch"}" class="${P.mode === "ch" ? "on" : ""}" data-act="intra-mode" data-m="ch" data-d="${d}">Elijo los CH/h</button><button aria-pressed="${P.mode === "kcal"}" class="${P.mode === "kcal" ? "on" : ""}" data-act="intra-mode" data-m="kcal" data-d="${d}" ${P.kc ? "" : "disabled"}>Reponer kcal del entreno</button></div>
+    ${P.mode === "ch" ? `<div><p class="note" style="margin:0 0 8px">Hidratos por hora (CH/h) que quieres tomar:</p><div class="in-add">${IN_GPH.map(g => `<button class="chip ${g === P.gph ? "on" : ""}" aria-pressed="${g === P.gph}" data-act="intra-gph" data-g="${g}" data-d="${d}">${g} g/h</button>`).join("")}</div>
+      <p class="note" style="margin:8px 0 0">${P.gph > 90 ? "Más de 90 g/h solo si tienes el estómago entrenado y mezclas glucosa y fructosa." : P.gph > 60 ? "Más de 60 g/h: pruébalo antes en entrenos, no el día de la carrera." : "Menos de 1 h de entreno normalmente no hace falta tomar nada."}</p></div>`
+      : `<p class="note" style="margin:0">Gastas ≈ <b>${fmt(P.kc)} kcal</b> en ${hm(s.dur)} → ${fmt(Math.round(P.kc / P.h))} kcal por hora → <b>${P.gph} g de hidratos por hora</b>.${P.capped ? " Lo dejo en 120 g/h: es lo máximo que el cuerpo absorbe; el resto lo repones después." : ""}</p>`}
+    ${!P.kc ? `<p class="note" style="margin:0">Para «reponer kcal» mete los kJ del entreno. <button class="link" data-act="intra-edit" data-d="${d}">Meter kJ</button></p>` : ""}
+    <h4 class="in-sec">Elige cómo tomarlo · ${fmt(P.total)} g en total</h4>
+    ${P.opts.map(o => `<button class="in-opt ${o.id === P.opt.id ? "on" : ""}" aria-pressed="${o.id === P.opt.id}" data-act="intra-opt" data-o="${o.id}" data-d="${d}">
+      <span class="in-opt-h"><b>${o.t}</b><span class="note">${fmt(o.g)} g${o.g < P.total * .85 ? " · no llega" : ""}</span></span>
+      ${P.hours.map((H, i) => `<span class="in-hr"><span>${hm(H.from)}–${hm(H.to)}</span><span>${o.per[i].length ? o.per[i].map(([n, q]) => inTxt(n, q)).join(" + ") : "solo agua"}</span></span>`).join("")}
+    </button>`).join("")}
+    <p class="note" style="margin:0">Empieza a los 20-30 min y luego reparte cada 20-30 min. Bebe agua según sed. Los hidratos de cada alimento salen de la base de alimentos de la app.</p>
+    ${P.opt.tot.length ? `<button class="btn" data-act="intra-logall" data-d="${d}">Apuntar «${P.opt.t}» en Intra</button>` : ""}</div>`);
+}
+let tpEv = [];
+async function tpLoad(d){
+  const box = $("tpRes"); if (!box) return; box.innerHTML = `<p class="note" style="margin:0">Buscando en TrainingPeaks…</p>`;
+  try { const { data:{ session } } = await sb.auth.getSession();
+    const r = await fetch("/api/tp", {method:"POST", headers:{"content-type":"application/json", authorization:"Bearer " + (session?.access_token || "")}, body:JSON.stringify({url:S.settings.tpIcs, from:d, to:d})});
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.code || r.status); tpEv = j.events || []; box.innerHTML = tpRes(d);
+  } catch (e) { box.innerHTML = `<p class="note" style="margin:0">No he podido leer el calendario de TrainingPeaks${String(e.message) === "not_tp" ? " (el enlace no es de TrainingPeaks)" : ""}. Revisa el enlace o mételo a mano.</p>`; }
+}
+function tpRes(d){
+  return tpEv.length ? tpEv.map((e, i) => `<button class="in-opt" data-act="intra-tp-use" data-i="${i}" data-d="${d}"><span class="in-opt-h"><b>${esc(e.name)}</b><span class="note">${e.dur ? hm(e.dur) : "sin duración"}</span></span>
+      <span class="note">${[e.kj ? fmt(e.kj) + " kJ" : "", e.kcal ? fmt(e.kcal) + " kcal" : "", e.tss ? "TSS " + e.tss : "", e.km ? e.km + " km" : ""].filter(Boolean).join(" · ") || "TrainingPeaks no manda kJ en el calendario: mételos tú"}</span></button>`).join("")
+    : `<p class="note" style="margin:0">No hay entrenos en TrainingPeaks para este día.</p>`;
 }
 function openIntra(d){
-  const s = intraSes(d) || {dur:60, sport:"run", int:"media", km:""};
-  const sel = (id, opts, cur) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select>`;
-  openSheet("⚡ Intra · durante el entreno", `<div class="stack">
-    <p class="note" style="margin:0">Calculo la energía que vas a gastar (en kcal y kJ) y cuántos hidratos tomar durante el entreno para rendir sin pájara.</p>
-    <div class="grid2"><label class="f">Deporte${sel("inSp", IN_SP, s.sport)}</label><label class="f">Intensidad${sel("inInt", IN_INT, s.int)}</label></div>
-    <div class="grid2"><label class="f">Duración (min)<input id="inDur" inputmode="numeric" value="${s.dur || ""}"></label><label class="f">Km (si corres)<input id="inKm" inputmode="decimal" value="${s.km || ""}" placeholder="Opcional"></label></div>
-    <button class="btn" data-act="intra-save" data-d="${d}">Calcular</button>
-    ${S.settings.intra?.[d] ? `<button class="btn ghost" data-act="intra-clear" data-d="${d}">Quitar este entreno</button>` : ""}
-    <p class="note" style="margin:0">Orientativo, según las guías de nutrición deportiva: menos de 1 h, solo agua; 1-2,5 h, 30-60 g de hidratos por hora; más de 2,5 h, hasta 90 g/h.</p></div>`);
+  const s = S.settings.intra?.[d] || intraSes(d) || {}, tp = S.settings.tpIcs;
+  openSheet("⚡ Intra · tu entreno", `<div class="stack">
+    <div class="card-in"><b>TrainingPeaks</b>
+      ${tp ? `<p class="note" style="margin:4px 0 8px">Calendario conectado. <button class="link" data-act="intra-tp-off" data-d="${d}">Desconectar</button></p><button class="btn soft" data-act="intra-tp" data-d="${d}">Traer el entreno de este día</button><div id="tpRes" class="stack" style="margin-top:8px"></div>`
+        : `<p class="note" style="margin:4px 0 8px">Pega el enlace de tu calendario de TrainingPeaks (en la web de TrainingPeaks, en tus ajustes, busca sincronizar el calendario con iCal / .ics; es de TrainingPeaks Premium).</p>
+        <label class="f">Enlace del calendario<input id="tpUrl" type="url" inputmode="url" placeholder="webcal://…trainingpeaks.com/…"></label><button class="btn soft" data-act="intra-tp-save" data-d="${d}">Conectar</button>`}
+    </div>
+    <p class="note" style="margin:0">O mételo a mano con los datos de TrainingPeaks:</p>
+    <label class="f">Entreno<input id="inName" value="${esc(s.name || "")}" placeholder="Ej.: Tirada larga Z2"></label>
+    <div class="grid2"><label class="f">Duración (min)<input id="inDur" inputmode="numeric" value="${s.dur || ""}"></label><label class="f">kJ del entreno<input id="inKj" inputmode="numeric" value="${s.kj || ""}" placeholder="De TrainingPeaks"></label></div>
+    <label class="f">o kcal estimadas (si TrainingPeaks o Garmin te las da)<input id="inKcal" inputmode="numeric" value="${s.kcal || ""}" placeholder="Opcional"></label>
+    <p class="note" style="margin:0">Con los kJ de trabajo calculo las kcal: 1 kJ ≈ 1 kcal gastada (el cuerpo rinde ~24 % y 1 kcal = 4,184 kJ). No me invento nada: si falta el dato, te lo pido.</p>
+    <button class="btn" data-act="intra-save" data-d="${d}" data-src="${esc(s.src || "")}">Guardar</button>
+    ${S.settings.intra?.[d] ? `<button class="btn ghost" data-act="intra-clear" data-d="${d}">Quitar este entreno</button>` : ""}</div>`);
 }
 
 function planLabel(d){ const P = datedPlan(d); if (!P) return `Plan del ${WDAYS[wdayOf(d)-1].toLowerCase()}`;
@@ -2393,14 +2457,27 @@ document.addEventListener("click", e => {
       closeSheet(); tab = "food"; render(); setBanner(`Objetivo guardado: ${fmt(g.kcal)} kcal y ${g.p} g de proteína al día.`); setTimeout(() => setBanner(""), 5000); break; }
     case "logout": sb.auth.signOut(); break;
     case "intra-edit": openIntra(el.dataset.d || today()); break;
+    case "intra-open": openIntraOpts(el.dataset.d || today()); break;
+    case "intra-mode": case "intra-gph": case "intra-opt": {
+      const P = {...(S.settings.intraPref || {})};
+      if (act === "intra-mode") P.mode = el.dataset.m; if (act === "intra-gph"){ P.gph = +el.dataset.g; P.mode = "ch"; } if (act === "intra-opt") P.opt = el.dataset.o;
+      put("settings", {...S.settings, intraPref:P}); render(); openIntraOpts(el.dataset.d); break; }
     case "intra-save": { const d = el.dataset.d, dur = parseNum($("inDur").value); if (!(dur > 0)){ $("inDur").focus(); break; }
       const intra = Object.fromEntries(Object.entries(S.settings.intra || {}).filter(([k]) => k >= addDays(today(), -30)));
-      intra[d] = {dur:Math.round(dur), km:parseNum($("inKm").value) || 0, sport:$("inSp").value, int:$("inInt").value};
+      intra[d] = {name:$("inName").value.trim(), dur:Math.round(dur), kj:Math.round(parseNum($("inKj").value) || 0), kcal:Math.round(parseNum($("inKcal").value) || 0), src:el.dataset.src === "tp" ? "tp" : "manual"};
       put("settings", {...S.settings, intra}); closeSheet(); render(); break; }
     case "intra-clear": { const intra = {...(S.settings.intra || {})}; delete intra[el.dataset.d]; put("settings", {...S.settings, intra}); closeSheet(); render(); break; }
-    case "intra-log": { const d = el.dataset.d, F = FOODS.find(x => x.name === el.dataset.f); if (!F) break; const g = (F.servings?.[0]?.g || 100) * (+el.dataset.n || 1), v = nutr({per:F}, g);
-      (S.diary[d] ||= []).push({id:rid(), meal:INTRA, name:F.name, qty:g, unit:"g", g, per:{kcal:F.kcal, p:F.p, c:F.c, f:F.f}, servings:F.servings || [], kcal:v.kcal, p:v.p, c:v.c, f:v.f});
-      putDay(d); render(); break; }
+    case "intra-tp-save": { const u = $("tpUrl").value.trim(); if (!/trainingpeaks\.com/i.test(u)){ $("tpUrl").focus(); flash("Ese enlace no es de TrainingPeaks"); break; }
+      put("settings", {...S.settings, tpIcs:u}); openIntra(el.dataset.d); break; }
+    case "intra-tp-off": { const st = {...S.settings}; delete st.tpIcs; put("settings", st); openIntra(el.dataset.d); break; }
+    case "intra-tp": tpLoad(el.dataset.d); break;
+    case "intra-tp-use": { const e = tpEv[+el.dataset.i]; if (!e) break;
+      $("inName").value = e.name || ""; if (e.dur) $("inDur").value = e.dur; $("inKj").value = e.kj || ""; $("inKcal").value = e.kcal || "";
+      document.querySelector('[data-act="intra-save"]').dataset.src = "tp"; (e.dur ? (e.kj || e.kcal ? $("inDur") : $("inKj")) : $("inDur")).focus(); break; }
+    case "intra-logall": { const d = el.dataset.d, s = intraSes(d); if (!s) break; const P = intraPlan(s);
+      for (const [n, q] of P.opt.tot){ const F = inFood(n); if (!F) continue; const g = Math.round((F.servings?.[0]?.g || 100) * q), v = nutr({per:F}, g);
+        (S.diary[d] ||= []).push({id:rid(), meal:INTRA, name:F.name, qty:g, unit:"g", g, per:{kcal:F.kcal, p:F.p, c:F.c, f:F.f}, servings:F.servings || [], kcal:v.kcal, p:v.p, c:v.c, f:v.f}); }
+      putDay(d); closeSheet(); render(); flash(`✓ Apuntado en Intra: ${P.opt.t.toLowerCase()}`); break; }
     case "w-adj": { const adj = (+S.settings.kAdj || 0) + (+el.dataset.d || 0); put("settings", {...S.settings, kAdj:adj, wAdvSeen:el.dataset.key}); render(); setBanner(`✓ Ajustado: ${adj>0?"+":""}${adj} kcal al día sobre tu objetivo.`); setTimeout(() => setBanner(""), 5000); break; }
     case "w-skip": put("settings", {...S.settings, wAdvSeen:el.dataset.key}); render(); break;
     case "w-reset": put("settings", {...S.settings, kAdj:0}); render(); break;
