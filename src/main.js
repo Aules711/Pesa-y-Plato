@@ -289,15 +289,16 @@ function landingHTML(card, mode){
         <p class="note">Funciona en iPhone, Android y ordenador. Se instala en la pantalla de inicio como una app.</p>
       </div>
       <div class="hero-side">
-        <div class="phone ph2" aria-hidden="true">
-          <div class="p2-bar"><b>Hoy</b><span class="p2-prem">Premium</span><span class="p2-av">A</span></div>
-          <div class="p2-wk">${["L","M","X","J","V","S","D"].map((l,i) => `<span class="${i<3?"on":""} ${i===3?"t":""}"><small>${l}</small><i>${i<3?"✓":""}</i></span>`).join("")}<span class="p2-fire">🔥</span></div>
-          <div class="p2-card"><small>Calorías</small><div class="p2-row"><b>1.576 cal <span>/ 2.200</span></b><span><b>624</b> restan</span></div><div class="p2-b"><i style="width:72%"></i></div></div>
-          <div class="p2-card p2-m">${[["Carbohidratos",165,230,"var(--carb)"],["Grasas",48,70,"var(--fat)"],["Proteínas",118,140,"var(--prot)"]].map(([l,v,o,c]) => `<div><small>${l}</small><b>${v} g</b><div class="p2-b"><i style="width:${v/o*100}%;background:${c}"></i></div></div>`).join("")}</div>
-          <div class="p2-sec"><b>Comidas</b><span>Mira el diario</span></div>
-          <div class="p2-meal"><div><b>Desayuno</b><small>412 kcal · Avena, plátano</small></div><em>✓</em></div>
-          <div class="p2-meal"><div><b>Comida</b><small>Pollo con arroz y verduras</small></div><span class="p2-reg">Regístralo</span></div>
-          <div class="p2-nav"><span class="on">Hoy</span><span>Diario</span><span>Nutrientes</span><span>Progreso</span><i>+</i></div>
+        <div class="phone ph3" aria-hidden="true">
+          <div class="p3-bar"><b>Hoy</b><span class="p3-av">A</span></div>
+          <div class="p3-wk">${["L","M","X","J","V","S","D"].map((l,i) => `<span class="${i<3?"on":""} ${i===3?"t":""}"><small>${l}</small><i>${i<3?"✓":""}</i></span>`).join("")}</div>
+          <div class="p3-card"><div class="p3-arc"><svg viewBox="0 0 240 132"><path d="M20 120 A100 100 0 0 1 220 120" pathLength="100" class="bg"/><path d="M20 120 A100 100 0 0 1 220 120" pathLength="100" class="fg" style="stroke-dasharray:72 100"/></svg><span><b>624</b><small>kcal por comer</small></span></div>
+            <div class="p3-chips"><span class="p">Proteína <b>118/140 g</b></span><span class="c">Carbos <b>165/230 g</b></span><span class="f">Grasa <b>48/70 g</b></span></div></div>
+          <div class="p3-sec"><b>Comidas</b><span>Mira el diario</span></div>
+          <div class="p3-grid"><div class="c1"><b>Desayuno</b><small>412 kcal · Avena, plátano</small></div><div class="c2"><b>Comida</b><small>640 kcal · Pollo con arroz</small></div>
+            <div class="c0"><b>Cena</b><span>Regístralo</span></div><div class="c0"><b>Snacks</b><span>Regístralo</span></div></div>
+          <div class="p3-intra"><span>⚡</span><div><b>Intra · durante el entreno</b><small>1:45 · ≈ 1.250 kcal · 105 g de hidratos</small></div></div>
+          <div class="p3-nav"><span class="on">Hoy</span><span>Diario</span><span>Nutrientes</span><span>Progreso</span><i>+</i></div>
         </div>
       </div>
     </section>
