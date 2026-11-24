@@ -9,8 +9,8 @@ const F = {
   merluza:["Merluza",75,16,0,1,"fish"], salmon:["Salmón",208,20,0,13,"fish cara"], atun:["Atún al natural (lata)",105,24,0,1,"fish"],
   gambas:["Gambas",85,19,0,1,"shellfish cara"], huevo:["Huevo",145,12.5,0.7,10,"egg"], claras:["Claras de huevo",48,10.9,0.7,0.2,"egg"],
   tofu:["Tofu",120,13,2,7,"soja"], lentejas:["Lentejas cocidas",116,9,17,0.4,""], garbanzos:["Garbanzos cocidos",140,7.5,20,2.5,""],
-  yogurp:["Yogur alto en proteína",60,10,4,0.2,"dairy"], batido:["Queso fresco batido 0%",46,8,3.5,0.1,"dairy"], burgos:["Queso fresco tipo Burgos 0%",70,11,4,0.5,"dairy"],
-  mozza:["Mozzarella light",160,20,2,8,"dairy"], leche:["Leche semidesnatada",46,3.2,4.8,1.6,"dairy"], soja:["Bebida de soja",40,3.3,2.5,1.8,"soja"],
+  yogurp:["Yogur alto en proteína",60,10,4,0.2,"dairy lactosa"], batido:["Queso fresco batido 0%",46,8,3.5,0.1,"dairy lactosa"], burgos:["Queso fresco tipo Burgos 0%",70,11,4,0.5,"dairy lactosa"],
+  mozza:["Mozzarella light",160,20,2,8,"dairy lactosa"], leche:["Leche semidesnatada",46,3.2,4.8,1.6,"dairy lactosa"], soja:["Bebida de soja",40,3.3,2.5,1.8,"soja"],
   arroz:["Arroz (en crudo)",350,7,78,0.6,""], pasta:["Pasta (en crudo)",355,12,72,1.5,"gluten"], patata:["Patata",77,2,17,0.1,""],
   boniato:["Boniato",86,1.6,20,0.1,""], pan:["Pan integral",250,10,43,3.5,"gluten"], avena:["Copos de avena",370,13,60,7,"gluten"],
   quinoa:["Quinoa (en crudo)",368,14,64,6,""], cuscus:["Cuscús (en crudo)",360,12.5,72,1.5,"gluten"], wrap:["Tortillas de trigo integrales",300,9,48,7,"gluten"],
@@ -22,11 +22,19 @@ const F = {
   champi:["Champiñones",22,3,3,0.3,""], yogsoja:["Yogur de soja natural",50,4,2.5,2.5,"soja"], hummus:["Hummus",170,7,14,10,""], cebolla:["Cebolla",40,1.1,9,0.1,""],
   aceite:["Aceite de oliva virgen extra",884,0,0,100,""], aguacate:["Aguacate",160,2,9,15,""], nueces:["Nueces",654,15,14,65,"nuts"],
   almendras:["Almendras",579,21,22,50,"nuts"], cacahuete:["Crema de cacahuete",588,25,20,50,"nuts"], choco:["Chocolate negro 85%",600,10,20,50,""],
+  // sustitutos para alergias e intolerancias
+  pansg:["Pan sin gluten",245,4,45,5,""], pastasg:["Pasta sin gluten (en crudo)",355,7,79,1.5,""], avenasg:["Copos de avena sin gluten",370,13,60,7,""],
+  tortmaiz:["Tortillas de maíz",220,5.5,45,2.8,""], lechesl:["Leche sin lactosa semidesnatada",46,3.2,4.8,1.6,"dairy"], yogursl:["Yogur proteico sin lactosa",60,10,4,0.2,"dairy"],
+  batidosl:["Queso batido sin lactosa 0%",50,8,3.5,0.2,"dairy"], burgossl:["Queso fresco sin lactosa",75,11,3,1,"dairy"], mozzasl:["Mozzarella sin lactosa",230,18,1.5,17,"dairy"],
 };
+// si un alimento no se puede, se cambia por su versión apta (sin gluten, sin lactosa…)
+const SUB = { pan:["pansg"], pasta:["pastasg"], avena:["avenasg"], wrap:["tortmaiz"], cuscus:["quinoa"], leche:["lechesl", "soja"], yogurp:["yogursl", "yogsoja"],
+  batido:["batidosl", "yogsoja"], burgos:["burgossl"], mozza:["mozzasl"] };
+const ORIG = Object.fromEntries(Object.entries(SUB).flatMap(([k, l]) => l.map(x => [x, k])));
 // Límites de gramos por alimento [mín, máx]
 const LIM = { yogsoja:[125,400], hummus:[40,120], aceite:[3,25], nueces:[5,35], almendras:[5,35], cacahuete:[5,30], choco:[5,25], aguacate:[20,120], huevo:[50,180], soja:[150,400],
   lentejas:[150,450], garbanzos:[100,350], jamon:[20,80], pavof:[30,120], batido:[100,350], yogurp:[120,400], mozza:[20,100] };
-const lim = (k, role) => LIM[k] || (role === "P" ? [50, 260] : role === "C" ? [20, 320] : [3, 60]);
+const lim = (k, role) => LIM[k] || LIM[ORIG[k]] || (role === "P" ? [50, 260] : role === "C" ? [20, 320] : [3, 60]);
 
 // Recetario. P = proteína, C = hidratos, F = grasa (se calculan sus gramos); V/X = cantidad fija.
 // q = rápido de hacer; k = palabras para «me gusta».
@@ -89,18 +97,20 @@ const nrm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]
 
 // Lo que la persona NO come. Mejor quitar de más que poner algo que no puede comer.
 const GROUPS = [
-  [/lactosa|lacteo|\bleche|queso|yogur|nata\b|mantequilla|caseina|proteina de (la )?leche/, ["dairy"], "lácteos"],
+  [/lactosa/, ["#lactosa"], "lactosa"],
+  [/lacteo|\bleche|queso|yogur|nata\b|mantequilla|caseina|proteina de (la )?leche/, ["dairy"], "lácteos"],
   [/gluten|celiac|trigo|harina|cebada|centeno/, ["gluten"], "gluten"],
   [/marisco|gamba|crustace|langostino|molusco/, ["shellfish"], "marisco"],
   [/pescado|\bpez\b|\bpeces\b/, ["fish", "shellfish"], "pescado y marisco"],
   [/huevo|\bclaras?\b/, ["egg"], "huevo"],
   [/frutos? secos?|\bnuez|nueces|almendra|cacahuete|\bmani\b|avellana|anacardo|pistacho/, ["nuts", "cacahuete"], "frutos secos"],
-  [/cerdo|porcino|jamon|\blomo\b|chorizo|embutido|fiambre|bacon|beicon|panceta/, ["cerdo"], "cerdo"],
+  [/cerdo|porcino|jamon|\blomo\b|chorizo|embutido|fiambre|bacon|beicon|panceta/, ["cerdo", "#cerdo", "jamon"], "cerdo"],
   [/embutido|fiambre|lonchas/, ["pavof", "jamon"], "embutidos"],
   [/carnes? rojas?/, ["ternera", "cerdo", "jamon"], "carne roja"],
   [/\bcarnes?\b(?! rojas?)/, ["meat"], "carne"],
   [/\bpollo/, ["pollo"], "pollo"], [/\bpavo/, ["pavo", "pavof"], "pavo"], [/ternera|vacuno|\bvaca\b/, ["ternera"], "ternera"],
   [/soja|tofu|edamame/, ["#soja"], "soja"],
+  [/sesamo/, ["#sesamo"], "sésamo"],
   [/legumbre/, ["lentejas", "garbanzos", "hummus", "#soja"], "legumbres"],
   [/lenteja/, ["lentejas"], "lentejas"], [/garbanzo|hummus/, ["garbanzos", "hummus"], "garbanzos"],
   [/\bfrutas?\b/, ["platano", "manzana", "frutosr", "kiwi", "naranja"], "fruta"],
@@ -117,10 +127,10 @@ const GROUPS = [
   [/manzana/, ["manzana"], "manzana"], [/quinoa/, ["quinoa"], "quinoa"], [/cuscus/, ["cuscus"], "cuscús"],
 ];
 const TITLE_RX = [[/\bajos?\b|ajillo/, /ajillo|salsa verde/, "ajo"], [/picante|curry|especia/, /curry|tacos|fajita/, "picante"]];
-const STOP = /^(frutos?$|secos?$|alergi|alergic|intoleran|celiac|nada|ningun|tengo|gusta|gustan|puedo|comer|como|tambien|pero|sobre|todo|toda|tipo|cualquier|odio|evito|prefiero|mejor|nunca|alimento|comida|producto|derivad|ademas|menos|poco|mucho|nunca|algun|cosas|bien|mal|sienta|sientan|hace|dieta|siempre|veces|crudo|cocido|frito|asado|nada|soy|estoy|para|porque|cuando|esta|este|estos|estas|otro|otra|otros|otras|roja|rojo|blanca|blanco|verde|natural)/;
+const STOP = /^(frutos?$|secos?$|lactosa$|gluten$|alergi|alergic|intoleran|celiac|nada|ningun|tengo|gusta|gustan|puedo|comer|como|tambien|pero|sobre|todo|toda|tipo|cualquier|odio|evito|prefiero|mejor|nunca|alimento|comida|producto|derivad|ademas|menos|poco|mucho|nunca|algun|cosas|bien|mal|sienta|sientan|hace|dieta|siempre|veces|crudo|cocido|frito|asado|nada|soy|estoy|para|porque|cuando|esta|este|estos|estas|otro|otra|otros|otras|roja|rojo|blanca|blanco|verde|natural)/;
 const STEM = (w) => w.length > 5 ? w.replace(/(es|s)$/, "") : w.length > 4 ? w.replace(/s$/, "") : w;
 function blocked(v){
-  const a = nrm(v.avoid), tags = new Set(), keys = new Set(), title = [], labels = [];
+  const a = nrm([v.avoid, ...(v.alg || []), v.diet === "nopork" ? "cerdo" : ""].filter(Boolean).join(", ")), tags = new Set(), keys = new Set(), title = [], labels = [];
   if (v.diet === "veg" || v.diet === "vegan" || v.diet === "pesc") tags.add("meat");
   if (v.diet === "veg" || v.diet === "vegan") { tags.add("fish"); tags.add("shellfish"); }
   if (v.diet === "vegan") { tags.add("egg"); tags.add("dairy"); }
@@ -134,9 +144,17 @@ function blocked(v){
   return { tags, keys, title, words, labels: [...new Set(labels)] };
 }
 const foodOk = (k, B) => { const f = F[k]; if (!f || B.keys.has(k)) return false; const tg = f[5].split(" ").filter(Boolean); return !tg.some(t => B.tags.has(t)); };
+const sw = (k, B) => foodOk(k, B) ? k : (SUB[k] || []).find(x => foodOk(x, B) && !B.keys.has(ORIG[x])) || null;
+// receta con los alimentos cambiados por su versión apta
+function adapt(r, B){
+  const P = sw(r.P, B), C = sw(r.C, B), Fa = sw(r.F, B), X = (r.X || []).map(([k, g]) => [sw(k, B), g]);
+  if (!P || !C || !Fa || X.some(([k]) => !k)) return null;
+  const changed = [P !== r.P && P, C !== r.C && C, Fa !== r.F && Fa, ...X.map(([k], i) => k !== r.X[i][0] && k)].filter(Boolean);
+  const tag = [...new Set(changed.map(k => /sg$|tortmaiz/.test(k) ? "sin gluten" : /sl$/.test(k) ? "sin lactosa" : ""))].filter(Boolean);
+  return changed.length ? { ...r, P, C, F:Fa, ...(r.X ? { X } : {}), t:r.t + (tag.length ? ` (${tag.join(", ")})` : "") } : r;
+}
 function recipeOk(r, B){
-  if (![r.P, r.C, r.F].every(k => foodOk(k, B))) return false;
-  if ((r.X || []).some(([k]) => !foodOk(k, B))) return false;
+  if (!adapt(r, B)) return false;
   const t = nrm(r.t + " " + r.k);
   if (B.title.some(rx => rx.test(t))) return false;
   if (B.words.some(w => t.split(/[^a-zñ]+/).some(x => x.startsWith(w)))) return false;
@@ -176,8 +194,8 @@ const kcalOf = items => items.reduce((a, i) => a + i.per.kcal*i.g/100, 0);
 function rng(seed){ let s = seed >>> 0 || 1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
 const TRAIN_DAYS = { 0:[], 1:[3], 2:[2,4], 3:[1,3,5], 4:[1,2,4,5], 5:[1,2,3,5,6], 6:[1,2,3,4,5,6], 7:[1,2,3,4,5,6,7] };
 
-function buildMeal(r, t, share, B, train){
-  const ck = train ? 1.1 : 1;                                           // días de entreno: algo más de hidratos
+function buildMeal(r0, t, share, B, train){
+  const r = adapt(r0, B) || r0, ck = train ? 1.1 : 1;                                           // días de entreno: algo más de hidratos
   const items = solve(r, t.p*share, t.c*share*ck, t.f*share, B);
   // ajuste fino a las kcal de la toma escalando lo calculado (no lo fijo)
   const goal = t.kcal*share + (train ? t.c*share*.1*4 : 0), k = kcalOf(items);
