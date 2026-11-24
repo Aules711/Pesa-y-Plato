@@ -481,7 +481,7 @@ function viewHome(){
 }
 function homeFood(t, tot, remaining){
   const g = goalsFor(t), P = curPlan(t), dishes = P.dishes || {}, ex = exAdd(t), kgoal = g.kcal + ex;
-  const meals = MEALS.filter(m => m !== INTRA).map(m => { const items = (P[m]||[]).filter(f => !f.opt || f.opt === (planOpts(P[m]).length ? planOpts(P[m])[0] : null));
+  const meals = MEALS.map(m => { if (m === INTRA) return intraHome(t); const items = (P[m]||[]).filter(f => !f.opt || f.opt === (planOpts(P[m]).length ? planOpts(P[m])[0] : null));
       const logged = (S.diary[t]||[]).filter(e => e.meal===m), lk = logged.reduce((a,e)=>a+(+e.kcal||0),0);
       const sub = logged.length ? `${fmt(lk)} kcal · ${esc(logged.slice(0,2).map(e => e.name).join(", "))}${logged.length>2?"…":""}` : dishes[m] ? esc(dishes[m]) : items.length ? esc(items.filter(f => !/aceite|leche desnatada \(en el café\)/i.test(f.name)).slice(0,3).map(f => f.name.replace(/\s*\(.*?\)/g,"")).join(", ")) : "";
       return `<div class="ml-row ${logged.length?"done":""}"><button class="ml-n" data-act="tab" data-tab="food"><b>${m}</b>${sub?`<small>${sub}</small>`:""}</button>
@@ -500,7 +500,6 @@ function homeFood(t, tot, remaining){
     ${S.fast?.active ? `<button class="card nutri-cta" data-act="fast-open"><span class="chat-av" aria-hidden="true">⏳</span><span><b>Ayunando · <span data-fast="t"></span></b><small data-fast="left"></small></span><span class="prof-ch" aria-hidden="true">›</span></button>` : ""}
     <div class="sec-h"><h3>Comidas</h3><button class="link" data-act="tab" data-tab="food">Mira el diario</button></div>
     <div class="ml">${meals}</div>
-    ${intraCard(t)}
     ${weightCard()}
     ${hasPlanFor(t) ? "" : `<button class="card nutri-cta" data-act="prof-sec" data-k="plan"><span class="chat-av" aria-hidden="true">📋</span><span><b>Importa tu plan de comidas</b><small>Y cada día verás aquí lo que te toca comer</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`}
     ${nutriCard}`;
@@ -732,7 +731,7 @@ function viewFood(){
   const meals = MEALS.map(m=>{
     const list = (S.diary[day]||[]).filter(e=>e.meal===m), k = list.reduce((a,e)=>a+(+e.kcal||0),0);
     const y = (S.diary[addDays(day,-1)]||[]).some(e=>e.meal===m);
-    return `<div class="card meal ${m===INTRA?"meal-intra":""}"><div class="meal-h"><h3>${m===INTRA?"⚡ Intra · durante el entreno":m}</h3><b>${fmt(k)}</b></div>${m===INTRA?intraCard(day, true):""}
+    return `<div class="card meal ${m===INTRA?"meal-intra":""}"><div class="meal-h"><h3>${m===INTRA?"⚡ Intra · durante el entreno":m}</h3><b>${fmt(k)}</b></div>${m===INTRA?intraLine(day):""}
       ${list.map(e=>`${e.plan?`<div class="entry-wrap"><button class="pl-chk on" data-act="plan-undo" data-id="${esc(e.id)}" aria-label="Desmarcar ${esc(e.name)}" title="Desmarcar">✓</button>`:""}<button class="entry" data-act="edit-entry" data-id="${esc(e.id)}"><span class="n">${esc(e.name)}${e.ex?'<span class="ex-tag">ejemplo</span>':""}<small>${entryDetail(e)}</small></span><span class="k">${fmt(e.kcal)}</span></button>${e.plan?"</div>":""}`).join("")}
       ${planRows(m)}
       <div class="meal-f"><button class="link" data-act="add-food" data-meal="${m}">+ AÑADIR ALIMENTO</button>${!list.length&&y?`<button class="link" data-act="copy-yesterday" data-meal="${m}" style="color:var(--muted)">Copiar de ayer</button>`:""}</div></div>`; }).join("");
@@ -1381,6 +1380,22 @@ function intraPlan(s){
 }
 const hm = m => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
 const inSrc = s => s.src === "tp" ? "TrainingPeaks" : s.src === "plan" ? "tu plan" : "metido por ti";
+// Intra en Hoy: como Snacks (apuntas lo que quieras) + botón para que la IA calcule qué tomar
+function intraHome(t){
+  const logged = (S.diary[t] || []).filter(e => e.meal === INTRA), lk = logged.reduce((a, e) => a + (+e.kcal || 0), 0), gc = logged.reduce((a, e) => a + (+e.c || 0), 0);
+  const s = intraSes(t), P = s ? intraPlan(s) : null;
+  const sub = logged.length ? `${fmt(lk)} kcal · ${fmt(gc)} g hidratos${P?.total ? ` de ${fmt(P.total)} g` : ""} · ${esc(logged.slice(0, 2).map(e => e.name).join(", "))}${logged.length > 2 ? "…" : ""}`
+    : P ? `${esc(s.name || "Entreno")} · objetivo ${fmt(P.total)} g de hidratos (${P.gph} g/h)` : "Lo que comes durante el entreno: geles, isotónica, plátano…";
+  return `<div class="ml-row ml-intra ${logged.length ? "done" : ""}"><button class="ml-n" data-act="tab" data-tab="food"><b>⚡ Intra</b><small>${sub}</small></button>
+    <span class="ml-ib"><button class="reg-btn" data-act="home-add" data-meal="${INTRA}">${logged.length ? "+ Añadir" : "Regístralo"}</button>
+    <button class="ia-btn" data-act="${s ? "intra-open" : "intra-edit"}" data-d="${t}">✨ ${s ? "Qué tomar" : "Calcular con IA"}</button></span></div>`;
+}
+function intraLine(d){
+  const s = intraSes(d), gc = (S.diary[d] || []).filter(e => e.meal === INTRA).reduce((a, e) => a + (+e.c || 0), 0);
+  if (!s) return `<div class="intra-q"><span class="note">Apunta lo que tomes entrenando, o deja que la IA calcule qué tomar.</span><button class="link" data-act="intra-edit" data-d="${d}">✨ Calcular</button></div>`;
+  const P = intraPlan(s);
+  return `<div class="intra-q"><span class="note">✨ ${esc(s.name || "Entreno")}: objetivo <b>${fmt(P.total)} g</b> de hidratos (${P.gph} g/h) · llevas ${fmt(gc)} g</span><button class="link" data-act="intra-open" data-d="${d}">Ver qué tomar</button></div>`;
+}
 function intraCard(d, inDiary){
   const s = intraSes(d), got = (S.diary[d] || []).filter(e => e.meal === INTRA), gotC = got.reduce((a, e) => a + (+e.c || 0), 0);
   if (!s) return inDiary ? `<div class="intra-q"><span class="note">¿Entrenas este día? Trae el entreno de TrainingPeaks y te digo qué tomar durante.</span><button class="link" data-act="intra-edit" data-d="${d}">⚡ Calcular</button></div>`
@@ -2466,7 +2481,7 @@ document.addEventListener("click", e => {
     case "intra-save": { const d = el.dataset.d, dur = parseNum($("inDur").value); if (!(dur > 0)){ $("inDur").focus(); break; }
       const intra = Object.fromEntries(Object.entries(S.settings.intra || {}).filter(([k]) => k >= addDays(today(), -30)));
       intra[d] = {name:$("inName").value.trim(), dur:Math.round(dur), kj:Math.round(parseNum($("inKj").value) || 0), kcal:Math.round(parseNum($("inKcal").value) || 0), src:el.dataset.src === "tp" ? "tp" : "manual"};
-      put("settings", {...S.settings, intra}); closeSheet(); render(); break; }
+      put("settings", {...S.settings, intra}); closeSheet(); render(); openIntraOpts(d); break; }
     case "intra-clear": { const intra = {...(S.settings.intra || {})}; delete intra[el.dataset.d]; put("settings", {...S.settings, intra}); closeSheet(); render(); break; }
     case "intra-tp-save": { const u = $("tpUrl").value.trim(); if (!/trainingpeaks\.com/i.test(u)){ $("tpUrl").focus(); flash("Ese enlace no es de TrainingPeaks"); break; }
       put("settings", {...S.settings, tpIcs:u}); openIntra(el.dataset.d); break; }
