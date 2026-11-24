@@ -1327,35 +1327,85 @@ function weightCard(){
    Tú eliges los hidratos por hora (CH/h) o reponer las kcal del entreno repartidas por horas,
    y la app te da varias opciones de comida hora a hora. */
 const IN_GPH = [30, 45, 60, 75, 90, 120];
-// [singular, plural, paso, máximo por hora]
-const IN_U = {"Gel energético":["gel","geles",1,4], "Bebida isotónica":["bidón de isotónica (500 ml)","bidones de isotónica (500 ml)",.5,1.5], "Plátano":["plátano","plátanos",.5,1],
-  "Dátiles":["dátil","dátiles",1,6], "Dulce de membrillo":["porción de membrillo (30 g)","porciones de membrillo (30 g)",1,3], "Barrita energética":["barrita","barritas",.5,2],
-  "Gominolas":["puñado de gominolas (30 g)","puñados de gominolas (30 g)",.5,3], "Pasas":["puñado de pasas (30 g)","puñados de pasas (30 g)",.5,2]};
 const flash = t => { setBanner(t); setTimeout(() => setBanner(""), 4000); };
-const IN_OPTS = [
-  {id:"gel",   t:"Geles + agua",          it:["Gel energético"]},
-  {id:"iso",   t:"Isotónica + geles",     it:["Bebida isotónica","Gel energético"], base:["Bebida isotónica", 1]},
-  {id:"real",  t:"Comida real",           it:["Plátano","Dátiles","Dulce de membrillo"]},
-  {id:"bar",   t:"Barritas + isotónica",  it:["Barrita energética","Bebida isotónica"], base:["Bebida isotónica", .5]},
-  {id:"sweet", t:"Gominolas y pasas",     it:["Gominolas","Pasas"]},
-];
 const inFood = n => FOODS.find(x => x.name === n);
-const inCh = n => { const F = inFood(n); return F ? F.c * (F.servings?.[0]?.g || 100) / 100 : 0; };   // g de hidratos por unidad (de la base de alimentos)
-const fr = q => { const w = Math.floor(q), h = q - w >= .5; return w ? `${w}${h ? "½" : ""}` : h ? "½" : "0"; };
-const inTxt = (n, q) => { const u = IN_U[n] || [n, n]; return `${fr(q)} ${q > 1 ? u[1] : u[0]}`; };
-// mejor combinación de unidades para llegar a g hidratos (pocas unidades y cerca del objetivo)
-function inSolve(o, g, len = 1){
-  if (g <= 0) return [];
-  const steps = o.it.map(n => (IN_U[n] || [,,1])[2]), ch = o.it.map(inCh), base = o.base ? Math.min(o.base[1] * len, Math.round(g / inCh(o.base[0]) * 2) / 2) : 0;
-  let best = null;
-  const rec = (i, acc) => {
-    if (i === o.it.length){ const tot = acc.reduce((a, q, j) => a + q * ch[j], 0), n = acc.reduce((a, q) => a + q, 0);
-      if (!tot) return; const sc = Math.abs(tot - g) + n * 1.5 + (tot < g * .85 ? 15 : 0); if (!best || sc < best.sc) best = {sc, acc:[...acc]}; return; }
-    const lo = o.base && o.it[i] === o.base[0] ? base : 0;
-    for (let q = lo; q <= (IN_U[o.it[i]]?.[3] ?? 6) * len + 1e-9; q += steps[i]){ acc.push(q); rec(i + 1, acc); acc.pop(); if (q * ch[i] > g * 1.3) break; }
-  };
-  rec(0, []);
-  return best ? o.it.map((n, j) => [n, best.acc[j]]).filter(([, q]) => q > 0) : [];
+const chPer = n => (inFood(n)?.c || 0) / 100;                 // g de hidratos por gramo (de la base de alimentos)
+// piezas con mucha energía y pocas unidades; cantidades exactas en gramos/ml
+const PIECE = {
+  gel:   {n:"Gel energético", g:40, txt:"1 gel (40 g)"},
+  bar:   {n:"Barrita energética", g:40, txt:"1 barrita (40 g)"},
+  ban:   {n:"Plátano", g:120, txt:"1 plátano (120 g)"},
+};
+const pieceCh = k => Math.round(PIECE[k].g * chPer(PIECE[k].n));
+// opciones: qué va en el bidón y qué piezas
+const IN_OPTS = [
+  {id:"gel",  t:"Solo geles",                 drink:null,  solid:["gel"]},
+  {id:"mix",  t:"Bidón de hidratos + geles",  drink:"mix", solid:["gel"]},
+  {id:"iso",  t:"Isotónica + geles",          drink:"iso", solid:["gel"]},
+  {id:"bar",  t:"Barritas + geles",           drink:null,  solid:["bar", "gel"]},
+  {id:"ban",  t:"Plátano + geles",            drink:null,  solid:["ban", "gel"]},
+];
+const r5 = m => Math.max(5, Math.round(m / 5) * 5);
+function inBuild(o, total, dur){
+  const items = [], plan = []; let left = total;
+  const bottles = dur >= 50 ? Math.max(1, Math.round(dur / 60)) : 0;
+  if (o.drink === "iso" && bottles){
+    const ch = Math.round(500 * chPer("Bebida isotónica")), n = Math.min(bottles, Math.max(1, Math.round(left * .6 / ch)));
+    items.push(["Bebida isotónica", 500 * n]); left -= ch * n;
+    for (let i = 0; i < n; i++) plan.push({at:Math.round(i * dur / n), to:Math.round((i + 1) * dur / n), txt:`bidón ${n > 1 ? i + 1 : ""} de isotónica (500 ml · ${ch} g HC), a sorbos`.replace("bidón  ", "bidón ")});
+  }
+  if (o.drink === "mix" && bottles){
+    const want = left * .7 / bottles, pw = Math.min(90, Math.max(30, Math.round(want / chPer("Hidratos en polvo") / 10) * 10)), ch = Math.round(pw * chPer("Hidratos en polvo"));
+    items.push(["Hidratos en polvo", pw * bottles]); left -= ch * bottles;
+    for (let i = 0; i < bottles; i++) plan.push({at:Math.round(i * dur / bottles), to:Math.round((i + 1) * dur / bottles), txt:`bidón ${bottles > 1 ? i + 1 + " " : ""}(500 ml de agua + ${pw} g de hidratos en polvo · ${ch} g HC), a sorbos`});
+  }
+  // piezas: primero la sólida (barrita/plátano) al principio, luego geles
+  const sol = [];
+  if (o.solid[0] !== "gel" && left > 0){ const k = o.solid[0], n = Math.min(2, Math.max(1, Math.round(left * .4 / pieceCh(k)))); for (let i = 0; i < n; i++){ sol.push(k); left -= pieceCh(k); } }
+  const ng = Math.max(0, Math.round(left / pieceCh("gel"))); for (let i = 0; i < ng; i++) sol.push("gel");
+  if (sol.length){
+    const first = Math.min(20, r5(dur * .3)), last = Math.max(first, dur - 15), step = sol.length > 1 ? (last - first) / (sol.length - 1) : 0;
+    sol.forEach((k, i) => plan.push({at:sol.length > 1 ? r5(first + step * i) : r5(Math.min(dur / 2, 40)), txt:`${PIECE[k].txt} · ${pieceCh(k)} g HC`, k}));
+    const cnt = {}; sol.forEach(k => cnt[k] = (cnt[k] || 0) + 1);
+    Object.entries(cnt).forEach(([k, n]) => items.push([PIECE[k].n, PIECE[k].g * n]));
+  }
+  const g = Math.round(items.reduce((a, [n, gr]) => a + gr * chPer(n), 0));
+  plan.sort((a, b) => a.at - b.at || (a.to ? -1 : 1));
+  const pieces = sol.length + plan.filter(x => x.to != null).length;
+  return {...o, items, plan, g, pieces, nSol:sol.length};
+}
+const inKcal = s => +s.kcal || +s.kj || 0;    // kJ de trabajo ≈ kcal gastadas (rendimiento ~24 % × 4,184)
+function intraPlan(s){
+  const P = S.settings.intraPref || {}, h = s.dur / 60, kc = inKcal(s);
+  const mode = P.mode === "kcal" && kc ? "kcal" : "ch";
+  let gph = mode === "kcal" ? Math.round(kc / h / 4) : (+P.gph || 60), capped = false;
+  if (mode === "kcal" && gph > 120){ gph = 120; capped = true; }
+  const total = Math.round(gph * h), opts = IN_OPTS.map(o => inBuild(o, total, s.dur));
+  return {mode, gph, capped, h, kc, total, opts, opt:opts.find(o => o.id === P.opt) || opts[1]};
+}
+const hm = m => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+const mm = m => `${m}'`;
+const inSrc = s => s.src === "tp" ? "TrainingPeaks" : s.src === "plan" ? "tu plan" : "metido por ti";
+const inItemsTxt = o => o.items.map(([n, g]) => n === "Bebida isotónica" ? `${fmt(g)} ml de isotónica` : n === "Hidratos en polvo" ? `${fmt(g)} g de hidratos en polvo` : `${fmt(Math.round(g / (Object.values(PIECE).find(p => p.n === n)?.g || g)))} × ${n.toLowerCase()}`).join(" + ");
+// hoja con los modos (CH/h o reponer kcal), las opciones y el horario exacto
+function openIntraOpts(d){
+  const s = intraSes(d); if (!s) return openIntra(d);
+  const P = intraPlan(s);
+  openSheet("⚡ Qué tomar durante el entreno", `<div class="stack">
+    <div class="in-ses"><div><b>${esc(s.name || "Entreno")}</b><small>${hm(s.dur)}${s.kj ? ` · ${fmt(s.kj)} kJ` : ""}${s.kcal ? ` · ${fmt(s.kcal)} kcal` : ""} · ${inSrc(s)}</small></div><button class="btn soft" data-act="intra-edit" data-d="${d}">✏️ Cambiar entreno</button></div>
+    <div class="seg"><button aria-pressed="${P.mode === "ch"}" class="${P.mode === "ch" ? "on" : ""}" data-act="intra-mode" data-m="ch" data-d="${d}">Elijo los CH/h</button><button aria-pressed="${P.mode === "kcal"}" class="${P.mode === "kcal" ? "on" : ""}" data-act="intra-mode" data-m="kcal" data-d="${d}" ${P.kc ? "" : "disabled"}>Reponer kcal del entreno</button></div>
+    ${P.mode === "ch" ? `<div><p class="note" style="margin:0 0 8px">Hidratos por hora (CH/h) que quieres tomar:</p><div class="in-add">${IN_GPH.map(g => `<button class="chip ${g === P.gph ? "on" : ""}" aria-pressed="${g === P.gph}" data-act="intra-gph" data-g="${g}" data-d="${d}">${g} g/h</button>`).join("")}</div>
+      <p class="note" style="margin:8px 0 0">${P.gph > 90 ? "Más de 90 g/h solo si tienes el estómago entrenado." : P.gph > 60 ? "Más de 60 g/h: pruébalo antes en entrenos, no el día de la carrera." : "Con menos de 1 h de entreno normalmente no hace falta tomar nada."}</p></div>`
+      : `<p class="note" style="margin:0">Gastas ≈ <b>${fmt(P.kc)} kcal</b> en ${hm(s.dur)} → ${fmt(Math.round(P.kc / P.h))} kcal por hora → <b>${P.gph} g de hidratos por hora</b>.${P.capped ? " Lo dejo en 120 g/h: es lo máximo que el cuerpo absorbe; el resto lo repones después." : ""}</p>`}
+    ${!P.kc ? `<p class="note" style="margin:0">Para «reponer kcal» mete los kJ del entreno. <button class="link" data-act="intra-edit" data-d="${d}">Meter kJ</button></p>` : ""}
+    <h4 class="in-sec">Elige cómo tomarlo · ${fmt(P.total)} g de hidratos</h4>
+    ${P.opts.map(o => `<button class="in-opt ${o.id === P.opt.id ? "on" : ""}" aria-pressed="${o.id === P.opt.id}" data-act="intra-opt" data-o="${o.id}" data-d="${d}">
+      <span class="in-opt-h"><b>${o.t}</b><span class="note">${fmt(o.g)} g · ${o.pieces} ${o.pieces === 1 ? "cosa" : "cosas"}</span></span>
+      <span class="note">Llevas: ${inItemsTxt(o) || "nada"}</span>
+      ${o.id === P.opt.id ? o.plan.map(x => `<span class="in-hr"><span>${x.to != null ? `${mm(x.at)}–${mm(x.to)}` : `min ${x.at}`}</span><span>${x.to != null ? x.txt[0].toUpperCase() + x.txt.slice(1) : x.txt}</span></span>`).join("") : ""}
+    </button>`).join("")}
+    <p class="note" style="margin:0">Pon una alarma en el reloj a los minutos que marca y olvídate. Agua según sed. Los hidratos salen de la base de alimentos de la app.</p>
+    ${P.opt.items.length ? `<button class="btn" data-act="intra-logall" data-d="${d}">Apuntar «${P.opt.t}» en Intra</button>` : ""}</div>`);
 }
 function intraSes(d){
   const m = S.settings.intra?.[d]; if (m?.dur) return m;
@@ -1365,21 +1415,6 @@ function intraSes(d){
   } catch {} }
   return null;
 }
-const inKcal = s => +s.kcal || +s.kj || 0;    // kJ de trabajo ≈ kcal gastadas (rendimiento ~24 % × 4,184)
-function intraPlan(s){
-  const P = S.settings.intraPref || {}, h = s.dur / 60, kc = inKcal(s);
-  const mode = P.mode === "kcal" && kc ? "kcal" : "ch";
-  let gph = mode === "kcal" ? Math.round(kc / h / 4) : (+P.gph || 60), capped = false;
-  if (mode === "kcal" && gph > 120){ gph = 120; capped = true; }
-  const hours = []; for (let m = 0; m < s.dur; m += 60){ const len = Math.min(60, s.dur - m); if (len >= 10) hours.push({from:m, to:m + len, g:Math.round(gph * len / 60)}); }
-  const opts = IN_OPTS.map(o => { const per = hours.map(H => inSolve(o, H.g, (H.to - H.from) / 60)), tot = {};
-    per.forEach(L => L.forEach(([n, q]) => tot[n] = (tot[n] || 0) + q));
-    const g = Object.entries(tot).reduce((a, [n, q]) => a + q * inCh(n), 0);
-    return {...o, per, tot:Object.entries(tot), g:Math.round(g)}; });
-  return {mode, gph, capped, h, kc, total:Math.round(gph * h), hours, opts, opt:opts.find(o => o.id === P.opt) || opts[1]};
-}
-const hm = m => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
-const inSrc = s => s.src === "tp" ? "TrainingPeaks" : s.src === "plan" ? "tu plan" : "metido por ti";
 // Intra en Hoy: como Snacks (apuntas lo que quieras) + botón para que la IA calcule qué tomar
 function intraHome(t){
   const logged = (S.diary[t] || []).filter(e => e.meal === INTRA), lk = logged.reduce((a, e) => a + (+e.kcal || 0), 0), gc = logged.reduce((a, e) => a + (+e.c || 0), 0);
@@ -1395,38 +1430,6 @@ function intraLine(d){
   if (!s) return `<div class="intra-q"><span class="note">Apunta lo que tomes entrenando, o deja que la IA calcule qué tomar.</span><button class="link" data-act="intra-edit" data-d="${d}">✨ Calcular</button></div>`;
   const P = intraPlan(s);
   return `<div class="intra-q"><span class="note">✨ ${esc(s.name || "Entreno")}: objetivo <b>${fmt(P.total)} g</b> de hidratos (${P.gph} g/h) · llevas ${fmt(gc)} g</span><span class="in-lk"><button class="link" data-act="intra-open" data-d="${d}">Ver qué tomar</button><button class="link" data-act="intra-edit" data-d="${d}">Cambiar entreno</button></span></div>`;
-}
-function intraCard(d, inDiary){
-  const s = intraSes(d), got = (S.diary[d] || []).filter(e => e.meal === INTRA), gotC = got.reduce((a, e) => a + (+e.c || 0), 0);
-  if (!s) return inDiary ? `<div class="intra-q"><span class="note">¿Entrenas este día? Trae el entreno de TrainingPeaks y te digo qué tomar durante.</span><button class="link" data-act="intra-edit" data-d="${d}">⚡ Calcular</button></div>`
-    : `<button class="card nutri-cta" data-act="intra-edit" data-d="${d}"><span class="chat-av" aria-hidden="true">⚡</span><span><b>Intra · comida durante el entreno</b><small>Trae tu entreno de TrainingPeaks y te digo cuántos hidratos tomar y en qué</small></span><span class="prof-ch" aria-hidden="true">›</span></button>`;
-  const P = intraPlan(s), kc = P.kc, o = P.opt;
-  const body = `<div class="in-k"><div><b>${hm(s.dur)}</b><span>duración</span></div><div><b>${kc ? "≈ " + fmt(kc) : "—"}</b><span>${kc ? (s.kcal ? "kcal gastadas" : `kcal (de ${fmt(s.kj)} kJ)`) : "falta el kJ"}</span></div><div><b>${fmt(P.total)} g</b><span>hidratos (${P.gph} g/h)</span></div></div>
-    ${!kc ? `<p class="note" style="margin:0">Para calcular el gasto mete los kJ del entreno (salen en TrainingPeaks). <button class="link" data-act="intra-edit" data-d="${d}">Meter kJ</button></p>` : ""}
-    <p class="in-txt"><b>${o.t}:</b> ${o.tot.length ? o.tot.map(([n, q]) => inTxt(n, q)).join(" + ") : "nada"}${P.hours.length > 1 && o.per[0]?.length ? ` <span class="note">(cada hora: ${o.per[0].map(([n, q]) => inTxt(n, q)).join(" + ")})</span>` : ""}</p>
-    ${P.total ? `<div class="in-bar"><span class="hc-bar"><i style="width:${Math.min(100, gotC / P.total * 100)}%"></i></span><span class="note">${fmt(gotC)} / ${fmt(P.total)} g apuntados</span></div>` : ""}
-    <div class="in-add"><button class="btn soft" data-act="intra-open" data-d="${d}">Opciones y horas</button>${o.tot.length ? `<button class="btn" data-act="intra-logall" data-d="${d}">Apuntar en Intra</button>` : ""}</div>`;
-  if (inDiary) return `<div class="intra-in"><p class="note" style="margin:0">⚡ ${esc(s.name || "Entreno")} · ${inSrc(s)} <button class="link" data-act="intra-edit" data-d="${d}">Cambiar</button></p>${body}</div>`;
-  return `<div class="card intra"><div class="in-h"><span class="chat-av" aria-hidden="true">⚡</span><div><b>Intra · durante el entreno</b><small>${esc(s.name || "Entreno")} · ${inSrc(s)}</small></div><button class="link" data-act="intra-edit" data-d="${d}">Cambiar</button></div>${body}</div>`;
-}
-// hoja con los modos (CH/h o reponer kcal), las variedades y el reparto por horas
-function openIntraOpts(d){
-  const s = intraSes(d); if (!s) return openIntra(d);
-  const P = intraPlan(s), pref = S.settings.intraPref || {};
-  openSheet("⚡ Qué tomar durante el entreno", `<div class="stack">
-    <div class="in-ses"><div><b>${esc(s.name || "Entreno")}</b><small>${hm(s.dur)}${s.kj ? ` · ${fmt(s.kj)} kJ` : ""}${s.kcal ? ` · ${fmt(s.kcal)} kcal` : ""} · ${inSrc(s)}</small></div><button class="btn soft" data-act="intra-edit" data-d="${d}">✏️ Cambiar entreno</button></div>
-    <div class="seg"><button aria-pressed="${P.mode === "ch"}" class="${P.mode === "ch" ? "on" : ""}" data-act="intra-mode" data-m="ch" data-d="${d}">Elijo los CH/h</button><button aria-pressed="${P.mode === "kcal"}" class="${P.mode === "kcal" ? "on" : ""}" data-act="intra-mode" data-m="kcal" data-d="${d}" ${P.kc ? "" : "disabled"}>Reponer kcal del entreno</button></div>
-    ${P.mode === "ch" ? `<div><p class="note" style="margin:0 0 8px">Hidratos por hora (CH/h) que quieres tomar:</p><div class="in-add">${IN_GPH.map(g => `<button class="chip ${g === P.gph ? "on" : ""}" aria-pressed="${g === P.gph}" data-act="intra-gph" data-g="${g}" data-d="${d}">${g} g/h</button>`).join("")}</div>
-      <p class="note" style="margin:8px 0 0">${P.gph > 90 ? "Más de 90 g/h solo si tienes el estómago entrenado y mezclas glucosa y fructosa." : P.gph > 60 ? "Más de 60 g/h: pruébalo antes en entrenos, no el día de la carrera." : "Menos de 1 h de entreno normalmente no hace falta tomar nada."}</p></div>`
-      : `<p class="note" style="margin:0">Gastas ≈ <b>${fmt(P.kc)} kcal</b> en ${hm(s.dur)} → ${fmt(Math.round(P.kc / P.h))} kcal por hora → <b>${P.gph} g de hidratos por hora</b>.${P.capped ? " Lo dejo en 120 g/h: es lo máximo que el cuerpo absorbe; el resto lo repones después." : ""}</p>`}
-    ${!P.kc ? `<p class="note" style="margin:0">Para «reponer kcal» mete los kJ del entreno. <button class="link" data-act="intra-edit" data-d="${d}">Meter kJ</button></p>` : ""}
-    <h4 class="in-sec">Elige cómo tomarlo · ${fmt(P.total)} g en total</h4>
-    ${P.opts.map(o => `<button class="in-opt ${o.id === P.opt.id ? "on" : ""}" aria-pressed="${o.id === P.opt.id}" data-act="intra-opt" data-o="${o.id}" data-d="${d}">
-      <span class="in-opt-h"><b>${o.t}</b><span class="note">${fmt(o.g)} g${o.g < P.total * .85 ? " · no llega" : ""}</span></span>
-      ${P.hours.map((H, i) => `<span class="in-hr"><span>${hm(H.from)}–${hm(H.to)}</span><span>${o.per[i].length ? o.per[i].map(([n, q]) => inTxt(n, q)).join(" + ") : "solo agua"}</span></span>`).join("")}
-    </button>`).join("")}
-    <p class="note" style="margin:0">Empieza a los 20-30 min y luego reparte cada 20-30 min. Bebe agua según sed. Los hidratos de cada alimento salen de la base de alimentos de la app.</p>
-    ${P.opt.tot.length ? `<button class="btn" data-act="intra-logall" data-d="${d}">Apuntar «${P.opt.t}» en Intra</button>` : ""}</div>`);
 }
 let tpEv = [];
 async function tpLoad(d){
@@ -2492,7 +2495,7 @@ document.addEventListener("click", e => {
       $("inName").value = e.name || ""; if (e.dur) $("inDur").value = e.dur; $("inKj").value = e.kj || ""; $("inKcal").value = e.kcal || "";
       document.querySelector('[data-act="intra-save"]').dataset.src = "tp"; (e.dur ? (e.kj || e.kcal ? $("inDur") : $("inKj")) : $("inDur")).focus(); break; }
     case "intra-logall": { const d = el.dataset.d, s = intraSes(d); if (!s) break; const P = intraPlan(s);
-      for (const [n, q] of P.opt.tot){ const F = inFood(n); if (!F) continue; const g = Math.round((F.servings?.[0]?.g || 100) * q), v = nutr({per:F}, g);
+      for (const [n, g0] of P.opt.items){ const F = inFood(n); if (!F) continue; const g = Math.round(g0), v = nutr({per:F}, g);
         (S.diary[d] ||= []).push({id:rid(), meal:INTRA, name:F.name, qty:g, unit:"g", g, per:{kcal:F.kcal, p:F.p, c:F.c, f:F.f}, servings:F.servings || [], kcal:v.kcal, p:v.p, c:v.c, f:v.f}); }
       putDay(d); closeSheet(); render(); flash(`✓ Apuntado en Intra: ${P.opt.t.toLowerCase()}`); break; }
     case "w-adj": { const adj = (+S.settings.kAdj || 0) + (+el.dataset.d || 0); put("settings", {...S.settings, kAdj:adj, wAdvSeen:el.dataset.key}); render(); setBanner(`✓ Ajustado: ${adj>0?"+":""}${adj} kcal al día sobre tu objetivo.`); setTimeout(() => setBanner(""), 5000); break; }

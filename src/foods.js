@@ -115,5 +115,5 @@ export const MORE_FOODS = [
 ["Ron con cola",80,0,7,0,"copa",250],["Vermut",140,0,14,0,"vaso",100],["Batido de proteínas con agua",120,24,3,1.5,"batido",300],["Batido de proteínas con leche",230,32,15,5,"batido",350],
 // --- Suplementos ---
 ["Proteína vegana",370,72,10,6,"cacito",30],["Caseína",360,80,6,1.5,"cacito",30],["Ganador de peso (gainer)",390,20,70,3.5,"cacito",100],["Creatina",0,0,0,0,"cacito",5],
-["Gel energético",270,0,68,0,"unidad",40],["Dulce de membrillo",215,0.4,55,0.1,"porción",30],["Barrita energética",370,5,70,7,"unidad",40],["Harina de avena aromatizada",380,12,65,7,"ración",50],["Mantequilla de cacahuete en polvo",380,50,20,12,"cucharada",12],
+["Gel energético",270,0,68,0,"unidad",40],["Dulce de membrillo",215,0.4,55,0.1,"porción",30],["Hidratos en polvo",380,0,95,0,"cacito",30],["Barrita energética",370,5,70,7,"unidad",40],["Harina de avena aromatizada",380,12,65,7,"ración",50],["Mantequilla de cacahuete en polvo",380,50,20,12,"cucharada",12],
 ];
