@@ -1388,13 +1388,13 @@ function intraHome(t){
     : P ? `${esc(s.name || "Entreno")} · objetivo ${fmt(P.total)} g de hidratos (${P.gph} g/h)` : "Lo que comes durante el entreno: geles, isotónica, plátano…";
   return `<div class="ml-row ml-intra ${logged.length ? "done" : ""}"><button class="ml-n" data-act="tab" data-tab="food"><b>⚡ Intra</b><small>${sub}</small></button>
     <span class="ml-ib"><button class="reg-btn" data-act="home-add" data-meal="${INTRA}">${logged.length ? "+ Añadir" : "Regístralo"}</button>
-    <button class="ia-btn" data-act="${s ? "intra-open" : "intra-edit"}" data-d="${t}">✨ ${s ? "Qué tomar" : "Calcular con IA"}</button></span></div>`;
+    <button class="ia-btn" data-act="${s ? "intra-open" : "intra-edit"}" data-d="${t}">✨ ${s ? "Qué tomar" : "Calcular con IA"}</button>${s ? `<button class="link" data-act="intra-edit" data-d="${t}">Cambiar entreno</button>` : ""}</span></div>`;
 }
 function intraLine(d){
   const s = intraSes(d), gc = (S.diary[d] || []).filter(e => e.meal === INTRA).reduce((a, e) => a + (+e.c || 0), 0);
   if (!s) return `<div class="intra-q"><span class="note">Apunta lo que tomes entrenando, o deja que la IA calcule qué tomar.</span><button class="link" data-act="intra-edit" data-d="${d}">✨ Calcular</button></div>`;
   const P = intraPlan(s);
-  return `<div class="intra-q"><span class="note">✨ ${esc(s.name || "Entreno")}: objetivo <b>${fmt(P.total)} g</b> de hidratos (${P.gph} g/h) · llevas ${fmt(gc)} g</span><button class="link" data-act="intra-open" data-d="${d}">Ver qué tomar</button></div>`;
+  return `<div class="intra-q"><span class="note">✨ ${esc(s.name || "Entreno")}: objetivo <b>${fmt(P.total)} g</b> de hidratos (${P.gph} g/h) · llevas ${fmt(gc)} g</span><span class="in-lk"><button class="link" data-act="intra-open" data-d="${d}">Ver qué tomar</button><button class="link" data-act="intra-edit" data-d="${d}">Cambiar entreno</button></span></div>`;
 }
 function intraCard(d, inDiary){
   const s = intraSes(d), got = (S.diary[d] || []).filter(e => e.meal === INTRA), gotC = got.reduce((a, e) => a + (+e.c || 0), 0);
@@ -1414,6 +1414,7 @@ function openIntraOpts(d){
   const s = intraSes(d); if (!s) return openIntra(d);
   const P = intraPlan(s), pref = S.settings.intraPref || {};
   openSheet("⚡ Qué tomar durante el entreno", `<div class="stack">
+    <div class="in-ses"><div><b>${esc(s.name || "Entreno")}</b><small>${hm(s.dur)}${s.kj ? ` · ${fmt(s.kj)} kJ` : ""}${s.kcal ? ` · ${fmt(s.kcal)} kcal` : ""} · ${inSrc(s)}</small></div><button class="btn soft" data-act="intra-edit" data-d="${d}">✏️ Cambiar entreno</button></div>
     <div class="seg"><button aria-pressed="${P.mode === "ch"}" class="${P.mode === "ch" ? "on" : ""}" data-act="intra-mode" data-m="ch" data-d="${d}">Elijo los CH/h</button><button aria-pressed="${P.mode === "kcal"}" class="${P.mode === "kcal" ? "on" : ""}" data-act="intra-mode" data-m="kcal" data-d="${d}" ${P.kc ? "" : "disabled"}>Reponer kcal del entreno</button></div>
     ${P.mode === "ch" ? `<div><p class="note" style="margin:0 0 8px">Hidratos por hora (CH/h) que quieres tomar:</p><div class="in-add">${IN_GPH.map(g => `<button class="chip ${g === P.gph ? "on" : ""}" aria-pressed="${g === P.gph}" data-act="intra-gph" data-g="${g}" data-d="${d}">${g} g/h</button>`).join("")}</div>
       <p class="note" style="margin:8px 0 0">${P.gph > 90 ? "Más de 90 g/h solo si tienes el estómago entrenado y mezclas glucosa y fructosa." : P.gph > 60 ? "Más de 60 g/h: pruébalo antes en entrenos, no el día de la carrera." : "Menos de 1 h de entreno normalmente no hace falta tomar nada."}</p></div>`
