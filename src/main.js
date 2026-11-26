@@ -496,6 +496,7 @@ function homeFood(t, tot, remaining){
       <span class="arc-sub">${fmt(tot.kcal)} comidas · objetivo ${fmt(kgoal)}${ex ? ` · +${fmt(ex)} ejercicio` : ""}</span>
       <button class="chips" data-act="nutri-go" data-k="mac">${[["Proteína",tot.p,g.p,"p"],["Carbos",tot.c,g.c,"c"],["Grasa",tot.f,g.f,"f"]].map(([l,v,o,k]) => `<span class="chip-m ${k}">${l} <b>${r0(v)}/${r0(o)} g</b></span>`).join("")}</button>
     </div>
+    ${whoopHome(t)}
     ${actsOn(t).length ? `<div class="st-day">${actsOn(t).map(actChip).join("")}</div>` : ""}
     ${S.fast?.active ? `<button class="card nutri-cta" data-act="fast-open"><span class="chat-av" aria-hidden="true">⏳</span><span><b>Ayunando · <span data-fast="t"></span></b><small data-fast="left"></small></span><span class="prof-ch" aria-hidden="true">›</span></button>` : ""}
     <div class="sec-h"><h3>Comidas</h3><button class="link" data-act="tab" data-tab="food">Mira el diario</button></div>
@@ -1236,11 +1237,119 @@ function connSection(){
       <p class="note" style="margin:0">Desactívalo si tu plan ya cuenta con el ejercicio.</p></div>` : ""}
     <p class="note">Solo se leen tus actividades; la app nunca publica nada en tus cuentas. Puedes quitar el permiso cuando quieras desde aquí o desde la propia app de Garmin Connect o WHOOP.</p>`;
 }
+/* ---------- WHOOP: sueño, recuperación, esfuerzo y monitor de salud ---------- */
+const whDays = () => Object.entries(S.whoop?.days || {}).sort(([a], [b]) => a < b ? -1 : 1);
+function whLatest(){   // el día más reciente con datos (hoy si ya hay)
+  const L = whDays().filter(([, d]) => d.rec != null || d.sleep || d.strain != null);
+  return L.length ? L.at(-1) : null;
+}
+const recCol = p => p == null ? "var(--muted)" : p >= 67 ? "#16A34A" : p >= 34 ? "#E5A50A" : "#E5484D";
+const dec = (v, n = 1) => v == null ? "--" : String(Math.round(v * 10 ** n) / 10 ** n).replace(".", ",");
+const hTxt = h => { if (h == null) return "--"; const m = Math.round(h * 60); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`; };
+function whRing(val, max, col, txt, label){
+  const pct = val == null ? 0 : Math.max(2, Math.min(100, val / max * 100));
+  return `<div class="wr"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42" class="wr-bg"/><circle cx="50" cy="50" r="42" class="wr-fg" pathLength="100" style="stroke:${col};stroke-dasharray:${pct} 100"/></svg>
+    <span class="wr-v"><b>${txt}</b></span><span class="wr-l">${label}</span></div>`;
+}
+function whRings(d){
+  const sp = d?.sleep?.perf;
+  return `<div class="wrings">${whRing(sp, 100, "#8069F7", sp == null ? "--" : sp + " %", "Sueño")}${whRing(d?.rec, 100, recCol(d?.rec), d?.rec == null ? "--" : d.rec + " %", "Recuperación")}${whRing(d?.strain, 21, "#F08A4B", dec(d?.strain), "Esfuerzo")}</div>`;
+}
+const whWake = () => S.settings.whWake || "07:30";
+function whBedtime(need){
+  if (!need) return null; const [h, m] = whWake().split(":").map(Number); let t = h * 60 + m - Math.round(need * 60) - 15;
+  t = (t % 1440 + 1440) % 1440; return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+function whAdvice(d){
+  if (!d) return "";
+  const out = [];
+  if (d.rec != null) out.push(d.rec < 34 ? "Recuperación baja: hoy mejor entreno suave, no recortes hidratos y prioriza dormir."
+    : d.rec < 67 ? "Recuperación media: entreno moderado y reparte la proteína en 3-4 tomas."
+    : "Recuperación alta: buen día para apretar. Mete hidratos en la comida de antes del entreno.");
+  if (d.sleep?.perf != null && d.sleep.perf < 70) { const b = whBedtime(d.sleep.need); out.push(`Dormiste menos de lo que necesitas${b ? `: esta noche intenta acostarte a las ${b}` : ""}.`); }
+  return out.join(" ");
+}
+function whoopHome(t){
+  if (!S.whoop) return "";
+  const L = whLatest(); if (!L) return "";
+  const [k, d] = L, kc = S.whoop.days?.[t]?.kcal;
+  return `<button class="card whh" data-act="wh-open"><span class="whh-h"><span class="wh-logo" aria-hidden="true">W</span><b>Tu día con WHOOP</b><small>${k === t ? "Hoy" : dayLabel(k)}${kc ? ` · ${fmt(kc)} kcal gastadas` : ""}</small><span class="prof-ch" aria-hidden="true">›</span></span>
+    ${whRings(d)}<span class="note whh-adv">${whAdvice(d)}</span></button>`;
+}
+function whStat(lbl, v, unit, key, digits, better){
+  const L = whDays(), last = L.at(-1)?.[1]?.[key] != null ? L.at(-1)[1][key] : v;
+  const prev = L.slice(0, -1).map(([, d]) => d[key]).filter(x => x != null), base = prev.length >= 3 ? prev.reduce((a, b) => a + b, 0) / prev.length : null;
+  let tr = "";
+  if (v != null && base != null){ const diff = v - base, sig = Math.abs(diff) >= Math.max(0.5, Math.abs(base) * 0.03);
+    if (sig){ const good = better === 0 ? null : (diff > 0) === (better > 0); tr = `<small class="${good == null ? "" : good ? "pos" : "neg"}">${diff > 0 ? "▲" : "▼"} ${dec(Math.abs(diff), digits)} vs media</small>`; }
+    else tr = `<small>= media (${dec(base, digits)})</small>`; }
+  return `<div class="wh-st"><span>${lbl}</span><b>${v == null ? "--" : dec(v, digits)}<i>${v == null ? "" : unit}</i></b>${tr || `<small>${v == null ? "Sin datos" : ""}</small>`}</div>`;
+}
+function whRecStrainChart(){
+  const L = whDays().slice(-7); if (!L.length) return `<p class="note">Sin datos aún.</p>`;
+  const W = 600, H = 200, B = 26, T = 14, bw = W / L.length;
+  const bars = L.map(([k, d], i) => { const h = d.rec == null ? 0 : (H - B - T) * d.rec / 100; return `<rect x="${i * bw + bw * .2}" y="${H - B - h}" width="${bw * .6}" height="${h}" rx="6" fill="${recCol(d.rec)}" opacity=".85"/>
+      ${d.rec != null ? `<text x="${i * bw + bw / 2}" y="${H - B - h - 5}" text-anchor="middle" class="wc-t">${d.rec}%</text>` : ""}<text x="${i * bw + bw / 2}" y="${H - 6}" text-anchor="middle" class="wc-x">${shortDay(k)}</text>`; }).join("");
+  const pts = L.map(([, d], i) => d.strain == null ? null : [i * bw + bw / 2, H - B - (H - B - T) * d.strain / 21]).filter(Boolean);
+  return `<svg class="wc" viewBox="0 0 ${W} ${H}" role="img" aria-label="Recuperación y esfuerzo de los últimos 7 días">${bars}
+    ${pts.length > 1 ? `<polyline points="${pts.map(p => p.join(",")).join(" ")}" fill="none" stroke="#F08A4B" stroke-width="3"/>` : ""}${pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="#F08A4B"/>`).join("")}</svg>
+    <p class="note" style="margin:0">Barras: recuperación · línea naranja: esfuerzo (0-21)</p>`;
+}
+function openWhoop(){
+  const W = S.whoop; if (!W) return;
+  const L = whLatest(), d = L?.[1] || {}, k = L?.[0], sl = d.sleep;
+  const wk = addDays(today(), -6), acts = (W.list || []).filter(a => a.day >= wk);
+  const z = acts.reduce((a, x) => { (x.z || []).forEach((m, i) => a[i] += m || 0); return a; }, [0, 0, 0, 0, 0, 0]);
+  const strMin = Math.round(acts.filter(a => /weight|strength|functional|power|crossfit|lift|fuerza/i.test(a.type || "")).reduce((a, x) => a + (x.dur || 0), 0) / 60);
+  const kc = whDays().slice(-7).map(([, x]) => x.kcal).filter(Boolean), kAvg = kc.length ? Math.round(kc.reduce((a, b) => a + b, 0) / kc.length) : null;
+  const asleep = sl ? Math.max(0, (sl.bed || 0) - (sl.awake || 0)) : null, bed = whBedtime(sl?.need);
+  const stage = (v, c, l) => v ? `<i style="flex:${v};background:${c}" title="${l} ${hTxt(v)}"></i>` : "";
+  const ser = key => whDays().slice(-14).filter(([, x]) => x[key] != null).map(([kk, x]) => ({x:shortDay(kk), y:x[key]}));
+  openSheet("WHOOP", `<div class="stack wh">
+    <p class="note" style="margin:0">${k ? (k === today() ? "Hoy" : dayLabel(k)) : ""}${W.synced ? ` · sincronizado ${new Date(W.synced).toLocaleTimeString("es-ES", {hour:"2-digit", minute:"2-digit"})}` : ""}</p>
+    ${whRings(d)}
+    ${whAdvice(d) ? `<p class="wh-adv">${whAdvice(d)}</p>` : ""}
+    ${W.sleepScope === false ? `<p class="note warn-card" style="margin:0">Para ver tu sueño, desconecta WHOOP y vuelve a conectarlo: hace falta un permiso nuevo.</p>` : ""}
+
+    <h3 class="wh-h">El sueño</h3>
+    <div class="card-in wh-sleep">
+      <div class="wh-row"><div><span class="note">Dormiste</span><b>${hTxt(asleep)}</b></div><div><span class="note">Necesitabas</span><b>${hTxt(sl?.need)}</b></div></div>
+      ${sl ? `<div class="wh-stages">${stage(sl.light, "#B8A9FF", "Ligero")}${stage(sl.deep, "#5B3FD9", "Profundo")}${stage(sl.rem, "#F08A4B", "REM")}${stage(sl.awake, "#D6D3E6", "Despierto")}</div>
+      <div class="wh-leg"><span><i style="background:#B8A9FF"></i>Ligero ${hTxt(sl.light)}</span><span><i style="background:#5B3FD9"></i>Profundo ${hTxt(sl.deep)}</span><span><i style="background:#F08A4B"></i>REM ${hTxt(sl.rem)}</span></div>
+      <p class="note" style="margin:0">Eficiencia ${sl.eff ?? "--"} % · Constancia ${sl.cons ?? "--"} %${sl.dist != null ? ` · ${sl.dist} interrupciones` : ""}</p>` : `<p class="note" style="margin:0">Sin datos de sueño.</p>`}
+      <div class="wh-row wh-bed"><div><span class="note">Hora de dormir recomendada</span><b>${bed || "--:--"}</b></div>
+        <label class="f">Me levanto a las<input id="whWake" type="time" value="${whWake()}"></label><button class="btn soft" data-act="wh-wake">Guardar</button></div>
+    </div>
+
+    <h3 class="wh-h">Monitor de salud</h3>
+    <div class="wh-grid">
+      ${whStat("FC en reposo", d.rhr, " lpm", "rhr", 0, -1)}${whStat("VFC", d.hrv, " ms", "hrv", 0, 1)}
+      ${whStat("Frec. respiratoria", d.rr, " rpm", "rr", 1, 0)}${whStat("Oxígeno en sangre", d.spo2, " %", "spo2", 1, 1)}
+      ${whStat("Temp. cutánea", d.skin, " °C", "skin", 1, 0)}${whStat("FC máxima (perfil)", W.body?.maxHr, " lpm", "_", 0, 0)}
+    </div>
+
+    <h3 class="wh-h">Esfuerzo y recuperación · 7 días</h3>
+    <div class="card-in">${whRecStrainChart()}</div>
+
+    <h3 class="wh-h">Mi panel</h3>
+    <div class="wh-grid">
+      <div class="wh-st"><span>Zonas FC 1-3 (semana)</span><b>${fmt(z[1] + z[2] + z[3])}<i> min</i></b></div>
+      <div class="wh-st"><span>Zonas FC 4-5 (semana)</span><b>${fmt(z[4] + z[5])}<i> min</i></b></div>
+      <div class="wh-st"><span>Tiempo de fuerza (semana)</span><b>${fmt(strMin)}<i> min</i></b></div>
+      <div class="wh-st"><span>Calorías gastadas hoy</span><b>${W.days?.[today()]?.kcal ? fmt(W.days[today()].kcal) : "--"}<i> kcal</i></b><small>${kAvg ? `media 7 días: ${fmt(kAvg)}` : ""}</small></div>
+    </div>
+    <div class="card-in">${lineChart(ser("hrv"), {color:"#8069F7", label:"Variabilidad de la FC (ms)", empty:"Sin datos de VFC."})}</div>
+    <div class="card-in">${lineChart(ser("rhr"), {color:"#E5484D", label:"FC en reposo (lpm)", empty:"Sin datos de FC en reposo."})}</div>
+    <p class="note" style="margin:0">WHOOP no comparte con otras apps el monitor de estrés, los pasos, el VO₂ máx ni la frecuencia cardiaca en directo: eso solo lo verás en la app de WHOOP.</p>
+    <button class="btn soft" data-act="strava-sync" data-s="whoop" ${stravaBusy ? "disabled" : ""}>Sincronizar ahora</button>
+  </div>`);
+}
 function whoopCard(){
   const W = S.whoop, last = W?.list?.[0], R = W?.recovery;
   return `<div class="card"><div class="st-h"><span class="wh-logo" aria-hidden="true">W</span><div><b>WHOOP</b><small>${W ? `Conectado${W.athlete ? " como "+esc(W.athlete) : ""}` : "No conectado"}</small></div>${W?`<span class="st-on">●</span>`:""}</div>
     ${W ? `${R ? `<div class="wh-rec ${R.pct>=67?"g":R.pct>=34?"y":"r"}"><b>${R.pct} %</b><span>Recuperación${R.hrv?` · VFC ${R.hrv} ms`:""}${R.rhr?` · FC reposo ${R.rhr}`:""}</span></div>` : ""}
       <p class="note">Tus entrenos de WHOOP llegan con sus calorías cada vez que abres la app. ${last ? `Último: ${SPORT_ICO(last.type)} ${esc(sportName(last.type))}, ${dayLabel(last.day).toLowerCase()}${last.strain?` · esfuerzo ${String(last.strain).replace(".",",")}`:""}.` : "Aún no hay entrenos en los últimos 3 meses."}</p>
+      ${whLatest() ? `<button class="btn" data-act="wh-open">Ver sueño, recuperación y salud</button>` : ""}
       <button class="btn soft" data-act="strava-sync" data-s="whoop" ${stravaBusy?"disabled":""}>Sincronizar ahora</button>
       <button class="btn danger" data-act="conn-off" data-s="whoop">Desconectar WHOOP</button>`
     : `<p class="note">Trae tus entrenos con las calorías que mide tu WHOOP, y tu % de recuperación de cada día.</p><button class="btn wh-btn" data-act="conn-on" data-s="whoop">Conectar con WHOOP</button>`}</div>`;
@@ -2476,6 +2585,8 @@ document.addEventListener("click", e => {
       if (v.w && !S.body[today()]) put("body", {log:{...S.body, [today()]:{kg:r1(v.w)}}});
       closeSheet(); tab = "food"; render(); setBanner(`Objetivo guardado: ${fmt(g.kcal)} kcal y ${g.p} g de proteína al día.`); setTimeout(() => setBanner(""), 5000); break; }
     case "logout": sb.auth.signOut(); break;
+    case "wh-open": openWhoop(); break;
+    case "wh-wake": { const v = $("whWake").value; if (/^\d{2}:\d{2}$/.test(v)){ put("settings", {...S.settings, whWake:v}); openWhoop(); } break; }
     case "intra-edit": openIntra(el.dataset.d || today()); break;
     case "intra-open": openIntraOpts(el.dataset.d || today()); break;
     case "intra-mode": case "intra-gph": case "intra-opt": {

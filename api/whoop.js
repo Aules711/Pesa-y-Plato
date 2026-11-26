@@ -10,7 +10,7 @@ import { sbAdmin, hasPremium, hasPremiumById, mergeActivities } from "./_sb.js";
 const ID = () => (process.env.WHOOP_CLIENT_ID || "").trim();
 const SECRET = () => (process.env.WHOOP_CLIENT_SECRET || "").trim();
 const AUTH = "https://api.prod.whoop.com/oauth/oauth2/auth", TOKEN = "https://api.prod.whoop.com/oauth/oauth2/token", API = "https://api.prod.whoop.com/developer";
-const SCOPES = "offline read:workout read:recovery read:cycles read:profile";
+const SCOPES = "offline read:workout read:recovery read:cycles read:sleep read:profile read:body_measurement";
 const sign = (s) => crypto.createHmac("sha256", "whoop-state:" + SECRET()).update(s).digest("base64url").slice(0, 32);
 
 export default async function handler(req, res) {
@@ -97,7 +97,8 @@ async function sync(sb, uid) {
         const start = Date.parse(w.start), off = parseOffset(w.timezone_offset), sc = w.score || {};
         items.push({ id: "w" + w.id, name: "", type: w.sport_name || "activity", src: "whoop", start, day: new Date(start + off).toISOString().slice(0, 10),
           dur: Math.round((Date.parse(w.end) - start) / 1000) || 0, km: sc.distance_meter ? Math.round(sc.distance_meter / 10) / 100 : 0,
-          hr: sc.average_heart_rate || null, kcal: sc.kilojoule != null ? Math.round(sc.kilojoule / 4.184) : null, strain: sc.strain != null ? Math.round(sc.strain * 10) / 10 : null });
+          hr: sc.average_heart_rate || null, kcal: sc.kilojoule != null ? Math.round(sc.kilojoule / 4.184) : null, strain: sc.strain != null ? Math.round(sc.strain * 10) / 10 : null,
+          z: sc.zone_durations ? ["zero", "one", "two", "three", "four", "five"].map((k) => Math.round((sc.zone_durations[`zone_${k}_milli`] || 0) / 60000)) : null });
       }
       next = d.next_token || ""; pages++;
     } while (next && pages < 8);
@@ -105,9 +106,41 @@ async function sync(sb, uid) {
     if (e.code === "revoked") { await sb.call(`/rest/v1/whoop?user_id=eq.${uid}`, { method: "DELETE" }); return { connected: false, revoked: true }; }
     throw e;
   }
-  // recuperación más reciente (para mostrarla en la app)
-  let recovery = prev.recovery || null;
-  try { const r = await api(`/v2/recovery?limit=1`); const x = r.records?.[0]; if (x?.score) recovery = { pct: Math.round(x.score.recovery_score), hrv: Math.round(x.score.hrv_rmssd_milli || 0), rhr: Math.round(x.score.resting_heart_rate || 0), at: x.updated_at || x.created_at }; } catch {}
-  return mergeActivities(sb, uid, "whoop", { athlete: row.name || "", recovery }, items);
+  // día a día (14 días): sueño, recuperación, esfuerzo y monitor de salud
+  const from = encodeURIComponent(new Date(Date.now() - 15 * 86400_000).toISOString()), days = { ...(prev.days || {}) };
+  const day = (iso, off, plusH = 0) => new Date(Date.parse(iso) + off + plusH * 3600_000).toISOString().slice(0, 10);
+  const D = (k) => (days[k] ||= {});
+  const r1 = (x) => x == null ? null : Math.round(x * 10) / 10, h = (ms) => ms == null ? null : Math.round(ms / 360000) / 10;
+  const list = async (path) => { try { return (await api(`${path}?limit=25&start=${from}`)).records || []; } catch (e) { if (e.code === "revoked") throw e; return null; } };
+  let sleepOk = false;
+  const sleeps = await list("/v2/activity/sleep"), sleepDay = {};
+  for (const x of sleeps || []) {
+    if (x.nap || !x.score || x.score_state !== "SCORED") continue; sleepOk = true;
+    const k = day(x.end, parseOffset(x.timezone_offset)), st = x.score.stage_summary || {}, nd = x.score.sleep_needed || {};
+    sleepDay[x.id] = k;
+    Object.assign(D(k), { sleep: { perf: x.score.sleep_performance_percentage != null ? Math.round(x.score.sleep_performance_percentage) : null,
+      eff: x.score.sleep_efficiency_percentage != null ? Math.round(x.score.sleep_efficiency_percentage) : null, cons: x.score.sleep_consistency_percentage != null ? Math.round(x.score.sleep_consistency_percentage) : null,
+      bed: h(st.total_in_bed_time_milli), awake: h(st.total_awake_time_milli), light: h(st.total_light_sleep_time_milli), deep: h(st.total_slow_wave_sleep_time_milli), rem: h(st.total_rem_sleep_time_milli),
+      dist: st.disturbance_count ?? null, need: h((nd.baseline_milli || 0) + (nd.need_from_sleep_debt_milli || 0) + (nd.need_from_recent_strain_milli || 0) + (nd.need_from_recent_nap_milli || 0)) || null,
+      start: x.start, end: x.end }, rr: r1(x.score.respiratory_rate) });
+  }
+  const recs = await list("/v2/recovery");
+  for (const x of recs || []) {
+    if (!x.score || x.score_state !== "SCORED") continue;
+    const k = sleepDay[x.sleep_id] || day(x.created_at, 0); const sc = x.score;
+    Object.assign(D(k), { rec: Math.round(sc.recovery_score), hrv: Math.round(sc.hrv_rmssd_milli || 0) || null, rhr: Math.round(sc.resting_heart_rate || 0) || null,
+      spo2: r1(sc.spo2_percentage), skin: r1(sc.skin_temp_celsius) });
+  }
+  const cycles = await list("/v2/cycle");
+  for (const x of cycles || []) {
+    if (!x.score) continue; const k = day(x.start, parseOffset(x.timezone_offset), 8);
+    Object.assign(D(k), { strain: r1(x.score.strain), kcal: x.score.kilojoule != null ? Math.round(x.score.kilojoule / 4.184) : null, avgHr: x.score.average_heart_rate || null, maxHr: x.score.max_heart_rate || null });
+  }
+  let body = prev.body || null;
+  try { const b = await api(`/v2/user/measurement/body`); if (b) body = { maxHr: b.max_heart_rate || null, kg: b.weight_kilogram ? r1(b.weight_kilogram) : null, cm: b.height_meter ? Math.round(b.height_meter * 100) : null }; } catch (e) { if (e.code === "revoked") throw e; }
+  const keep = Object.keys(days).sort().slice(-21); for (const k of Object.keys(days)) if (!keep.includes(k)) delete days[k];
+  const lastRec = Object.keys(days).sort().reverse().map((k) => days[k]).find((d) => d.rec != null);
+  const recovery = lastRec ? { pct: lastRec.rec, hrv: lastRec.hrv, rhr: lastRec.rhr } : prev.recovery || null;
+  return mergeActivities(sb, uid, "whoop", { athlete: row.name || "", recovery, days, body, sleepScope: sleeps != null ? sleepOk || !!(sleeps || []).length : false }, items);
 }
 function parseOffset(s) { const m = String(s || "").match(/([+-])(\d{2}):?(\d{2})/); return m ? (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]) * 60000 : 0; }
